@@ -1,22 +1,22 @@
 # Nuxt
-nuxt-app/.output
-nuxt-app/.data
-nuxt-app/.nuxt
-nuxt-app/.nitro
-nuxt-app/.cache
-nuxt-app/dist
-nuxt-app/node_modules
-nuxt-app/logs
-nuxt-app/*.log
-nuxt-app/.env
-nuxt-app/.env.*
-!nuxt-app/.env.example
+ui/.output
+ui/.data
+ui/.nuxt
+ui/.nitro
+ui/.cache
+ui/dist
+ui/node_modules
+ui/logs
+ui/*.log
+ui/.env
+ui/.env.*
+!ui/.env.example
 
 # PlatformIO
-esp32/**/.pio
-esp32/**/.vscode
-esp32/**/.cache
-esp32/**/include/secrets.h
+firmware/**/.pio
+firmware/**/.vscode
+firmware/**/.cache
+firmware/**/include/secrets.h
 
 # Docker secrets
 docker/admin.token
