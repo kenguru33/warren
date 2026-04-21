@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   influxdb3:
     image: influxdb:3-core
