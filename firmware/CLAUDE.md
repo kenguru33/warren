@@ -73,14 +73,17 @@ docker compose up -d
 - GPIO 4 — fan relay
 - GPIO 19 — heater relay
 
-**Control logic** lives in `mqttCallback`: subscribes to `home/temperature` and adjusts relay states (fan ON > 30 °C, heater ON < 18 °C, heater OFF > 22 °C).
+**Control logic** lives in `mqttCallback`: subscribes to `home/temperature` and adjusts relay states around the room's target temperature (heater ON when < target − 2 °C, heater OFF when > target + 2 °C, fan ON when > target + 10 °C). Falls back to hardcoded thresholds (18/22/30 °C) when no target is available.
+
+**Target fetch** — a third task `taskFetchTarget` (core 0) polls `BACKEND_URL/api/sensors/target/{deviceId}` every 60 s and updates the shared `targetTemp` used by the control logic. Unknown/unassigned device or `refTemp: null` resets it to `NAN` (fallback).
 
 ## Secrets
 
-Copy `sensor/include/secrets.h.example` to `sensor/include/secrets.h` and fill in `SECRET_SSID`, `SECRET_PASS`, `MQTT_SERVER`, `MQTT_USER`, `MQTT_PASS`. The file is gitignored.
+Copy `sensor/include/secrets.h.example` to `sensor/include/secrets.h` and fill in `SECRET_SSID`, `SECRET_PASS`, `MQTT_SERVER`, `MQTT_USER`, `MQTT_PASS`, `BACKEND_URL`. The file is gitignored.
 
 ## Dependencies (sensor)
 
 Declared in `sensor/platformio.ini` and managed by PlatformIO:
 - `knolleary/PubSubClient` — MQTT client
 - `beegee-tokyo/DHT sensor library for ESPx` — DHT22 driver
+- `bblanchon/ArduinoJson` — JSON parsing for backend target fetch

@@ -1,6 +1,9 @@
 #include <Arduino.h>
   #include <WiFi.h>
+  #include <HTTPClient.h>
   #include <PubSubClient.h>
+  #include <ArduinoJson.h>
+  #include <math.h>
   #include "DHTesp.h"
   #include "secrets.h"
 
@@ -36,6 +39,10 @@
   // -------------------- Device ID --------------------
   String deviceId;
 
+  // -------------------- Target (from backend) --------------------
+  // NAN means "no target, use hardcoded fallback thresholds"
+  volatile float targetTemp = NAN;
+
   String getDeviceId() {
     uint8_t mac[6];
     WiFi.macAddress(mac);
@@ -48,6 +55,7 @@
   void ensureWiFiConnected();
   bool ensureMQTTConnected();
   void mqttCallback(char* topic, byte* payload, unsigned int length);
+  void fetchTargetTemp();
 
   // -------------------- WiFi --------------------
   void ensureWiFiConnected() {
@@ -109,12 +117,22 @@
     if (strcmp(topic, "home/temperature") == 0 && length > 0) {
       float tempValue = String((char*)payload, length).toFloat();
 
-      digitalWrite(FAN_PIN, tempValue > 30.0 ? HIGH : LOW);
-      Serial.println(tempValue > 30.0 ? "[MQTT] Fan ON" : "[MQTT] Fan OFF");
+      float t = targetTemp;
+      float heaterOn, heaterOff, fanOn;
+      if (!isnan(t)) {
+        heaterOn  = t - 2.0;
+        heaterOff = t + 2.0;
+        fanOn     = t + 10.0;
+      } else {
+        heaterOn = 18.0; heaterOff = 22.0; fanOn = 30.0;
+      }
 
-      if (tempValue > 18.0 && tempValue < 22.0) {
+      digitalWrite(FAN_PIN, tempValue > fanOn ? HIGH : LOW);
+      Serial.println(tempValue > fanOn ? "[MQTT] Fan ON" : "[MQTT] Fan OFF");
+
+      if (tempValue > heaterOn && tempValue < heaterOff) {
         Serial.println("[MQTT] Temperature is comfortable");
-      } else if (tempValue <= 18.0) {
+      } else if (tempValue <= heaterOn) {
         Serial.println("[MQTT] Temperature is too cold");
         digitalWrite(HEATER_PIN, HIGH);
       } else {
@@ -125,6 +143,50 @@
       // Handle humidity command
     } else if (strncmp(topic, "home/cmd/", 9) == 0) {
       // Handle other commands
+    }
+  }
+
+  // -------------------- Target fetch --------------------
+  void fetchTargetTemp() {
+    if (WiFi.status() != WL_CONNECTED) return;
+
+    HTTPClient http;
+    String url = String(BACKEND_URL) + "/api/sensors/target/" + deviceId;
+    http.begin(url);
+    int code = http.GET();
+
+    if (code != 200) {
+      Serial.printf("[Target] HTTP %d — keeping previous target\n", code);
+      http.end();
+      return;
+    }
+
+    String body = http.getString();
+    http.end();
+
+    JsonDocument doc;
+    DeserializationError err = deserializeJson(doc, body);
+    if (err) {
+      Serial.printf("[Target] JSON parse error: %s\n", err.c_str());
+      return;
+    }
+
+    if (doc["refTemp"].isNull()) {
+      targetTemp = NAN;
+      Serial.println("[Target] no target (null) — using hardcoded fallback");
+    } else {
+      targetTemp = doc["refTemp"].as<float>();
+      Serial.printf("[Target] fetched refTemp=%.2f\n", (float)targetTemp);
+    }
+  }
+
+  // -------------------- TASK: TARGET --------------------
+  void taskFetchTarget(void *pvParameters) {
+    while (true) {
+      if (WiFi.status() == WL_CONNECTED) {
+        fetchTargetTemp();
+      }
+      vTaskDelay(pdMS_TO_TICKS(60000));
     }
   }
 
@@ -228,8 +290,9 @@
     }
     Serial.printf("[Device] ID: %s\n", deviceId.c_str());
 
-    xTaskCreatePinnedToCore(taskReadSensor, "SensorTask", 4096, NULL, 1, NULL, 1);
-    xTaskCreatePinnedToCore(taskMQTT,       "MQTTTask",   6144, NULL, 1, NULL, 0);
+    xTaskCreatePinnedToCore(taskReadSensor,  "SensorTask", 4096, NULL, 1, NULL, 1);
+    xTaskCreatePinnedToCore(taskMQTT,        "MQTTTask",   6144, NULL, 1, NULL, 0);
+    xTaskCreatePinnedToCore(taskFetchTarget, "TargetTask", 6144, NULL, 1, NULL, 0);
   }
 
   // -------------------- LOOP --------------------
