@@ -57,15 +57,6 @@ async function confirmDelete() {
 <template>
   <div class="page">
     <header class="page-header">
-      <div>
-        <NuxtLink to="/" class="back-link">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-            <path d="M19 12H5M12 5l-7 7 7 7"/>
-          </svg>
-          Dashboard
-        </NuxtLink>
-        <h1 class="page-title">Sensors</h1>
-      </div>
       <label class="toggle-label">
         <input type="checkbox" v-model="onlyUnused" class="toggle-input" />
         <span class="toggle-track"><span class="toggle-thumb" /></span>
@@ -86,9 +77,6 @@ async function confirmDelete() {
           <span class="sensor-room" :class="{ unassigned: !sensor.roomName }">
             {{ sensor.roomName ?? 'Unassigned' }}
           </span>
-        </div>
-
-        <div class="sensor-meta">
           <span v-if="sensor.deviceId" class="device-id">{{ sensor.deviceId }}</span>
         </div>
 
@@ -116,9 +104,6 @@ async function confirmDelete() {
 
 <style scoped>
 .page {
-  max-width: 800px;
-  margin: 0 auto;
-  padding: 40px 24px;
   display: flex;
   flex-direction: column;
   gap: 24px;
@@ -126,8 +111,8 @@ async function confirmDelete() {
 
 .page-header {
   display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
+  align-items: center;
+  justify-content: flex-end;
   gap: 8px;
 }
 
@@ -172,24 +157,6 @@ async function confirmDelete() {
   background: #fff;
 }
 
-.back-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 0.8rem;
-  color: #475569;
-  text-decoration: none;
-  transition: color 0.15s;
-}
-
-.back-link:hover { color: #94a3b8; }
-
-.page-title {
-  font-size: 1.6rem;
-  font-weight: 800;
-  color: #f1f5f9;
-  margin-top: 6px;
-}
 
 .empty {
   color: #475569;
@@ -199,9 +166,9 @@ async function confirmDelete() {
 }
 
 .sensor-list {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 6px;
 }
 
 .sensor-row {
@@ -228,18 +195,26 @@ async function confirmDelete() {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  min-width: 120px;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .sensor-name {
   font-size: 0.9rem;
   font-weight: 600;
   color: #e2e8f0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .sensor-room {
   font-size: 0.75rem;
   color: #64748b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .sensor-room.unassigned {
@@ -247,17 +222,14 @@ async function confirmDelete() {
   font-style: italic;
 }
 
-.sensor-meta {
-  flex: 1;
-}
-
 .device-id {
-  font-size: 0.72rem;
+  font-size: 0.68rem;
   color: #475569;
   font-family: monospace;
-  background: #151825;
-  border-radius: 4px;
-  padding: 2px 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 1px;
 }
 
 .sensor-value {
@@ -265,7 +237,7 @@ async function confirmDelete() {
   flex-direction: column;
   align-items: flex-end;
   gap: 2px;
-  min-width: 70px;
+  flex-shrink: 0;
 }
 
 .value {
@@ -303,4 +275,5 @@ async function confirmDelete() {
   color: #f87171 !important;
   border-color: #ef4444 !important;
 }
+
 </style>

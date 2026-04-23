@@ -47,17 +47,10 @@ async function onAddSensor(payload: {
 
 <template>
   <div class="dashboard">
-    <header class="header">
-      <div>
-        <h1 class="title">HomeNut</h1>
-        <p class="subtitle">Home Overview</p>
-      </div>
-      <div class="header-right">
-        <span class="last-updated">Updated {{ lastUpdated }}</span>
-        <NuxtLink to="/sensors" class="btn-sensors">Sensors</NuxtLink>
-        <button class="btn-add-room" @click="showAddRoom = true">+ Add room</button>
-      </div>
-    </header>
+    <div class="toolbar">
+      <span class="last-updated">Updated {{ lastUpdated }}</span>
+      <button class="btn-add-room" @click="showAddRoom = true">+ Add room</button>
+    </div>
 
     <!-- Empty state -->
     <div v-if="rooms.length === 0" class="empty">
@@ -123,35 +116,15 @@ body {
 
 <style scoped>
 .dashboard {
-  max-width: 1100px;
-  margin: 0 auto;
-  padding: 40px 24px;
   display: flex;
   flex-direction: column;
-  gap: 32px;
+  gap: 28px;
 }
 
-.header {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-}
-
-.title {
-  font-size: 2rem;
-  font-weight: 800;
-  color: #f1f5f9;
-}
-
-.subtitle {
-  font-size: 0.9rem;
-  color: #64748b;
-  margin-top: 4px;
-}
-
-.header-right {
+.toolbar {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 16px;
 }
 
@@ -159,21 +132,6 @@ body {
   font-size: 0.8rem;
   color: #475569;
 }
-
-.btn-sensors {
-  background: none;
-  color: #64748b;
-  border: 1px solid #2a2f45;
-  border-radius: 8px;
-  padding: 8px 14px;
-  font-size: 0.85rem;
-  font-weight: 500;
-  cursor: pointer;
-  text-decoration: none;
-  transition: color 0.15s, border-color 0.15s;
-}
-
-.btn-sensors:hover { color: #94a3b8; border-color: #4a6fa5; }
 
 .btn-add-room {
   background: #4a6fa5;
@@ -201,7 +159,7 @@ body {
 
 .grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 320px));
+  grid-template-columns: repeat(auto-fill, minmax(340px, 560px));
   gap: 16px;
 }
 </style>

@@ -1,4 +1,6 @@
 <script setup lang="ts">
+definePageMeta({ layout: 'auth' })
+
 const { fetch: fetchSession } = useUserSession()
 
 const username = ref('')
@@ -27,8 +29,20 @@ async function submit() {
 <template>
   <div class="login-wrap">
     <form class="card" @submit.prevent="submit">
-      <h1 class="title">HomeNut</h1>
-      <p class="subtitle">Sign in</p>
+      <div class="brand">
+        <svg class="brand-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <ellipse cx="8.5" cy="6" rx="2.5" ry="5" fill="currentColor"/>
+          <ellipse cx="15.5" cy="6" rx="2.5" ry="5" fill="currentColor"/>
+          <ellipse cx="8.5" cy="6.5" rx="1.2" ry="3.5" fill="#4a6fa5"/>
+          <ellipse cx="15.5" cy="6.5" rx="1.2" ry="3.5" fill="#4a6fa5"/>
+          <circle cx="12" cy="17" r="6" fill="currentColor"/>
+          <circle cx="10" cy="16" r="0.9" fill="#161a26"/>
+          <circle cx="14" cy="16" r="0.9" fill="#161a26"/>
+          <circle cx="12" cy="18.5" r="0.7" fill="#4a6fa5"/>
+        </svg>
+        <h1 class="title">Warren</h1>
+      </div>
+      <p class="subtitle">Your home, at a glance</p>
 
       <label class="field">
         <span>Username</span>
@@ -70,16 +84,37 @@ async function submit() {
   gap: 14px;
 }
 
+.brand {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0 20px;
+  border-bottom: 1px solid #2a2f45;
+  margin-bottom: 4px;
+}
+
+.brand-icon {
+  width: 64px;
+  height: 64px;
+  color: #e2e8f0;
+  filter: drop-shadow(0 0 12px rgba(74, 111, 165, 0.6));
+}
+
 .title {
-  font-size: 1.6rem;
-  font-weight: 800;
-  color: #f1f5f9;
+  font-size: 2rem;
+  font-weight: 900;
+  letter-spacing: -0.03em;
+  background: linear-gradient(135deg, #f1f5f9 20%, #7ab3e0 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
 
 .subtitle {
-  font-size: 0.85rem;
-  color: #64748b;
-  margin-bottom: 8px;
+  font-size: 0.8rem;
+  color: #475569;
+  margin-top: -8px;
 }
 
 .field {
