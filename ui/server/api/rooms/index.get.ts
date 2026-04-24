@@ -3,7 +3,7 @@ import { queryInflux } from '../../utils/influxdb'
 import type { RoomWithSensors, SensorView } from '../../../shared/types'
 
 function toMs(t: unknown): number {
-  if (typeof t === 'bigint') return Number(t / 1_000_000n)
+  if (typeof t === 'bigint') return Number(t / BigInt(1_000_000))
   if (t instanceof Date) return t.getTime()
   return Number(t)
 }

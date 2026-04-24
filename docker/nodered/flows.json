@@ -11,7 +11,7 @@
         "type": "mqtt-broker",
         "name": "Mosquitto",
         "broker": "mosquitto",
-        "port": "1883",
+        "port": "1884",
         "clientid": "nodered-warren",
         "autoConnect": true,
         "usetls": false,
@@ -30,18 +30,26 @@
         "broker": "broker-mosquitto",
         "x": 130,
         "y": 100,
-        "wires": [["fn-format-line-protocol"]]
+        "wires": [
+            [
+                "fn-format-line-protocol"
+            ]
+        ]
     },
     {
         "id": "fn-format-line-protocol",
         "type": "function",
         "z": "warren-flow",
         "name": "Format line protocol",
-        "func": "const parts = msg.topic.split('/');\nconst deviceId = parts[2];\nconst sensorType = parts[3];\n\nif (sensorType === 'announce') return null;\n\nconst value = parseFloat(msg.payload);\nif (isNaN(value)) return null;\n\nconst ts = Date.now();\nmsg.payload = `sensor_readings,device_id=${deviceId},sensor_type=${sensorType} value=${value} ${ts}`;\nmsg.headers = {\n    'Authorization': 'Token apiv3_e4c2073a33432f758c3bad37d497c21ba4dcce1806460908bbb2d1b3033d5d0a',\n    'Content-Type': 'text/plain; charset=utf-8'\n};\nreturn msg;",
+        "func": "const parts = msg.topic.split('/');\nconst deviceId = parts[2];\nconst sensorType = parts[3];\n\nif (sensorType === 'announce') return null;\n\nconst value = parseFloat(msg.payload);\nif (isNaN(value)) return null;\n\nconst ts = Date.now();\nmsg.payload = `sensor_readings,device_id=${deviceId},sensor_type=${sensorType} value=${value} ${ts}`;\nmsg.headers = {\n    'Authorization': 'Token apiv3_2f6f7bf738ae15728869d3539624e938039fd8f6b9a62c00589d1e750e8c5c0d',\n    'Content-Type': 'text/plain; charset=utf-8'\n};\nreturn msg;",
         "outputs": 1,
         "x": 360,
         "y": 100,
-        "wires": [["http-write-influxdb"]]
+        "wires": [
+            [
+                "http-write-influxdb"
+            ]
+        ]
     },
     {
         "id": "http-write-influxdb",
@@ -58,6 +66,8 @@
         "authType": "",
         "x": 580,
         "y": 100,
-        "wires": [[]]
+        "wires": [
+            []
+        ]
     }
 ]
