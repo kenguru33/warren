@@ -1,8 +1,8 @@
 [
     {
-        "id": "homenut-flow",
+        "id": "warren-flow",
         "type": "tab",
-        "label": "HomeNut",
+        "label": "Warren",
         "disabled": false,
         "info": ""
     },
@@ -12,7 +12,7 @@
         "name": "Mosquitto",
         "broker": "mosquitto",
         "port": "1883",
-        "clientid": "nodered-homenut",
+        "clientid": "nodered-warren",
         "autoConnect": true,
         "usetls": false,
         "protocolVersion": "4",
@@ -22,9 +22,9 @@
     {
         "id": "mqtt-sensors-in",
         "type": "mqtt in",
-        "z": "homenut-flow",
-        "name": "homenut/sensors/+/+",
-        "topic": "homenut/sensors/+/+",
+        "z": "warren-flow",
+        "name": "warren/sensors/+/+",
+        "topic": "warren/sensors/+/+",
         "qos": "0",
         "datatype": "utf8",
         "broker": "broker-mosquitto",
@@ -35,7 +35,7 @@
     {
         "id": "fn-format-line-protocol",
         "type": "function",
-        "z": "homenut-flow",
+        "z": "warren-flow",
         "name": "Format line protocol",
         "func": "const parts = msg.topic.split('/');\nconst deviceId = parts[2];\nconst sensorType = parts[3];\n\nif (sensorType === 'announce') return null;\n\nconst value = parseFloat(msg.payload);\nif (isNaN(value)) return null;\n\nconst ts = Date.now();\nmsg.payload = `sensor_readings,device_id=${deviceId},sensor_type=${sensorType} value=${value} ${ts}`;\nmsg.headers = {\n    'Authorization': 'Token apiv3_my-super-secret-token',\n    'Content-Type': 'text/plain; charset=utf-8'\n};\nreturn msg;",
         "outputs": 1,
@@ -46,12 +46,12 @@
     {
         "id": "http-write-influxdb",
         "type": "http request",
-        "z": "homenut-flow",
+        "z": "warren-flow",
         "name": "Write to InfluxDB",
         "method": "POST",
         "ret": "txt",
         "paytoqs": "ignore",
-        "url": "http://influxdb3:8086/api/v2/write?bucket=homenut&precision=ms",
+        "url": "http://influxdb3:8086/api/v2/write?bucket=warren&precision=ms",
         "tls": "",
         "persist": true,
         "proxy": "",

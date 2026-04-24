@@ -10,7 +10,7 @@ export function getDb(): Database.Database {
   const dir = join(process.cwd(), '.data')
   mkdirSync(dir, { recursive: true })
 
-  _db = new Database(join(dir, 'homenut.db'))
+  _db = new Database(join(dir, 'warren.db'))
   _db.pragma('journal_mode = WAL')
   _db.pragma('foreign_keys = ON')
   return _db

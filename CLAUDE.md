@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Root guidance for the HomeNut monorepo. See sub-directory CLAUDE.md files for component-specific details.
+Root guidance for the Warren monorepo. See sub-directory CLAUDE.md files for component-specific details.
 
 ## Architecture
 

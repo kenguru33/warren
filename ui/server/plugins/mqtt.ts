@@ -4,10 +4,10 @@ import { getDb } from '../utils/db'
 export default defineNitroPlugin(() => {
   const brokerUrl = process.env.MQTT_URL ?? 'mqtt://localhost:1883'
 
-  const client = mqtt.connect(brokerUrl, { clientId: 'homenut-nuxt', reconnectPeriod: 5000 })
+  const client = mqtt.connect(brokerUrl, { clientId: 'warren-nuxt', reconnectPeriod: 5000 })
 
   client.on('connect', () => {
-    client.subscribe('homenut/sensors/+/announce', { qos: 0 })
+    client.subscribe('warren/sensors/+/announce', { qos: 0 })
   })
 
   client.on('message', (topic, payload) => {

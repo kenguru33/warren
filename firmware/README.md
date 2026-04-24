@@ -1,6 +1,6 @@
-# HomeNut ESP32
+# Warren ESP32
 
-ESP32 firmware for the HomeNut home automation system. Two independent projects:
+ESP32 firmware for the Warren home automation system. Two independent projects:
 
 - **sensor/** — climate sensor (DHT22) + fan/heater relay control via MQTT
 - **camera/** — MJPEG stream + snapshot server (AI Thinker ESP32-CAM)
@@ -9,7 +9,7 @@ ESP32 firmware for the HomeNut home automation system. Two independent projects:
 
 - [PlatformIO CLI](https://docs.platformio.org/en/latest/core/installation/index.html) or PlatformIO IDE extension for VS Code
 - Docker + Docker Compose (for the backend stack)
-- The [HomeNut Nuxt app](../nuxt-app) running for camera auto-discovery
+- The [Warren Nuxt app](../nuxt-app) running for camera auto-discovery
 
 ---
 
@@ -58,8 +58,8 @@ pio device monitor -b 115200
 ```
 
 The device publishes readings every 5 seconds to:
-- `homenut/sensors/{deviceId}/temperature`
-- `homenut/sensors/{deviceId}/humidity`
+- `warren/sensors/{deviceId}/temperature`
+- `warren/sensors/{deviceId}/humidity`
 
 **Wiring:**
 
@@ -110,7 +110,7 @@ Snapshot: http://192.168.x.x/capture
 
 ### Add to the frontend
 
-1. Open the HomeNut dashboard
+1. Open the Warren dashboard
 2. Click **Add Sensor** in any room
 3. The camera appears under **Discovered devices** with its stream and snapshot URLs pre-filled
 4. Select it and save — the live stream is accessible from the camera card

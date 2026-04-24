@@ -1,4 +1,4 @@
-# HomeNut
+# Warren
 
 Home automation dashboard built with Nuxt 4. Tracks temperature, humidity, and motion sensors per room. Sensor readings are stored in InfluxDB; room and sensor configuration is stored in SQLite.
 
@@ -53,7 +53,7 @@ Services started:
 Run once after the first `docker compose up`:
 
 ```bash
-docker exec influxdb3 influxdb3 create database homenut \
+docker exec influxdb3 influxdb3 create database warren \
   --token apiv3_my-super-secret-token \
   --host http://localhost:8086
 ```
@@ -75,7 +75,7 @@ cp .env.example .env
 ```
 INFLUXDB_URL=http://localhost:8086
 INFLUXDB_TOKEN=apiv3_my-super-secret-token
-INFLUXDB_DATABASE=homenut
+INFLUXDB_DATABASE=warren
 ```
 
 The token value comes from `docker/admin.token`.

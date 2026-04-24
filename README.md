@@ -1,11 +1,11 @@
-# HomeNut
+# Warren
 
 Home automation system for monitoring rooms with temperature, humidity, and camera sensors.
 
 ## Structure
 
 ```
-HomeNut/
+warren/
 ├── ui/          # Nuxt 4 web dashboard (frontend + API server)
 ├── firmware/    # ESP32 PlatformIO projects (sensor & camera)
 └── docker/      # Supporting services (MQTT, InfluxDB, Node-RED)
@@ -79,7 +79,7 @@ Then flash with PlatformIO — see [`firmware/README.md`](firmware/README.md) fo
 
 | Service | URL | Purpose |
 |---|---|---|
-| Dashboard | http://localhost:3000 | HomeNut UI |
+| Dashboard | http://localhost:3000 | Warren UI |
 | InfluxDB | http://localhost:8086 | Time-series data |
 | InfluxDB UI | http://localhost:8888 | DB explorer |
 | Node-RED | http://localhost:1880 | Flow automation |

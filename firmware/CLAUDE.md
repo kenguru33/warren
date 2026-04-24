@@ -64,7 +64,7 @@ docker compose up -d
 `sensor/src/main.cpp` uses FreeRTOS with two pinned tasks:
 
 - **`taskReadSensor`** (core 1, priority 1) — polls DHT22 every 5 s, pushes valid readings into a `QueueHandle_t`
-- **`taskMQTT`** (core 0, priority 1) — drains the queue, publishes to `homenut/sensors/{deviceId}/temperature` and `homenut/sensors/{deviceId}/humidity`, handles reconnection
+- **`taskMQTT`** (core 0, priority 1) — drains the queue, publishes to `warren/sensors/{deviceId}/temperature` and `warren/sensors/{deviceId}/humidity`, handles reconnection
 
 `loop()` is intentionally empty; all work is done in tasks.
 

@@ -243,7 +243,7 @@
         snprintf(tempStr, sizeof(tempStr), "%.2f", data.temperature);
         snprintf(humStr, sizeof(humStr), "%.2f", data.humidity);
 
-        String base = "homenut/sensors/" + deviceId + "/";
+        String base = "warren/sensors/" + deviceId + "/";
         bool tOk = client.publish((base + "temperature").c_str(), tempStr, true);
         bool hOk = client.publish((base + "humidity").c_str(), humStr, true);
 

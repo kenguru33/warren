@@ -7,7 +7,7 @@ export function getInfluxClient(): InfluxDBClient {
   _client = new InfluxDBClient({
     host: process.env.INFLUXDB_URL ?? 'http://localhost:8086',
     token: process.env.INFLUXDB_TOKEN ?? '',
-    database: process.env.INFLUXDB_DATABASE ?? 'homenut',
+    database: process.env.INFLUXDB_DATABASE ?? 'warren',
   })
   return _client
 }
