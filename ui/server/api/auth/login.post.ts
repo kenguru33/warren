@@ -1,4 +1,5 @@
 import { timingSafeEqual } from 'node:crypto'
+import { getDb, verifyUserPassword } from '../../utils/db'
 
 function safeEqual(a: string, b: string) {
   const bufA = Buffer.from(a)
@@ -15,11 +16,16 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 500, statusMessage: 'Auth is not configured on the server' })
   }
 
-  const ok =
-    typeof username === 'string' &&
-    typeof password === 'string' &&
-    safeEqual(username, config.authUsername) &&
-    safeEqual(password, config.authPassword)
+  if (typeof username !== 'string' || typeof password !== 'string' || !safeEqual(username, config.authUsername)) {
+    throw createError({ statusCode: 401, statusMessage: 'Invalid credentials' })
+  }
+
+  const db = getDb()
+  const row = db.prepare('SELECT password_hash FROM users WHERE username = ?').get(username) as { password_hash: string } | undefined
+
+  const ok = row
+    ? await verifyUserPassword(password, row.password_hash)
+    : safeEqual(password, config.authPassword)
 
   if (!ok) {
     throw createError({ statusCode: 401, statusMessage: 'Invalid credentials' })

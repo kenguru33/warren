@@ -1,6 +1,25 @@
 import Database from 'better-sqlite3'
 import { join } from 'path'
 import { mkdirSync } from 'fs'
+import { scrypt, randomBytes, timingSafeEqual } from 'node:crypto'
+import { promisify } from 'node:util'
+
+const scryptAsync = promisify(scrypt)
+
+export async function hashUserPassword(plain: string): Promise<string> {
+  const salt = randomBytes(16).toString('hex')
+  const hash = await scryptAsync(plain, salt, 64) as Buffer
+  return `${salt}:${hash.toString('hex')}`
+}
+
+export async function verifyUserPassword(plain: string, stored: string): Promise<boolean> {
+  const [salt, hash] = stored.split(':')
+  if (!salt || !hash) return false
+  const derived = await scryptAsync(plain, salt, 64) as Buffer
+  const stored_buf = Buffer.from(hash, 'hex')
+  if (derived.length !== stored_buf.length) return false
+  return timingSafeEqual(derived, stored_buf)
+}
 
 let _db: Database.Database | null = null
 
@@ -55,6 +74,13 @@ export function initDb() {
       device_id TEXT NOT NULL,
       type      TEXT NOT NULL,
       PRIMARY KEY (device_id, type)
+    );
+
+    CREATE TABLE IF NOT EXISTS users (
+      id            INTEGER PRIMARY KEY,
+      username      TEXT    NOT NULL UNIQUE,
+      password_hash TEXT    NOT NULL,
+      updated_at    DATETIME NOT NULL DEFAULT (datetime('now'))
     );
   `)
 

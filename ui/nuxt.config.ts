@@ -8,7 +8,7 @@ export default defineNuxtConfig({
   runtimeConfig: {
     authUsername: '',
     authPassword: '',
-    session: { password: '' },
+    session: { password: '', cookie: { secure: false } },
   },
   nitro: {
     externals: { external: ['better-sqlite3', '@influxdata/influxdb3-client', 'mqtt'] },

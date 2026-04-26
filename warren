@@ -14,6 +14,7 @@ CAMERA_SECRETS="$SCRIPT_DIR/firmware/camera/include/secrets.h"
 UI_ENV="$SCRIPT_DIR/ui/.env"
 INFLUXDB_TOKEN_FILE="$SCRIPT_DIR/docker/admin.token"
 MQTT_PASSWORDFILE="$SCRIPT_DIR/docker/mosquitto/config/passwordfile"
+SQLITE_DATA_DIR="$SCRIPT_DIR/ui/.data"
 MQTT_CONF="$SCRIPT_DIR/docker/mosquitto/config/mosquitto.conf"
 
 usage() {
@@ -271,6 +272,7 @@ cleanup() {
     echo "  ui/.env"
     echo "  docker/admin.token"
     echo "  docker/mosquitto/config/passwordfile"
+    echo "  ui/.data/  (SQLite database including user password)"
     echo ""
     IFS= read -r -p "Type YES to confirm: " confirm
     [[ "$confirm" == "YES" ]] || { echo "Aborted."; exit 1; }
@@ -293,6 +295,7 @@ cleanup() {
 
     echo "Removing secrets and tokens…"
     rm -f "$SENSOR_SECRETS" "$CAMERA_SECRETS" "$UI_ENV" "$INFLUXDB_TOKEN_FILE" "$MQTT_PASSWORDFILE"
+    rm -rf "$SQLITE_DATA_DIR"
 
     cat > "$MQTT_CONF" <<'EOF'
 listener 1883

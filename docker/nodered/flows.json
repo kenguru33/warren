@@ -41,7 +41,7 @@
         "type": "function",
         "z": "warren-flow",
         "name": "Format line protocol",
-        "func": "const parts = msg.topic.split('/');\nconst deviceId = parts[2];\nconst sensorType = parts[3];\n\nif (sensorType === 'announce') return null;\n\nconst value = parseFloat(msg.payload);\nif (isNaN(value)) return null;\n\nconst ts = Date.now();\nmsg.payload = `sensor_readings,device_id=${deviceId},sensor_type=${sensorType} value=${value} ${ts}`;\nmsg.headers = {\n    'Authorization': 'Token apiv3_2f6f7bf738ae15728869d3539624e938039fd8f6b9a62c00589d1e750e8c5c0d',\n    'Content-Type': 'text/plain; charset=utf-8'\n};\nreturn msg;",
+        "func": "const parts = msg.topic.split('/');\nconst deviceId = parts[2];\nconst sensorType = parts[3];\n\nif (sensorType === 'announce') return null;\n\nconst value = parseFloat(msg.payload);\nif (isNaN(value)) return null;\n\nconst ts = Date.now();\nmsg.payload = `sensor_readings,device_id=${deviceId},sensor_type=${sensorType} value=${value} ${ts}`;\nmsg.headers = {\n    'Authorization': 'Token apiv3_b6c78b3d08eeac7a037b5ec7241485228efad6de33b74c71f0a2fe3d39ddf0d8',\n    'Content-Type': 'text/plain; charset=utf-8'\n};\nreturn msg;",
         "outputs": 1,
         "x": 360,
         "y": 100,

@@ -2,18 +2,29 @@
 const { loggedIn, user, clear } = useUserSession()
 const route = useRoute()
 const sidebarOpen = ref(true)
+const menuOpen = ref(false)
+const showChangePassword = ref(false)
+const userSectionRef = ref<HTMLElement | null>(null)
 
 function handleResize() {
   sidebarOpen.value = window.innerWidth > 768
 }
 
+function handleDocumentClick(e: MouseEvent) {
+  if (userSectionRef.value && !userSectionRef.value.contains(e.target as Node)) {
+    menuOpen.value = false
+  }
+}
+
 onMounted(() => {
   sidebarOpen.value = window.innerWidth > 768
   window.addEventListener('resize', handleResize)
+  document.addEventListener('click', handleDocumentClick)
 })
 
 onBeforeUnmount(() => {
   window.removeEventListener('resize', handleResize)
+  document.removeEventListener('click', handleDocumentClick)
 })
 
 watch(() => route.path, () => {
@@ -24,6 +35,11 @@ async function logout() {
   await $fetch('/api/auth/logout', { method: 'POST' })
   await clear()
   await navigateTo('/login')
+}
+
+function openChangePassword() {
+  menuOpen.value = false
+  showChangePassword.value = true
 }
 
 const navLinks = [
@@ -70,10 +86,14 @@ const navLinks = [
         </svg>
         <span class="brand-name">Warren</span>
       </div>
-      <div v-if="loggedIn" class="user-section">
-        <span class="username">{{ user?.name }}</span>
-        <button class="btn-logout" @click="logout">Log out</button>
+      <div v-if="loggedIn" ref="userSectionRef" class="user-section">
+        <button class="btn-username" @click="menuOpen = !menuOpen">{{ user?.name }}</button>
+        <div v-if="menuOpen" class="user-menu">
+          <button class="menu-item" @click="openChangePassword">Change password</button>
+          <button class="menu-item menu-item--danger" @click="logout">Log out</button>
+        </div>
       </div>
+      <ChangePasswordModal v-if="showChangePassword" @close="showChangePassword = false" />
     </header>
 
     <!-- Below header: sidebar + content -->
@@ -157,18 +177,11 @@ const navLinks = [
 }
 
 .user-section {
-  display: flex;
-  align-items: center;
-  gap: 10px;
+  position: relative;
   flex-shrink: 0;
 }
 
-.username {
-  font-size: 0.78rem;
-  color: #475569;
-}
-
-.btn-logout {
+.btn-username {
   background: none;
   color: #64748b;
   border: 1px solid #2a2f45;
@@ -179,9 +192,51 @@ const navLinks = [
   transition: color 0.15s, border-color 0.15s;
 }
 
-.btn-logout:hover {
+.btn-username:hover {
   color: #e2e8f0;
   border-color: #4a6fa5;
+}
+
+.user-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  background: #1e2130;
+  border: 1px solid #2a2f45;
+  border-radius: 8px;
+  padding: 4px;
+  min-width: 160px;
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.menu-item {
+  background: none;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 0.82rem;
+  color: #94a3b8;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+  width: 100%;
+}
+
+.menu-item:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: #e2e8f0;
+}
+
+.menu-item--danger {
+  color: #f87171;
+}
+
+.menu-item--danger:hover {
+  background: rgba(239, 68, 68, 0.1);
+  color: #fca5a5;
 }
 
 /* ── Hamburger ───────────────────────────────────────────── */
