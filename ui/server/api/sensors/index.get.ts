@@ -70,9 +70,38 @@ export default defineEventHandler(async () => {
       lastRecordedAt: a.last_seen, streamUrl: a.stream_url, snapshotUrl: a.snapshot_url,
     }))
 
+  // Relay config for computing heater/fan state
+  const configs = db.prepare(`
+    SELECT device_id, ref_temp, heater_on_offset, heater_off_offset, fan_threshold
+    FROM sensor_config
+  `).all() as {
+    device_id: string; ref_temp: number | null
+    heater_on_offset: number; heater_off_offset: number; fan_threshold: number
+  }[]
+  const configMap = new Map(configs.map(c => [c.device_id, c]))
+
+  function relayState(deviceId: string | null, temp: number | null) {
+    if (temp === null || deviceId === null) return { heaterActive: null, fanActive: null }
+    const cfg = configMap.get(deviceId)
+    const refTemp   = cfg?.ref_temp ?? null
+    const heatOnOff = cfg?.heater_on_offset  ?? 2.0
+    const heatOffOff = cfg?.heater_off_offset ?? 2.0
+    const fanThr    = cfg?.fan_threshold      ?? 10.0
+    const heaterOn  = refTemp !== null ? refTemp - heatOnOff  : 18.0
+    const heaterOff = refTemp !== null ? refTemp + heatOffOff : 22.0
+    const fanOn     = refTemp !== null ? refTemp + fanThr     : 30.0
+    return {
+      heaterActive: temp <= heaterOn,
+      fanActive: temp > fanOn,
+    }
+  }
+
   const assignedResult = assigned.map(s => {
     const key = s.device_id ? `${s.device_id}:${s.type}` : null
     const latest = key ? latestMap.get(key) : undefined
+    const { heaterActive, fanActive } = s.type === 'temperature'
+      ? relayState(s.device_id, latest?.value ?? null)
+      : { heaterActive: null, fanActive: null }
     return {
       id: s.id as number | null,
       type: s.type,
@@ -84,21 +113,30 @@ export default defineEventHandler(async () => {
       snapshotUrl: s.snapshot_url,
       latestValue: latest?.value ?? null,
       lastRecordedAt: latest?.timeMs ?? null,
+      heaterActive,
+      fanActive,
     }
   })
 
-  const unassignedResult = [...unassignedInflux, ...unassignedAnnounced].map(s => ({
-    id: null as number | null,
-    type: s.type,
-    label: null as string | null,
-    deviceId: s.deviceId,
-    roomId: null as number | null,
-    roomName: null as string | null,
-    streamUrl: s.streamUrl,
-    snapshotUrl: s.snapshotUrl,
-    latestValue: s.latestValue,
-    lastRecordedAt: s.lastRecordedAt,
-  }))
+  const unassignedResult = [...unassignedInflux, ...unassignedAnnounced].map(s => {
+    const { heaterActive, fanActive } = s.type === 'temperature'
+      ? relayState(s.deviceId, s.latestValue)
+      : { heaterActive: null, fanActive: null }
+    return {
+      id: null as number | null,
+      type: s.type,
+      label: null as string | null,
+      deviceId: s.deviceId,
+      roomId: null as number | null,
+      roomName: null as string | null,
+      streamUrl: s.streamUrl,
+      snapshotUrl: s.snapshotUrl,
+      latestValue: s.latestValue,
+      lastRecordedAt: s.lastRecordedAt,
+      heaterActive,
+      fanActive,
+    }
+  })
 
   return [...assignedResult, ...unassignedResult]
 })

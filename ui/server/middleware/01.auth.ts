@@ -5,7 +5,7 @@ const PUBLIC_EXACT = new Set([
   '/api/sensors/announce',
 ])
 
-const PUBLIC_PREFIXES = ['/api/sensors/target/']
+const PUBLIC_PREFIXES = ['/api/sensors/config/']
 const PUBLIC_PATTERNS = [/^\/api\/sensors\/[^/]+\/reading$/]
 
 function isPublic(path: string) {

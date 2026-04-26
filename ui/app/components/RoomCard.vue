@@ -135,6 +135,18 @@ function recentMotion(ts: number | null) {
           target {{ room.reference.refTemp }}°
           <span v-if="tempDev" class="dev" :class="parseFloat(tempDev) > 0 ? 'over' : 'under'">{{ tempDev }}</span>
         </span>
+        <div class="relay-indicators">
+          <span class="relay-indicator" :class="{ active: tempSensor.heaterActive }" title="Heater">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+              <path d="M3 6 Q6 3 9 6 Q12 9 15 6 Q18 3 21 6"/>
+              <path d="M3 12 Q6 9 9 12 Q12 15 15 12 Q18 9 21 12"/>
+              <path d="M3 18 Q6 15 9 18 Q12 21 15 18 Q18 15 21 18"/>
+            </svg>
+          </span>
+          <span class="relay-indicator fan" :class="{ active: tempSensor.fanActive }" title="Fan">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M12 11a1 1 0 1 0 0 2 1 1 0 0 0 0-2zm6.93-1A7 7 0 0 0 13 4.07V2h-2v2.07A7 7 0 0 0 5.07 10H3v2h2.07A7 7 0 0 0 11 19.93V22h2v-2.07A7 7 0 0 0 18.93 13H21v-2h-2.07zM12 18a6 6 0 1 1 0-12 6 6 0 0 1 0 12z"/></svg>
+          </span>
+        </div>
         <div v-if="editing" class="tile-actions">
           <button class="tile-action-btn" title="Edit sensor" @click.stop="emit('edit-sensor', tempSensor.id)">
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -425,6 +437,22 @@ function recentMotion(ts: number | null) {
 .dev { font-weight: 600; }
 .dev.over  { color: #f87171; }
 .dev.under { color: #34d399; }
+
+.relay-indicators {
+  display: flex;
+  gap: 4px;
+  margin-top: 2px;
+}
+
+.relay-indicator {
+  color: #2a2f45;
+  display: flex;
+  align-items: center;
+  transition: color 0.2s;
+}
+
+.relay-indicator.active     { color: #f97316; }
+.relay-indicator.fan.active { color: #38bdf8; }
 
 .tile-actions {
   position: absolute;

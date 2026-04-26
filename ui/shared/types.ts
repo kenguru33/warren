@@ -11,6 +11,8 @@ export interface SensorView {
   streamUrl: string | null
   snapshotUrl: string | null
   lastMotion: number | null
+  heaterActive: boolean | null
+  fanActive: boolean | null
 }
 
 export interface RoomReference {

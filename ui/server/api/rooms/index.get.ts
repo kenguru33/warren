@@ -48,6 +48,27 @@ export default defineEventHandler(async (): Promise<RoomWithSensors[]> => {
     motionMap.set(String(row.device_id), toMs(row.last_motion_at))
   }
 
+  const configs = db.prepare(`
+    SELECT device_id, ref_temp, heater_on_offset, heater_off_offset, fan_threshold FROM sensor_config
+  `).all() as {
+    device_id: string; ref_temp: number | null
+    heater_on_offset: number; heater_off_offset: number; fan_threshold: number
+  }[]
+  const configMap = new Map(configs.map(c => [c.device_id, c]))
+
+  function relayState(deviceId: string | null, temp: number | null) {
+    if (temp === null || deviceId === null) return { heaterActive: null, fanActive: null }
+    const cfg = configMap.get(deviceId)
+    const refTemp    = cfg?.ref_temp          ?? null
+    const heatOnOff  = cfg?.heater_on_offset  ?? 2.0
+    const heatOffOff = cfg?.heater_off_offset ?? 2.0
+    const fanThr     = cfg?.fan_threshold     ?? 10.0
+    const heaterOn   = refTemp !== null ? refTemp - heatOnOff  : 18.0
+    const heaterOff  = refTemp !== null ? refTemp + heatOffOff : 22.0
+    const fanOn      = refTemp !== null ? refTemp + fanThr     : 30.0
+    return { heaterActive: temp <= heaterOn, fanActive: temp > fanOn }
+  }
+
   const refStmt = db.prepare('SELECT ref_temp, ref_humidity FROM room_references WHERE room_id = ?')
 
   return rooms.map(room => {
@@ -58,6 +79,9 @@ export default defineEventHandler(async (): Promise<RoomWithSensors[]> => {
       .map(s => {
         const key = s.device_id ? `${s.device_id}:${s.type}` : null
         const latest = key ? latestMap.get(key) : undefined
+        const { heaterActive, fanActive } = s.type === 'temperature'
+          ? relayState(s.device_id, latest?.value ?? null)
+          : { heaterActive: null, fanActive: null }
         return {
           id: s.id,
           roomId: s.room_id,
@@ -69,6 +93,8 @@ export default defineEventHandler(async (): Promise<RoomWithSensors[]> => {
           streamUrl: s.stream_url,
           snapshotUrl: s.snapshot_url,
           lastMotion: s.device_id ? (motionMap.get(s.device_id) ?? null) : null,
+          heaterActive,
+          fanActive,
         }
       })
 

@@ -21,8 +21,8 @@
 
   // -------------------- Pins --------------------
   const int DHT_PIN = 21;
-  const int FAN_PIN = 4;
-  const int HEATER_PIN = 19;
+  const int FAN_PIN = 19;
+  const int HEATER_PIN = 4;
 
   // -------------------- Objects --------------------
   DHTesp dhtSensor;
@@ -291,6 +291,28 @@
         } else {
           Serial.println("[MQTT] Publish failed");
         }
+
+        // Apply relay control directly from own sensor reading
+        float t = config.refTemp;
+        float heaterOn, heaterOff, fanOn;
+        if (!isnan(t)) {
+          heaterOn  = t - config.heaterOnOffset;
+          heaterOff = t + config.heaterOffOffset;
+          fanOn     = t + config.fanThreshold;
+        } else {
+          heaterOn = 18.0; heaterOff = 22.0; fanOn = 30.0;
+        }
+
+        digitalWrite(FAN_PIN, data.temperature > fanOn ? HIGH : LOW);
+
+        if (data.temperature <= heaterOn) {
+          digitalWrite(HEATER_PIN, HIGH);
+          Serial.println("[Relay] Heater ON");
+        } else if (data.temperature >= heaterOff) {
+          digitalWrite(HEATER_PIN, LOW);
+          Serial.println("[Relay] Heater OFF");
+        }
+        // In the comfort zone: leave heater unchanged (hysteresis)
       }
 
       vTaskDelay(pdMS_TO_TICKS(10));
@@ -327,7 +349,7 @@
     ensureWiFiConnected();
     deviceId = getDeviceId();
     if (strcmp(WiFi.SSID().c_str(), "Wokwi-GUEST") == 0) {
-      deviceId = "wokwi-" + String(random(1000, 9999));
+      deviceId = "wokwi-sensor";
     }
     Serial.printf("[Device] ID: %s\n", deviceId.c_str());
 

@@ -8,6 +8,7 @@ const emit = defineEmits<{ close: [] }>()
 
 const saving = ref(false)
 const loading = ref(true)
+const fetchError = ref<string | null>(null)
 
 const form = ref({
   refTemp: null as number | null,
@@ -27,20 +28,25 @@ const pending = computed(() => {
 })
 
 onMounted(async () => {
-  const data = await $fetch<typeof form.value & { updatedAt: string | null; lastFetchedAt: string | null }>(
-    `/api/sensors/config/${props.deviceId}`
-  )
-  form.value = {
-    refTemp: data.refTemp,
-    heaterOnOffset: data.heaterOnOffset,
-    heaterOffOffset: data.heaterOffOffset,
-    fanThreshold: data.fanThreshold,
-    pollInterval: data.pollInterval,
-    configFetchInterval: data.configFetchInterval,
+  try {
+    const data = await $fetch<typeof form.value & { updatedAt: string | null; lastFetchedAt: string | null }>(
+      `/api/sensors/config/${props.deviceId}`
+    )
+    form.value = {
+      refTemp: data.refTemp,
+      heaterOnOffset: data.heaterOnOffset,
+      heaterOffOffset: data.heaterOffOffset,
+      fanThreshold: data.fanThreshold,
+      pollInterval: data.pollInterval,
+      configFetchInterval: data.configFetchInterval,
+    }
+    updatedAt.value = data.updatedAt
+    lastFetchedAt.value = data.lastFetchedAt
+  } catch (e: unknown) {
+    fetchError.value = e instanceof Error ? e.message : 'Failed to load config'
+  } finally {
+    loading.value = false
   }
-  updatedAt.value = data.updatedAt
-  lastFetchedAt.value = data.lastFetchedAt
-  loading.value = false
 })
 
 async function save() {
@@ -67,6 +73,7 @@ async function save() {
         </div>
 
         <div v-if="loading" class="loading">Loading…</div>
+        <div v-else-if="fetchError" class="loading" style="color:#f87171">{{ fetchError }}</div>
 
         <template v-else>
           <div class="fields">

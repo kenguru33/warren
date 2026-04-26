@@ -110,6 +110,18 @@ async function saveEdit() {
         <div class="sensor-value">
           <span class="value">{{ formatValue(sensor) }}</span>
           <span class="age">{{ formatAge(sensor.lastRecordedAt) }}</span>
+          <div v-if="sensor.type === 'temperature'" class="relay-indicators">
+            <span class="relay-indicator" :class="{ active: sensor.heaterActive }" title="Heater">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+                <path d="M3 6 Q6 3 9 6 Q12 9 15 6 Q18 3 21 6"/>
+                <path d="M3 12 Q6 9 9 12 Q12 15 15 12 Q18 9 21 12"/>
+                <path d="M3 18 Q6 15 9 18 Q12 21 15 18 Q18 15 21 18"/>
+              </svg>
+            </span>
+            <span class="relay-indicator fan" :class="{ active: sensor.fanActive }" title="Fan">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M12 11a1 1 0 1 0 0 2 1 1 0 0 0 0-2zm6.93-1A7 7 0 0 0 13 4.07V2h-2v2.07A7 7 0 0 0 5.07 10H3v2h2.07A7 7 0 0 0 11 19.93V22h2v-2.07A7 7 0 0 0 18.93 13H21v-2h-2.07zM12 18a6 6 0 1 1 0-12 6 6 0 0 1 0 12z"/></svg>
+            </span>
+          </div>
         </div>
 
         <div class="row-actions">
@@ -341,6 +353,22 @@ async function saveEdit() {
   font-size: 0.7rem;
   color: #475569;
 }
+
+.relay-indicators {
+  display: flex;
+  gap: 4px;
+  margin-top: 2px;
+}
+
+.relay-indicator {
+  color: #2a2f45;
+  display: flex;
+  align-items: center;
+  transition: color 0.2s;
+}
+
+.relay-indicator.active { color: #f97316; }
+.relay-indicator.fan.active { color: #38bdf8; }
 
 .row-actions {
   display: flex;

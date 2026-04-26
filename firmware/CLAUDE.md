@@ -64,17 +64,17 @@ docker compose up -d
 `sensor/src/main.cpp` uses FreeRTOS with three pinned tasks:
 
 - **`taskReadSensor`** (core 1, priority 1) — polls DHT22 at `config.pollInterval` (default 5 s), pushes valid readings into a `QueueHandle_t`
-- **`taskMQTT`** (core 0, priority 1) — drains the queue, publishes to `warren/sensors/{deviceId}/temperature` and `warren/sensors/{deviceId}/humidity`, handles reconnection
+- **`taskMQTT`** (core 0, priority 1) — drains the queue, publishes to `warren/sensors/{deviceId}/temperature` and `warren/sensors/{deviceId}/humidity`, handles reconnection, then applies relay control directly from the published reading
 - **`taskFetchConfig`** (core 0, priority 1) — polls `BACKEND_URL/api/sensors/config/{deviceId}` at `config.configFetchInterval` (default 60 s), updates the shared `SensorConfig` struct and persists changes to NVS
 
 `loop()` is intentionally empty; all work is done in tasks.
 
 **GPIO assignments (sensor):**
 - GPIO 21 — DHT22 data
-- GPIO 4 — fan relay
-- GPIO 19 — heater relay
+- GPIO 4 — heater relay
+- GPIO 19 — fan relay
 
-**Control logic** lives in `mqttCallback`: subscribes to `home/temperature` and adjusts relay states using values from the `SensorConfig` struct (heaterOnOffset, heaterOffOffset, fanThreshold). Falls back to hardcoded thresholds (18/22/30 °C) when `config.refTemp` is NAN.
+**Control logic** runs inside `taskMQTT` immediately after publishing each reading. Heater (GPIO 4) turns ON when temperature ≤ `refTemp − heaterOnOffset`, turns OFF when ≥ `refTemp + heaterOffOffset` (hysteresis in between). Fan (GPIO 19) turns ON when temperature > `refTemp + fanThreshold`. Falls back to hardcoded absolute thresholds (18/22/30 °C) when `config.refTemp` is NAN.
 
 **Runtime config** — the `SensorConfig` struct holds all tunable values. On boot, `loadConfigFromNVS()` restores values from the ESP32 NVS flash (namespace `"cfg"`), so the device operates with the last-known config even without network. `taskFetchConfig` fetches the full config object from the backend and calls `saveConfigToNVS()` only when values change, to minimise flash wear.
 
