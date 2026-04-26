@@ -6,6 +6,7 @@
   #include <math.h>
   #include "DHTesp.h"
   #include "secrets.h"
+  #include "wifi_connect.h"
 
   // -------------------- WiFi --------------------
   const char* ssid = SECRET_SSID;
@@ -60,26 +61,7 @@
   // -------------------- WiFi --------------------
   void ensureWiFiConnected() {
     if (WiFi.status() == WL_CONNECTED) return;
-
-    Serial.println("[WiFi] Connecting...");
-    WiFi.mode(WIFI_STA);
-    WiFi.begin(ssid, password);
-
-    unsigned long startAttemptTime = millis();
-    while (WiFi.status() != WL_CONNECTED && millis() - startAttemptTime < 15000) {
-      vTaskDelay(pdMS_TO_TICKS(500));
-      Serial.print(".");
-    }
-
-    if (WiFi.status() == WL_CONNECTED) {
-      Serial.println();
-      Serial.println("[WiFi] Connected");
-      Serial.print("[WiFi] IP: ");
-      Serial.println(WiFi.localIP());
-    } else {
-      Serial.println();
-      Serial.println("[WiFi] Failed to connect");
-    }
+    connectWithFallback(ssid, password);
   }
 
   // -------------------- MQTT --------------------
@@ -285,7 +267,7 @@
 
     ensureWiFiConnected();
     deviceId = getDeviceId();
-    if (strcmp(ssid, "Wokwi-GUEST") == 0) {
+    if (strcmp(WiFi.SSID().c_str(), "Wokwi-GUEST") == 0) {
       deviceId = "wokwi-" + String(random(1000, 9999));
     }
     Serial.printf("[Device] ID: %s\n", deviceId.c_str());

@@ -4,6 +4,7 @@
 #include <WiFi.h>
 #include <HTTPClient.h>
 #include "secrets.h"
+#include "wifi_connect.h"
 
 // AI Thinker ESP32-CAM pin map
 #define PWDN_GPIO_NUM   32
@@ -82,13 +83,7 @@ static bool initCamera() {
 }
 
 static void connectWiFi() {
-  WiFi.begin(SECRET_SSID, SECRET_PASS);
-  Serial.print("Connecting to WiFi");
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    Serial.print(".");
-  }
-  Serial.printf("\nIP: %s\n", WiFi.localIP().toString().c_str());
+  connectWithFallback(SECRET_SSID, SECRET_PASS);
 }
 
 static esp_err_t streamHandler(httpd_req_t *req) {
