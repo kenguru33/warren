@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 88">
+  <defs>
+    <linearGradient id="nameGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="20%" stop-color="#f1f5f9"/>
+      <stop offset="100%" stop-color="#7ab3e0"/>
+    </linearGradient>
+    <filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="2.5" result="blur"/>
+      <feFlood flood-color="#4a6fa5" flood-opacity="0.45" result="color"/>
+      <feComposite in="color" in2="blur" operator="in" result="shadow"/>
+      <feMerge>
+        <feMergeNode in="shadow"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Card background -->
+  <rect width="300" height="88" rx="14" fill="#161a26"/>
+
+  <!-- Rabbit icon — 2× scale, centred vertically in 88 px -->
+  <!-- Original 24×24 paths: ears top y≈1, head bottom y≈23 → 22 px tall → 44 px at 2× -->
+  <!-- vertical centre: (88−44)/2 = 22 → translate y = 22 − 2(1) = 20 -->
+  <g transform="translate(14, 20) scale(2)" filter="url(#glow)">
+    <!-- Ears -->
+    <ellipse cx="8.5" cy="6" rx="2.5" ry="5" fill="#e2e8f0"/>
+    <ellipse cx="15.5" cy="6" rx="2.5" ry="5" fill="#e2e8f0"/>
+    <!-- Inner ears -->
+    <ellipse cx="8.5" cy="6.5" rx="1.2" ry="3.5" fill="#4a6fa5"/>
+    <ellipse cx="15.5" cy="6.5" rx="1.2" ry="3.5" fill="#4a6fa5"/>
+    <!-- Head -->
+    <circle cx="12" cy="17" r="6" fill="#e2e8f0"/>
+    <!-- Eyes -->
+    <circle cx="10" cy="16" r="0.9" fill="#161a26"/>
+    <circle cx="14" cy="16" r="0.9" fill="#161a26"/>
+    <!-- Nose -->
+    <circle cx="12" cy="18.5" r="0.7" fill="#4a6fa5"/>
+  </g>
+
+  <!-- "Warren" wordmark -->
+  <text x="78" y="50"
+        font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, sans-serif"
+        font-size="36"
+        font-weight="900"
+        letter-spacing="-1"
+        fill="url(#nameGrad)">Warren</text>
+
+  <!-- Tagline -->
+  <text x="80" y="68"
+        font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, sans-serif"
+        font-size="10.5"
+        letter-spacing="3.5"
+        fill="#475569">HOME MONITORING</text>
+</svg>
