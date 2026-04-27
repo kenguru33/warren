@@ -13,10 +13,18 @@ export default defineEventHandler(async (): Promise<RoomWithSensors[]> => {
 
   const rooms = db.prepare('SELECT id, name FROM rooms ORDER BY created_at ASC').all() as { id: number; name: string }[]
   const sensors = db.prepare(`
-    SELECT id, room_id, type, device_id, label, stream_url, snapshot_url FROM sensors ORDER BY created_at ASC
+    SELECT s.id, s.room_id, s.type, s.device_id, s.label, s.stream_url, s.snapshot_url,
+           hls.on_state AS hue_on, hls.brightness AS hue_bri, hls.reachable AS hue_reachable,
+           hd.capabilities AS hue_capabilities
+    FROM sensors s
+    LEFT JOIN hue_light_state hls ON hls.device_id = s.device_id
+    LEFT JOIN hue_devices hd ON hd.device_id = s.device_id
+    ORDER BY s.created_at ASC
   `).all() as {
     id: number; room_id: number; type: string; device_id: string | null
     label: string | null; stream_url: string | null; snapshot_url: string | null
+    hue_on: number | null; hue_bri: number | null; hue_reachable: number | null
+    hue_capabilities: string | null
   }[]
 
   const latestMap = new Map<string, { value: number; timeMs: number }>()
@@ -82,6 +90,7 @@ export default defineEventHandler(async (): Promise<RoomWithSensors[]> => {
         const { heaterActive, fanActive } = s.type === 'temperature'
           ? relayState(s.device_id, latest?.value ?? null)
           : { heaterActive: null, fanActive: null }
+        const isHue = s.device_id?.startsWith('hue-') ?? false
         return {
           id: s.id,
           roomId: s.room_id,
@@ -95,6 +104,11 @@ export default defineEventHandler(async (): Promise<RoomWithSensors[]> => {
           lastMotion: s.device_id ? (motionMap.get(s.device_id) ?? null) : null,
           heaterActive,
           fanActive,
+          origin: isHue ? 'hue' : 'esp32',
+          capabilities: s.hue_capabilities ? JSON.parse(s.hue_capabilities) : undefined,
+          lightOn: s.hue_on === null ? null : s.hue_on === 1,
+          lightBrightness: s.hue_bri,
+          lightReachable: s.hue_reachable === null ? null : s.hue_reachable === 1,
         }
       })
 

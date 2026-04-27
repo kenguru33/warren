@@ -1,4 +1,12 @@
-export type SensorType = 'temperature' | 'humidity' | 'camera' | 'motion'
+export type SensorType = 'temperature' | 'humidity' | 'camera' | 'motion' | 'light' | 'lightlevel'
+
+export type SensorOrigin = 'esp32' | 'hue'
+
+export interface SensorCapabilities {
+  brightness?: boolean
+  colorTemp?: boolean
+  color?: boolean
+}
 
 export interface SensorView {
   id: number
@@ -13,6 +21,11 @@ export interface SensorView {
   lastMotion: number | null
   heaterActive: boolean | null
   fanActive: boolean | null
+  origin?: SensorOrigin
+  capabilities?: SensorCapabilities
+  lightOn?: boolean | null
+  lightBrightness?: number | null
+  lightReachable?: boolean | null
 }
 
 export interface RoomReference {
@@ -36,4 +49,6 @@ export interface DiscoveredSensor {
   latestValue: number | null
   streamUrl?: string | null
   snapshotUrl?: string | null
+  origin?: SensorOrigin
+  capabilities?: SensorCapabilities
 }

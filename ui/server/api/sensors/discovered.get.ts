@@ -41,6 +41,7 @@ export default defineEventHandler(async (): Promise<DiscoveredSensor[]> => {
 
   const influxSensors: DiscoveredSensor[] = rows
     .filter(r => !assignedSet.has(`${r.device_id}:${r.sensor_type}`))
+    .filter(r => !String(r.device_id).startsWith('hue-'))
     .map(r => ({
       deviceId: String(r.device_id),
       sensorType: String(r.sensor_type),
@@ -75,7 +76,34 @@ export default defineEventHandler(async (): Promise<DiscoveredSensor[]> => {
     snapshotUrl: s.snapshot_url,
   }))
 
-  return [...influxSensors, ...announcedSensors, ...unassignedSensors]
+  // Hue devices that haven't been assigned to a room yet
+  const hueDevices = db.prepare(`
+    SELECT device_id, kind, subtype, name, capabilities, last_seen
+    FROM hue_devices
+    WHERE available = 1
+  `).all() as {
+    device_id: string; kind: string; subtype: string | null
+    name: string | null; capabilities: string | null; last_seen: number
+  }[]
+
+  const hueSensors: DiscoveredSensor[] = hueDevices
+    .flatMap(h => {
+      const sensorType = h.kind === 'light' ? 'light' : (h.subtype ?? '')
+      if (!sensorType) return []
+      if (assignedSet.has(`${h.device_id}:${sensorType}`)) return []
+      const caps = h.capabilities ? (JSON.parse(h.capabilities) as { brightness?: boolean; colorTemp?: boolean; color?: boolean }) : undefined
+      return [{
+        deviceId: h.device_id,
+        sensorType,
+        label: h.name,
+        lastSeen: h.last_seen,
+        latestValue: null,
+        origin: 'hue' as const,
+        capabilities: caps,
+      }]
+    })
+
+  return [...influxSensors, ...announcedSensors, ...unassignedSensors, ...hueSensors]
 })
 
 function toMs(t: unknown): number {
