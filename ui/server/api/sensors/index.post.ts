@@ -1,7 +1,7 @@
 import { getDb } from '../../utils/db'
 import type { SensorType } from '../../../shared/types'
 
-const VALID_TYPES: SensorType[] = ['temperature', 'humidity', 'camera', 'motion']
+const VALID_TYPES: SensorType[] = ['temperature', 'humidity', 'camera', 'motion', 'light', 'lightlevel']
 
 export default defineEventHandler(async (event) => {
   const body = await readBody<{

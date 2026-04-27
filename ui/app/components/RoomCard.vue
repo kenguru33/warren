@@ -18,6 +18,7 @@ const tempSensor    = computed(() => props.room.sensors.find(s => s.type === 'te
 const humSensor     = computed(() => props.room.sensors.find(s => s.type === 'humidity')    ?? null)
 const motionSensor  = computed(() => props.room.sensors.find(s => s.type === 'motion')      ?? null)
 const cameras       = computed(() => props.room.sensors.filter(s => s.type === 'camera'))
+const lights        = computed(() => props.room.sensors.filter(s => s.type === 'light'))
 const hasClimate    = computed(() => tempSensor.value || humSensor.value)
 
 const editing        = ref(false)
@@ -213,6 +214,16 @@ function isOffline(ms: number | null) {
           <button class="tile-action-btn remove" title="Remove sensor" @click.stop="confirmSensor = cam.id">×</button>
         </div>
       </div>
+
+      <!-- Hue Lights -->
+      <HueLightTile
+        v-for="light in lights"
+        :key="light.id"
+        :sensor="light"
+        :editing="editing"
+        @edit-sensor="(id) => emit('edit-sensor', id)"
+        @remove-sensor="(id) => emit('remove-sensor', id)"
+      />
 
       <!-- Motion -->
       <div

@@ -94,6 +94,50 @@ export function initDb() {
       updated_at            TEXT,
       last_fetched_at       TEXT
     );
+
+    CREATE TABLE IF NOT EXISTS meta (
+      key   TEXT PRIMARY KEY,
+      value TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS hue_bridge (
+      id              INTEGER PRIMARY KEY CHECK (id = 1),
+      bridge_id       TEXT    NOT NULL,
+      name            TEXT,
+      model           TEXT,
+      ip              TEXT    NOT NULL,
+      app_key         TEXT    NOT NULL,
+      last_sync_at    INTEGER,
+      last_status     TEXT,
+      last_status_at  INTEGER,
+      created_at      INTEGER NOT NULL DEFAULT (unixepoch('now') * 1000)
+    );
+
+    CREATE TABLE IF NOT EXISTS hue_devices (
+      id              INTEGER PRIMARY KEY AUTOINCREMENT,
+      device_id       TEXT    NOT NULL UNIQUE,
+      bridge_id       TEXT    NOT NULL,
+      hue_resource_id TEXT    NOT NULL,
+      kind            TEXT    NOT NULL CHECK(kind IN ('light','sensor')),
+      subtype         TEXT,
+      name            TEXT,
+      model           TEXT,
+      capabilities    TEXT,
+      last_seen       INTEGER NOT NULL,
+      available       INTEGER NOT NULL DEFAULT 1,
+      created_at      INTEGER NOT NULL DEFAULT (unixepoch('now') * 1000)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_hue_devices_bridge ON hue_devices(bridge_id);
+    CREATE INDEX IF NOT EXISTS idx_hue_devices_kind   ON hue_devices(kind);
+
+    CREATE TABLE IF NOT EXISTS hue_light_state (
+      device_id  TEXT    PRIMARY KEY REFERENCES hue_devices(device_id) ON DELETE CASCADE,
+      on_state   INTEGER NOT NULL DEFAULT 0,
+      brightness INTEGER,
+      reachable  INTEGER NOT NULL DEFAULT 1,
+      updated_at INTEGER NOT NULL
+    );
   `)
 
   // Migrations: add columns that may be missing from older DB files
@@ -137,6 +181,30 @@ export function initDb() {
       INSERT INTO room_references_new SELECT * FROM room_references;
       DROP TABLE room_references;
       ALTER TABLE room_references_new RENAME TO room_references;
+    `)
+    db.pragma('foreign_keys = ON')
+  }
+
+  // Relax sensors.type CHECK to accept Hue types ('light', 'lightlevel', 'daylight').
+  // Gated on a meta sentinel because the CHECK constraint is not visible via PRAGMA.
+  const hueSchemaRow = db.prepare(`SELECT value FROM meta WHERE key = 'hue_schema_v1'`).get() as { value: string } | undefined
+  if (!hueSchemaRow) {
+    db.pragma('foreign_keys = OFF')
+    db.exec(`
+      CREATE TABLE sensors_hue_v1 (
+        id           INTEGER PRIMARY KEY AUTOINCREMENT,
+        room_id      INTEGER REFERENCES rooms(id) ON DELETE CASCADE,
+        type         TEXT NOT NULL CHECK(type IN ('temperature','humidity','camera','motion','light','lightlevel','daylight')),
+        device_id    TEXT,
+        label        TEXT,
+        stream_url   TEXT,
+        snapshot_url TEXT,
+        created_at   INTEGER NOT NULL DEFAULT (unixepoch('now') * 1000)
+      );
+      INSERT INTO sensors_hue_v1 SELECT * FROM sensors;
+      DROP TABLE sensors;
+      ALTER TABLE sensors_hue_v1 RENAME TO sensors;
+      INSERT INTO meta (key, value) VALUES ('hue_schema_v1', '1');
     `)
     db.pragma('foreign_keys = ON')
   }

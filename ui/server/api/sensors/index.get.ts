@@ -10,17 +10,24 @@ function toMs(t: unknown): number {
 export default defineEventHandler(async () => {
   const db = getDb()
 
-  // All persisted sensors (assigned and unassigned)
+  // All persisted sensors (assigned and unassigned).
+  // Pulls Hue light current-state via LEFT JOIN so the UI can render toggles/brightness.
   const assigned = db.prepare(`
     SELECT s.id, s.type, s.label, s.device_id, s.stream_url, s.snapshot_url,
-           r.id AS room_id, r.name AS room_name
+           r.id AS room_id, r.name AS room_name,
+           hls.on_state AS hue_on, hls.brightness AS hue_bri, hls.reachable AS hue_reachable,
+           hd.capabilities AS hue_capabilities
     FROM sensors s
     LEFT JOIN rooms r ON r.id = s.room_id
+    LEFT JOIN hue_light_state hls ON hls.device_id = s.device_id
+    LEFT JOIN hue_devices hd ON hd.device_id = s.device_id
     ORDER BY r.name ASC, s.type ASC
   `).all() as {
     id: number; type: string; label: string | null; device_id: string | null
     stream_url: string | null; snapshot_url: string | null
     room_id: number | null; room_name: string | null
+    hue_on: number | null; hue_bri: number | null; hue_reachable: number | null
+    hue_capabilities: string | null
   }[]
 
   const assignedKeys = new Set(assigned.filter(s => s.device_id).map(s => `${s.device_id}:${s.type}`))
@@ -50,9 +57,12 @@ export default defineEventHandler(async () => {
     }
   } catch {}
 
-  // Unassigned sensors from InfluxDB (temperature, humidity, motion)
+  // Unassigned sensors from InfluxDB (temperature, humidity, motion).
+  // Hue device readings live in the same measurement but are surfaced via /api/integrations/hue
+  // and the discovered-sensors flow, so skip them here.
   const unassignedInflux = [...latestMap.entries()]
     .filter(([key]) => !assignedKeys.has(key) && !blockedKeys.has(key))
+    .filter(([key]) => !key.startsWith('hue-'))
     .map(([key, latest]) => {
       const [deviceId, type] = key.split(':')
       return { deviceId, type, latestValue: latest.value, lastRecordedAt: latest.timeMs, streamUrl: null, snapshotUrl: null }
@@ -69,6 +79,25 @@ export default defineEventHandler(async () => {
       deviceId: a.device_id, type: a.type, latestValue: null,
       lastRecordedAt: a.last_seen, streamUrl: a.stream_url, snapshotUrl: a.snapshot_url,
     }))
+
+  // Unassigned Hue lights — they have no InfluxDB readings and no announcement,
+  // so surface them straight from hue_devices + hue_light_state.
+  const hueUnassigned = db.prepare(`
+    SELECT hd.device_id, hd.kind, hd.subtype, hd.name, hd.last_seen, hd.capabilities,
+           hls.on_state AS hue_on, hls.brightness AS hue_bri, hls.reachable AS hue_reachable
+    FROM hue_devices hd
+    LEFT JOIN hue_light_state hls ON hls.device_id = hd.device_id
+    WHERE hd.available = 1
+  `).all() as {
+    device_id: string; kind: string; subtype: string | null; name: string | null
+    last_seen: number; capabilities: string | null
+    hue_on: number | null; hue_bri: number | null; hue_reachable: number | null
+  }[]
+
+  const unassignedHue = hueUnassigned
+    .map(h => ({ ...h, type: h.kind === 'light' ? 'light' : (h.subtype ?? '') }))
+    .filter(h => h.type)
+    .filter(h => !assignedKeys.has(`${h.device_id}:${h.type}`) && !blockedKeys.has(`${h.device_id}:${h.type}`))
 
   // Relay config for computing heater/fan state
   const configs = db.prepare(`
@@ -102,6 +131,7 @@ export default defineEventHandler(async () => {
     const { heaterActive, fanActive } = s.type === 'temperature'
       ? relayState(s.device_id, latest?.value ?? null)
       : { heaterActive: null, fanActive: null }
+    const isHue = s.device_id?.startsWith('hue-') ?? false
     return {
       id: s.id as number | null,
       type: s.type,
@@ -115,6 +145,11 @@ export default defineEventHandler(async () => {
       lastRecordedAt: latest?.timeMs ?? null,
       heaterActive,
       fanActive,
+      origin: isHue ? 'hue' : 'esp32',
+      capabilities: s.hue_capabilities ? JSON.parse(s.hue_capabilities) : undefined,
+      lightOn: s.hue_on === null ? null : s.hue_on === 1,
+      lightBrightness: s.hue_bri,
+      lightReachable: s.hue_reachable === null ? null : s.hue_reachable === 1,
     }
   })
 
@@ -138,5 +173,25 @@ export default defineEventHandler(async () => {
     }
   })
 
-  return [...assignedResult, ...unassignedResult]
+  const unassignedHueResult = unassignedHue.map(h => ({
+    id: null as number | null,
+    type: h.type,
+    label: h.name,
+    deviceId: h.device_id,
+    roomId: null as number | null,
+    roomName: null as string | null,
+    streamUrl: null as string | null,
+    snapshotUrl: null as string | null,
+    latestValue: null as number | null,
+    lastRecordedAt: h.last_seen,
+    heaterActive: null,
+    fanActive: null,
+    origin: 'hue',
+    capabilities: h.capabilities ? JSON.parse(h.capabilities) : undefined,
+    lightOn: h.hue_on === null ? null : h.hue_on === 1,
+    lightBrightness: h.hue_bri,
+    lightReachable: h.hue_reachable === null ? null : h.hue_reachable === 1,
+  }))
+
+  return [...assignedResult, ...unassignedResult, ...unassignedHueResult]
 })

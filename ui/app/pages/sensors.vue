@@ -14,15 +14,31 @@ onMounted(() => {
 })
 
 const onlyUnused = ref(false)
-const visibleSensors = computed(() =>
-  onlyUnused.value ? sensors.value.filter(s => !s.roomName) : sensors.value
-)
+const search = ref('')
+
+function matchesSearch(haystacks: (string | null | undefined)[], needle: string): boolean {
+  if (!needle) return true
+  const q = needle.toLowerCase()
+  return haystacks.some(h => h?.toLowerCase().includes(q))
+}
+
+const nonLightSensors = computed(() => sensors.value.filter(s => s.type !== 'light'))
+const visibleSensors = computed(() => {
+  let list = nonLightSensors.value
+  if (onlyUnused.value) list = list.filter(s => !s.roomName)
+  return list.filter(s => matchesSearch([s.label, s.deviceId, s.roomName, typeLabel[s.type], s.type], search.value))
+})
+const visibleBlocked = computed(() => blocked.value
+  .filter(b => b.type !== 'light')
+  .filter(b => matchesSearch([b.deviceId, typeLabel[b.type], b.type], search.value)))
 
 const typeIcon: Record<string, string> = {
   temperature: '🌡️',
   humidity: '💧',
   camera: '📷',
   motion: '🏃',
+  light: '💡',
+  lightlevel: '☀️',
 }
 
 const typeLabel: Record<string, string> = {
@@ -30,13 +46,17 @@ const typeLabel: Record<string, string> = {
   humidity: 'Humidity',
   camera: 'Camera',
   motion: 'Motion',
+  light: 'Light',
+  lightlevel: 'Light Level',
 }
 
-function formatValue(sensor: { type: string; latestValue: number | null }) {
+function formatValue(sensor: { type: string; latestValue: number | null; lightOn?: boolean | null }) {
+  if (sensor.type === 'light') return sensor.lightOn ? 'On' : 'Off'
   if (sensor.latestValue === null) return '—'
   if (sensor.type === 'temperature') return `${sensor.latestValue}°C`
   if (sensor.type === 'humidity') return `${sensor.latestValue}%`
   if (sensor.type === 'motion') return sensor.latestValue === 1 ? 'Detected' : 'Clear'
+  if (sensor.type === 'lightlevel') return `${Math.round(sensor.latestValue)} lx`
   return '—'
 }
 
@@ -97,6 +117,12 @@ async function saveEdit() {
 <template>
   <div class="page">
     <header class="page-header">
+      <input
+        v-model="search"
+        type="search"
+        class="search-input"
+        placeholder="Search sensors…"
+      />
       <label class="toggle-label">
         <input type="checkbox" v-model="onlyUnused" class="toggle-input" />
         <span class="toggle-track"><span class="toggle-thumb" /></span>
@@ -164,10 +190,10 @@ async function saveEdit() {
       </div>
     </div>
 
-    <section v-if="blocked.length" class="blocked-section">
-      <h2 class="blocked-title">Hidden sensors ({{ blocked.length }})</h2>
+    <section v-if="visibleBlocked.length" class="blocked-section">
+      <h2 class="blocked-title">Hidden sensors ({{ visibleBlocked.length }})</h2>
       <div class="blocked-list">
-        <div v-for="b in blocked" :key="`${b.deviceId}:${b.type}`" class="blocked-row">
+        <div v-for="b in visibleBlocked" :key="`${b.deviceId}:${b.type}`" class="blocked-row">
           <span class="sensor-icon">{{ typeIcon[b.type] ?? '?' }}</span>
           <div class="sensor-info">
             <span class="sensor-name">{{ typeLabel[b.type] || b.type }}</span>
@@ -240,8 +266,25 @@ async function saveEdit() {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 8px;
+  gap: 14px;
+  flex-wrap: wrap;
 }
+
+.search-input {
+  flex: 1;
+  min-width: 200px;
+  max-width: 360px;
+  background: #151825;
+  border: 1px solid #2a2f45;
+  border-radius: 8px;
+  padding: 8px 12px;
+  color: #e2e8f0;
+  font-size: 0.85rem;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.search-input::placeholder { color: #475569; }
+.search-input:focus { border-color: #4a6fa5; }
 
 .toggle-label {
   display: flex;
@@ -294,8 +337,8 @@ async function saveEdit() {
 
 .sensor-list {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 6px;
+  grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));
+  gap: 8px;
 }
 
 .sensor-row {
@@ -305,7 +348,8 @@ async function saveEdit() {
   background: #1e2130;
   border: 1px solid #2a2f45;
   border-radius: 10px;
-  padding: 14px 16px;
+  padding: 18px 18px;
+  height: 104px;
   transition: border-color 0.15s;
 }
 
@@ -472,8 +516,8 @@ async function saveEdit() {
 
 .blocked-list {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 6px;
+  grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));
+  gap: 8px;
 }
 
 .blocked-row {

@@ -45,6 +45,8 @@ function openChangePassword() {
 const navLinks = [
   { to: '/', label: 'Dashboard' },
   { to: '/sensors', label: 'Sensors' },
+  { to: '/lights', label: 'Lights' },
+  { to: '/integrations/hue', label: 'Hue Bridge' },
 ]
 </script>
 
