@@ -12,6 +12,7 @@ INFLUXDB_TOKEN_FILE="$DOCKER_DIR/admin.token"
 MQTT_PASSWORDFILE="$DOCKER_DIR/mosquitto/config/passwordfile"
 MQTT_CONF="$DOCKER_DIR/mosquitto/config/mosquitto.conf"
 NODERED_FLOWS="$DOCKER_DIR/nodered/flows.json"
+NODERED_FLOWS_TEMPLATE="$DOCKER_DIR/nodered/flows.json.template"
 UI_ENV="$UI_DIR/.env"
 SQLITE_DATA_DIR="$UI_DIR/.data"
 SENSOR_SECRETS="$FIRMWARE_DIR/sensor/include/secrets.h"
@@ -193,6 +194,14 @@ NUXT_AUTH_USERNAME=admin
 NUXT_AUTH_PASSWORD=${UI_PASS}
 NUXT_SESSION_PASSWORD=${SESSION_PASS}
 EOF
+
+    if [[ ! -f "$NODERED_FLOWS" ]]; then
+        if [[ ! -f "$NODERED_FLOWS_TEMPLATE" ]]; then
+            err "Missing $NODERED_FLOWS_TEMPLATE — repository is in an unexpected state."
+            exit 1
+        fi
+        cp "$NODERED_FLOWS_TEMPLATE" "$NODERED_FLOWS"
+    fi
 
     python3 - "$NODERED_FLOWS" "$INFLUXDB_TOKEN" <<'PYEOF'
 import json, re, sys
@@ -453,12 +462,12 @@ listener 1883
 allow_anonymous true
 EOF
 
-    if command -v git &>/dev/null; then
-        (cd "$REPO_ROOT" && git checkout -- docker/nodered/flows.json 2>/dev/null) \
-            && echo "  docker/nodered/flows.json reset to git-tracked default" \
-            || warn "Could not reset flows.json via git — file may contain a stale token"
+    if [[ -f "$NODERED_FLOWS_TEMPLATE" ]]; then
+        cp "$NODERED_FLOWS_TEMPLATE" "$NODERED_FLOWS"
+        echo "  docker/nodered/flows.json reset from template"
     else
-        warn "git not found — docker/nodered/flows.json not reset; it may contain a stale token"
+        rm -f "$NODERED_FLOWS"
+        warn "Missing $NODERED_FLOWS_TEMPLATE — flows.json removed instead of reset"
     fi
 
     echo ""

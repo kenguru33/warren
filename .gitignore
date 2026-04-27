@@ -20,6 +20,8 @@ firmware/**/include/secrets.h
 
 # Docker secrets
 docker/admin.token
+docker/mosquitto/config/passwordfile
+docker/nodered/flows.json
 
 # OS
 .DS_Store

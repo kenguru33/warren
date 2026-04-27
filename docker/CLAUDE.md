@@ -45,7 +45,8 @@ Node-RED subscribes to `warren/sensors/+/+` and writes `sensor_readings` measure
 - `admin.token` — InfluxDB admin token (JSON, git-ignored, created by setup)
 - `mosquitto/config/mosquitto.conf` — broker config (git-ignored)
 - `mosquitto/config/passwordfile` — hashed MQTT credentials (git-ignored)
-- `nodered/flows.json` — flow definitions; reset to git-tracked default by `warren clear`
+- `nodered/flows.json` — flow definitions (git-ignored, generated from `nodered/flows.json.template` by `warren setup`; reset from the template by `warren clear`)
+- `nodered/flows.json.template` — committed default flows with a placeholder InfluxDB token (`apiv3_REPLACE_ME_BY_WARREN_SETUP`) that `warren setup` substitutes
 
 ## Tests
 

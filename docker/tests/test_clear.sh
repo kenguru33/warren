@@ -53,12 +53,12 @@ fi
 running="$(cd "$DOCKER_DIR" && docker compose ps --services --filter status=running)"
 assert_eq "$running" "" "no services running after clear"
 
-# flows.json should be reset (contains default token pattern from git)
-if grep -q 'apiv3_b6c78b3d' "$DOCKER_DIR/nodered/flows.json" 2>/dev/null; then
-    echo "  PASS: flows.json reset to git-tracked default"
+# flows.json should be reset to the template placeholder
+if grep -q 'apiv3_REPLACE_ME_BY_WARREN_SETUP' "$DOCKER_DIR/nodered/flows.json" 2>/dev/null; then
+    echo "  PASS: flows.json reset from template"
     ((passed++))
 else
-    echo "  FAIL: flows.json does not contain the expected default token" >&2
+    echo "  FAIL: flows.json does not contain the template placeholder token" >&2
     ((failed++))
 fi
 
