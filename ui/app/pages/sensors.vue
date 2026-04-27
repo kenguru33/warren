@@ -1,11 +1,15 @@
 <script setup lang="ts">
 const { data: sensors, refresh } = useFetch('/api/sensors', { default: () => [] })
+const { data: blocked, refresh: refreshBlocked } = useFetch<{ deviceId: string; type: string }[]>(
+  '/api/sensors/blocked',
+  { default: () => [] }
+)
 
 const now = ref(Date.now())
 
 onMounted(() => {
   const tickTimer = setInterval(() => { now.value = Date.now() }, 5000)
-  const refreshTimer = setInterval(() => refresh(), 30000)
+  const refreshTimer = setInterval(() => { refresh(); refreshBlocked() }, 30000)
   onUnmounted(() => { clearInterval(tickTimer); clearInterval(refreshTimer) })
 })
 
@@ -64,7 +68,12 @@ async function confirmDelete() {
     await $fetch('/api/sensors/block', { method: 'DELETE', body: { deviceId: sensor.deviceId, type: sensor.type } })
   }
   pendingDelete.value = null
-  await refresh()
+  await Promise.all([refresh(), refreshBlocked()])
+}
+
+async function restoreBlocked(b: { deviceId: string; type: string }) {
+  await $fetch('/api/sensors/unblock', { method: 'POST', body: b })
+  await Promise.all([refresh(), refreshBlocked()])
 }
 
 const editingSensor = ref<SensorRow | null>(null)
@@ -154,6 +163,20 @@ async function saveEdit() {
         </div>
       </div>
     </div>
+
+    <section v-if="blocked.length" class="blocked-section">
+      <h2 class="blocked-title">Hidden sensors ({{ blocked.length }})</h2>
+      <div class="blocked-list">
+        <div v-for="b in blocked" :key="`${b.deviceId}:${b.type}`" class="blocked-row">
+          <span class="sensor-icon">{{ typeIcon[b.type] ?? '?' }}</span>
+          <div class="sensor-info">
+            <span class="sensor-name">{{ typeLabel[b.type] || b.type }}</span>
+            <span class="device-id">{{ b.deviceId }}</span>
+          </div>
+          <button class="btn-restore" @click="restoreBlocked(b)">Restore</button>
+        </div>
+      </div>
+    </section>
   </div>
 
   <SensorConfigModal
@@ -165,7 +188,10 @@ async function saveEdit() {
 
   <ConfirmDialog
     v-if="pendingDelete"
-    :message="`Delete sensor &quot;${pendingDelete.label || typeLabel[pendingDelete.type] || pendingDelete.type}&quot;?`"
+    :message="pendingDelete.id === null
+      ? `Hide sensor &quot;${pendingDelete.label || typeLabel[pendingDelete.type] || pendingDelete.type}&quot;? You can restore it from the Hidden sensors section below.`
+      : `Delete sensor &quot;${pendingDelete.label || typeLabel[pendingDelete.type] || pendingDelete.type}&quot;?`"
+    :confirm-label="pendingDelete.id === null ? 'Hide' : 'Delete'"
     @confirm="confirmDelete"
     @cancel="pendingDelete = null"
   />
@@ -426,6 +452,54 @@ async function saveEdit() {
 
 .action-btn:hover { color: #94a3b8 !important; border-color: #4a6fa5 !important; }
 .action-btn.delete:hover { color: #f87171 !important; border-color: #ef4444 !important; }
+
+/* ── Hidden sensors ─────────────────────────────────────── */
+.blocked-section {
+  margin-top: 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.blocked-title {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #64748b;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  margin: 0 0 4px;
+}
+
+.blocked-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 6px;
+}
+
+.blocked-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: #161924;
+  border: 1px dashed #2a2f45;
+  border-radius: 10px;
+  padding: 10px 14px;
+}
+
+.blocked-row .sensor-name { color: #94a3b8; }
+
+.btn-restore {
+  background: none;
+  border: 1px solid #2a2f45;
+  color: #64748b;
+  border-radius: 7px;
+  padding: 5px 12px;
+  font-size: 0.78rem;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.btn-restore:hover { color: #a0c4ff; border-color: #4a6fa5; }
 
 /* ── Edit modal ──────────────────────────────────────────── */
 .modal-overlay {

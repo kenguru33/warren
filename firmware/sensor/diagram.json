@@ -3,7 +3,7 @@
   "author": "Anonymous maker",
   "editor": "wokwi",
   "parts": [
-    { "type": "board-esp32-devkit-c-v4", "id": "esp", "top": 0, "left": 0, "attrs": {} },
+    { "type": "board-esp32-devkit-c-v4", "id": "esp", "top": 19.2, "left": 14.44, "attrs": {} },
     {
       "type": "wokwi-resistor",
       "id": "r1",
