@@ -208,4 +208,41 @@ export function initDb() {
     `)
     db.pragma('foreign_keys = ON')
   }
+
+  // Hue rename: add display_name column for the Warren-side custom name.
+  const hueDeviceCols = db.pragma('table_info(hue_devices)') as { name: string }[]
+  if (!hueDeviceCols.some(c => c.name === 'display_name')) {
+    db.exec('ALTER TABLE hue_devices ADD COLUMN display_name TEXT')
+  }
+
+  // One-time migration: copy any existing sensors.label for Hue rows into hue_devices.display_name,
+  // then null those labels so there is a single source of truth.
+  const hueLabelRow = db.prepare(`SELECT value FROM meta WHERE key = 'hue_rename_label_migrated'`).get() as { value: string } | undefined
+  if (!hueLabelRow) {
+    db.exec(`
+      UPDATE hue_devices
+         SET display_name = (
+           SELECT s.label FROM sensors s
+            WHERE s.device_id = hue_devices.device_id
+              AND s.label IS NOT NULL
+              AND TRIM(s.label) <> ''
+            LIMIT 1
+         )
+       WHERE display_name IS NULL
+         AND device_id LIKE 'hue-%'
+         AND EXISTS (
+           SELECT 1 FROM sensors s
+            WHERE s.device_id = hue_devices.device_id
+              AND s.label IS NOT NULL
+              AND TRIM(s.label) <> ''
+         );
+
+      UPDATE sensors
+         SET label = NULL
+       WHERE device_id LIKE 'hue-%'
+         AND label IS NOT NULL;
+
+      INSERT INTO meta (key, value) VALUES ('hue_rename_label_migrated', '1');
+    `)
+  }
 }

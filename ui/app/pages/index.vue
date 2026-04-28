@@ -12,6 +12,7 @@ const {
   removeSensor,
   activeSensorId,
   activeCameraContext,
+  refresh,
 } = useRooms()
 
 const showAddRoom = ref(false)
@@ -27,13 +28,23 @@ const typeLabel: Record<string, string> = {
 
 const editingSensor = ref<{ id: number; type: string; label: string | null } | null>(null)
 const editingLabel = ref('')
+const editingHue = ref<{ deviceId: string; bridgeName: string | null; displayName: string | null } | null>(null)
 
 function openEditSensor(sensorId: number) {
   for (const room of rooms.value) {
     const sensor = room.sensors.find(s => s.id === sensorId)
     if (sensor) {
-      editingSensor.value = { id: sensor.id, type: sensor.type, label: sensor.label }
-      editingLabel.value = sensor.label ?? ''
+      const isHue = sensor.deviceId?.startsWith('hue-') ?? false
+      if (isHue && sensor.deviceId) {
+        editingHue.value = {
+          deviceId: sensor.deviceId,
+          bridgeName: sensor.bridgeName ?? null,
+          displayName: sensor.displayName ?? null,
+        }
+      } else {
+        editingSensor.value = { id: sensor.id, type: sensor.type, label: sensor.label }
+        editingLabel.value = sensor.label ?? ''
+      }
       return
     }
   }
@@ -44,6 +55,11 @@ async function saveSensorLabel() {
   if (!sensor) return
   await $fetch(`/api/sensors/${sensor.id}`, { method: 'PATCH', body: { label: editingLabel.value.trim() || null } })
   editingSensor.value = null
+  await refresh()
+}
+
+async function onHueRenamed() {
+  editingHue.value = null
   await refresh()
 }
 
@@ -159,6 +175,15 @@ async function onAddSensor(payload: {
       </div>
     </div>
   </Teleport>
+
+  <HueRenameModal
+    v-if="editingHue"
+    :device-id="editingHue.deviceId"
+    :bridge-name="editingHue.bridgeName"
+    :current-name="editingHue.displayName"
+    @saved="onHueRenamed"
+    @close="editingHue = null"
+  />
 </template>
 
 <style>

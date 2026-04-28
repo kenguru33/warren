@@ -212,6 +212,55 @@ export async function setLightState(
   }
 }
 
+async function putHueAttribute(
+  ip: string,
+  key: string,
+  resource: 'lights' | 'sensors',
+  hueResourceId: string,
+  body: Record<string, unknown>,
+): Promise<void> {
+  let res: Response
+  try {
+    res = await fetch(`http://${ip}/api/${key}/${resource}/${hueResourceId}`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(5000),
+    })
+  } catch (e) {
+    throw new HueUnreachableError(String((e as Error).message ?? e))
+  }
+  if (!res.ok) throw new HueUnreachableError(`HTTP ${res.status}`)
+  const data = await res.json() as unknown[]
+  if (isUnauthorized(data)) throw new HueUnauthorizedError()
+  for (const item of data) {
+    if (item && typeof item === 'object' && 'error' in item) {
+      const err = (item as HueErrorWrapper).error
+      throw new HueUnreachableError(err.description)
+    }
+  }
+}
+
+export async function setLightName(
+  ip: string,
+  key: string,
+  hueResourceId: string,
+  name: string,
+): Promise<void> {
+  if (FAKE) return
+  await putHueAttribute(ip, key, 'lights', hueResourceId, { name })
+}
+
+export async function setSensorName(
+  ip: string,
+  key: string,
+  hueResourceId: string,
+  name: string,
+): Promise<void> {
+  if (FAKE) return
+  await putHueAttribute(ip, key, 'sensors', hueResourceId, { name })
+}
+
 // Map a Hue sensor type to Warren's sensor_type tag, or null to ignore.
 export function mapHueSensorType(hueType: string): 'temperature' | 'motion' | 'lightlevel' | 'daylight' | null {
   switch (hueType) {

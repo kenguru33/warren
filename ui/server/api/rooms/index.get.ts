@@ -1,5 +1,6 @@
 import { getDb } from '../../utils/db'
 import { queryInflux } from '../../utils/influxdb'
+import { resolveHueName } from '../../utils/hue-name'
 import type { RoomWithSensors, SensorView } from '../../../shared/types'
 
 function toMs(t: unknown): number {
@@ -15,7 +16,8 @@ export default defineEventHandler(async (): Promise<RoomWithSensors[]> => {
   const sensors = db.prepare(`
     SELECT s.id, s.room_id, s.type, s.device_id, s.label, s.stream_url, s.snapshot_url,
            hls.on_state AS hue_on, hls.brightness AS hue_bri, hls.reachable AS hue_reachable,
-           hd.capabilities AS hue_capabilities
+           hd.capabilities AS hue_capabilities,
+           hd.name AS hue_bridge_name, hd.display_name AS hue_display_name
     FROM sensors s
     LEFT JOIN hue_light_state hls ON hls.device_id = s.device_id
     LEFT JOIN hue_devices hd ON hd.device_id = s.device_id
@@ -25,6 +27,7 @@ export default defineEventHandler(async (): Promise<RoomWithSensors[]> => {
     label: string | null; stream_url: string | null; snapshot_url: string | null
     hue_on: number | null; hue_bri: number | null; hue_reachable: number | null
     hue_capabilities: string | null
+    hue_bridge_name: string | null; hue_display_name: string | null
   }[]
 
   const latestMap = new Map<string, { value: number; timeMs: number }>()
@@ -91,12 +94,17 @@ export default defineEventHandler(async (): Promise<RoomWithSensors[]> => {
           ? relayState(s.device_id, latest?.value ?? null)
           : { heaterActive: null, fanActive: null }
         const isHue = s.device_id?.startsWith('hue-') ?? false
+        const resolvedLabel = isHue && s.device_id
+          ? resolveHueName(s.hue_display_name, s.hue_bridge_name, s.device_id)
+          : s.label
         return {
           id: s.id,
           roomId: s.room_id,
           type: s.type as SensorView['type'],
           deviceId: s.device_id,
-          label: s.label,
+          label: resolvedLabel,
+          bridgeName: isHue ? s.hue_bridge_name : undefined,
+          displayName: isHue ? s.hue_display_name : undefined,
           latestValue: latest?.value ?? null,
           lastRecordedAt: latest?.timeMs ?? null,
           streamUrl: s.stream_url,

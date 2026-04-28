@@ -1,5 +1,6 @@
 import { getDb } from '../../utils/db'
 import { queryInflux } from '../../utils/influxdb'
+import { resolveHueName } from '../../utils/hue-name'
 
 function toMs(t: unknown): number {
   if (typeof t === 'bigint') return Number(t / BigInt(1_000_000))
@@ -16,7 +17,8 @@ export default defineEventHandler(async () => {
     SELECT s.id, s.type, s.label, s.device_id, s.stream_url, s.snapshot_url,
            r.id AS room_id, r.name AS room_name,
            hls.on_state AS hue_on, hls.brightness AS hue_bri, hls.reachable AS hue_reachable,
-           hd.capabilities AS hue_capabilities
+           hd.capabilities AS hue_capabilities,
+           hd.name AS hue_bridge_name, hd.display_name AS hue_display_name
     FROM sensors s
     LEFT JOIN rooms r ON r.id = s.room_id
     LEFT JOIN hue_light_state hls ON hls.device_id = s.device_id
@@ -28,6 +30,7 @@ export default defineEventHandler(async () => {
     room_id: number | null; room_name: string | null
     hue_on: number | null; hue_bri: number | null; hue_reachable: number | null
     hue_capabilities: string | null
+    hue_bridge_name: string | null; hue_display_name: string | null
   }[]
 
   const assignedKeys = new Set(assigned.filter(s => s.device_id).map(s => `${s.device_id}:${s.type}`))
@@ -83,13 +86,14 @@ export default defineEventHandler(async () => {
   // Unassigned Hue lights — they have no InfluxDB readings and no announcement,
   // so surface them straight from hue_devices + hue_light_state.
   const hueUnassigned = db.prepare(`
-    SELECT hd.device_id, hd.kind, hd.subtype, hd.name, hd.last_seen, hd.capabilities,
+    SELECT hd.device_id, hd.kind, hd.subtype, hd.name, hd.display_name, hd.last_seen, hd.capabilities,
            hls.on_state AS hue_on, hls.brightness AS hue_bri, hls.reachable AS hue_reachable
     FROM hue_devices hd
     LEFT JOIN hue_light_state hls ON hls.device_id = hd.device_id
     WHERE hd.available = 1
   `).all() as {
-    device_id: string; kind: string; subtype: string | null; name: string | null
+    device_id: string; kind: string; subtype: string | null
+    name: string | null; display_name: string | null
     last_seen: number; capabilities: string | null
     hue_on: number | null; hue_bri: number | null; hue_reachable: number | null
   }[]
@@ -132,10 +136,15 @@ export default defineEventHandler(async () => {
       ? relayState(s.device_id, latest?.value ?? null)
       : { heaterActive: null, fanActive: null }
     const isHue = s.device_id?.startsWith('hue-') ?? false
+    const resolvedLabel = isHue && s.device_id
+      ? resolveHueName(s.hue_display_name, s.hue_bridge_name, s.device_id)
+      : s.label
     return {
       id: s.id as number | null,
       type: s.type,
-      label: s.label,
+      label: resolvedLabel,
+      bridgeName: isHue ? s.hue_bridge_name : undefined,
+      displayName: isHue ? s.hue_display_name : undefined,
       deviceId: s.device_id,
       roomId: s.room_id,
       roomName: s.room_name,
@@ -176,7 +185,9 @@ export default defineEventHandler(async () => {
   const unassignedHueResult = unassignedHue.map(h => ({
     id: null as number | null,
     type: h.type,
-    label: h.name,
+    label: resolveHueName(h.display_name, h.name, h.device_id),
+    bridgeName: h.name,
+    displayName: h.display_name,
     deviceId: h.device_id,
     roomId: null as number | null,
     roomName: null as string | null,

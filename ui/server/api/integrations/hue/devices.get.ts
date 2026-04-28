@@ -1,10 +1,11 @@
 import { getDb } from '../../../utils/db'
+import { resolveHueName } from '../../../utils/hue-name'
 
 export default defineEventHandler(() => {
   const db = getDb()
   const rows = db.prepare(`
     SELECT
-      hd.device_id, hd.kind, hd.subtype, hd.name, hd.model, hd.capabilities,
+      hd.device_id, hd.kind, hd.subtype, hd.name, hd.display_name, hd.model, hd.capabilities,
       hd.last_seen, hd.available,
       s.id AS sensor_id, s.room_id,
       r.name AS room_name,
@@ -13,10 +14,11 @@ export default defineEventHandler(() => {
     LEFT JOIN sensors s ON s.device_id = hd.device_id
     LEFT JOIN rooms r ON r.id = s.room_id
     LEFT JOIN blocked_sensors bs ON bs.device_id = hd.device_id
-    ORDER BY hd.kind ASC, hd.name ASC
+    ORDER BY hd.kind ASC, COALESCE(hd.display_name, hd.name) ASC
   `).all() as {
     device_id: string; kind: string; subtype: string | null
-    name: string | null; model: string | null; capabilities: string | null
+    name: string | null; display_name: string | null
+    model: string | null; capabilities: string | null
     last_seen: number; available: number
     sensor_id: number | null; room_id: number | null; room_name: string | null
     blocked_device_id: string | null
@@ -26,7 +28,9 @@ export default defineEventHandler(() => {
     deviceId: r.device_id,
     kind: r.kind,
     subtype: r.subtype,
-    name: r.name,
+    name: resolveHueName(r.display_name, r.name, r.device_id),
+    bridgeName: r.name,
+    displayName: r.display_name,
     model: r.model,
     capabilities: r.capabilities ? JSON.parse(r.capabilities) : null,
     lastSeen: r.last_seen,

@@ -8,6 +8,7 @@ import { getInfluxClient } from './influxdb'
 import {
   getLights, getSensors, lightCapabilities, lightSubtype,
   mapHueSensorType, sensorValue, buildDeviceId,
+  setLightName, setSensorName,
   HueUnauthorizedError, HueUnreachableError,
   type HueLightRaw, type HueSensorRaw,
 } from './hue'
@@ -46,6 +47,7 @@ function upsertLight(bridgeId: string, light: HueLightRaw) {
   const db = getDb()
   const deviceId = buildDeviceId(bridgeId, light.id)
   const caps = lightCapabilities(light)
+  // display_name is user-controlled — never include it in poller upserts.
   db.prepare(`
     INSERT INTO hue_devices (device_id, bridge_id, hue_resource_id, kind, subtype, name, model, capabilities, last_seen, available)
     VALUES (?, ?, ?, 'light', ?, ?, ?, ?, ?, 1)
@@ -81,6 +83,7 @@ function upsertSensor(bridgeId: string, sensor: HueSensorRaw) {
   if (!mapped) return // skip switches, rules, etc.
   const db = getDb()
   const deviceId = buildDeviceId(bridgeId, sensor.id)
+  // display_name is user-controlled — never include it in poller upserts.
   db.prepare(`
     INSERT INTO hue_devices (device_id, bridge_id, hue_resource_id, kind, subtype, name, model, capabilities, last_seen, available)
     VALUES (?, ?, ?, 'sensor', ?, ?, ?, NULL, ?, 1)
@@ -91,6 +94,34 @@ function upsertSensor(bridgeId: string, sensor: HueSensorRaw) {
       last_seen = excluded.last_seen,
       available = 1
   `).run(deviceId, bridgeId, sensor.id, mapped, sensor.name, sensor.modelid ?? null, Date.now())
+}
+
+// If a Hue device has a Warren display_name and the bridge's name has drifted
+// (e.g. user renamed it in the Hue app), push display_name back to the bridge.
+async function reconcileDeviceName(
+  bridge: BridgeRow,
+  deviceId: string,
+  kind: 'light' | 'sensor',
+  hueResourceId: string,
+): Promise<void> {
+  const db = getDb()
+  const row = db.prepare(
+    'SELECT display_name, name FROM hue_devices WHERE device_id = ?',
+  ).get(deviceId) as { display_name: string | null; name: string | null } | undefined
+  if (!row?.display_name) return
+  if (row.display_name === row.name) return
+
+  try {
+    if (kind === 'light') {
+      await setLightName(bridge.ip, bridge.app_key, hueResourceId, row.display_name)
+    } else {
+      await setSensorName(bridge.ip, bridge.app_key, hueResourceId, row.display_name)
+    }
+    db.prepare('UPDATE hue_devices SET name = ? WHERE device_id = ?')
+      .run(row.display_name, deviceId)
+  } catch (err) {
+    console.warn('[hue] reconcile rename failed', deviceId, (err as Error).message ?? err)
+  }
 }
 
 async function writeSensorReading(bridgeId: string, sensor: HueSensorRaw) {
@@ -157,12 +188,17 @@ async function runSyncCycle(): Promise<void> {
 
     for (const light of lights) {
       upsertLight(bridge.bridge_id, light)
-      seenDeviceIds.add(buildDeviceId(bridge.bridge_id, light.id))
+      const deviceId = buildDeviceId(bridge.bridge_id, light.id)
+      seenDeviceIds.add(deviceId)
+      await reconcileDeviceName(bridge, deviceId, 'light', light.id)
     }
     for (const sensor of sensors) {
       upsertSensor(bridge.bridge_id, sensor)
       const mapped = mapHueSensorType(sensor.type)
-      if (mapped) seenDeviceIds.add(buildDeviceId(bridge.bridge_id, sensor.id))
+      if (!mapped) continue
+      const deviceId = buildDeviceId(bridge.bridge_id, sensor.id)
+      seenDeviceIds.add(deviceId)
+      await reconcileDeviceName(bridge, deviceId, 'sensor', sensor.id)
     }
 
     const db = getDb()

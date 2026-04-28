@@ -14,6 +14,8 @@ export interface SensorView {
   type: SensorType
   deviceId: string | null
   label: string | null
+  bridgeName?: string | null
+  displayName?: string | null
   latestValue: number | null
   lastRecordedAt: number | null
   streamUrl: string | null
@@ -45,6 +47,8 @@ export interface DiscoveredSensor {
   sensorId?: number          // set for unassigned persisted sensors (re-assign instead of insert)
   sensorType: string
   label?: string | null
+  bridgeName?: string | null
+  displayName?: string | null
   lastSeen: number
   latestValue: number | null
   streamUrl?: string | null

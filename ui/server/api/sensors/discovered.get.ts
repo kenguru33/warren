@@ -1,5 +1,6 @@
 import { getDb } from '../../utils/db'
 import { queryInflux } from '../../utils/influxdb'
+import { resolveHueName } from '../../utils/hue-name'
 import type { DiscoveredSensor } from '../../../shared/types'
 
 export default defineEventHandler(async (): Promise<DiscoveredSensor[]> => {
@@ -78,12 +79,13 @@ export default defineEventHandler(async (): Promise<DiscoveredSensor[]> => {
 
   // Hue devices that haven't been assigned to a room yet
   const hueDevices = db.prepare(`
-    SELECT device_id, kind, subtype, name, capabilities, last_seen
+    SELECT device_id, kind, subtype, name, display_name, capabilities, last_seen
     FROM hue_devices
     WHERE available = 1
   `).all() as {
     device_id: string; kind: string; subtype: string | null
-    name: string | null; capabilities: string | null; last_seen: number
+    name: string | null; display_name: string | null
+    capabilities: string | null; last_seen: number
   }[]
 
   const hueSensors: DiscoveredSensor[] = hueDevices
@@ -95,7 +97,9 @@ export default defineEventHandler(async (): Promise<DiscoveredSensor[]> => {
       return [{
         deviceId: h.device_id,
         sensorType,
-        label: h.name,
+        label: resolveHueName(h.display_name, h.name, h.device_id),
+        bridgeName: h.name,
+        displayName: h.display_name,
         lastSeen: h.last_seen,
         latestValue: null,
         origin: 'hue' as const,

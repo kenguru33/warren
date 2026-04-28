@@ -4,6 +4,8 @@ interface LightRow {
   deviceId: string | null
   type: string
   label: string | null
+  bridgeName?: string | null
+  displayName?: string | null
   roomId: number | null
   roomName: string | null
   origin?: 'esp32' | 'hue'
@@ -46,8 +48,17 @@ const visibleBlocked = computed(() => blocked.value
 const pendingDelete = ref<LightRow | null>(null)
 const editingLight = ref<LightRow | null>(null)
 const editingLabel = ref('')
+const editingHue = ref<LightRow | null>(null)
 const errorById = ref<Record<string, string>>({})
 const pendingById = ref<Record<string, boolean>>({})
+
+function isHueRow(row: LightRow): boolean {
+  return row.origin === 'hue' || (row.deviceId?.startsWith('hue-') ?? false)
+}
+
+function canEdit(row: LightRow): boolean {
+  return row.id !== null || isHueRow(row)
+}
 
 function briFromHue(b: number | null | undefined) {
   return Math.round(((b ?? 0) / 254) * 100)
@@ -91,6 +102,10 @@ async function setBrightness(row: LightRow, percent: number) {
 }
 
 function openEdit(row: LightRow) {
+  if (isHueRow(row)) {
+    editingHue.value = row
+    return
+  }
   if (row.id === null) return
   editingLight.value = row
   editingLabel.value = row.label ?? ''
@@ -101,6 +116,11 @@ async function saveEdit() {
   if (!row?.id) return
   await $fetch(`/api/sensors/${row.id}`, { method: 'PATCH', body: { label: editingLabel.value.trim() || null } })
   editingLight.value = null
+  await refresh()
+}
+
+async function onHueRenamed() {
+  editingHue.value = null
   await refresh()
 }
 
@@ -191,7 +211,7 @@ async function restoreBlocked(b: { deviceId: string; type: string }) {
         </div>
 
         <div class="row-actions">
-          <button v-if="row.id !== null" class="action-btn" title="Edit light" @click="openEdit(row)">
+          <button v-if="canEdit(row)" class="action-btn" :title="isHueRow(row) ? 'Rename Hue light' : 'Edit light'" @click="openEdit(row)">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/>
             </svg>
@@ -261,6 +281,15 @@ async function restoreBlocked(b: { deviceId: string; type: string }) {
       </div>
     </div>
   </Teleport>
+
+  <HueRenameModal
+    v-if="editingHue?.deviceId"
+    :device-id="editingHue.deviceId"
+    :bridge-name="editingHue.bridgeName ?? null"
+    :current-name="editingHue.displayName ?? null"
+    @saved="onHueRenamed"
+    @close="editingHue = null"
+  />
 </template>
 
 <style scoped>
