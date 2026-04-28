@@ -1,5 +1,90 @@
 import type { Database } from 'better-sqlite3'
-import type { LightGroupView, SensorView } from '../../shared/types'
+import type { LightGroupState, LightGroupView, MasterState, SensorView } from '../../shared/types'
+import { setLightState, HueUnauthorizedError, HueUnreachableError } from './hue'
+
+export interface FanOutMember {
+  sensor_id: number
+  device_id: string
+  hue_resource_id: string
+  ip: string
+  app_key: string
+  capabilities: string | null
+}
+
+export interface FanOutResult {
+  sensorId: number
+  deviceId: string
+  ok: boolean
+  error?: string
+}
+
+export interface FanOutSummary {
+  ok: boolean
+  total: number
+  successCount: number
+  failureCount: number
+  results: FanOutResult[]
+}
+
+export async function fanOutLightCommand(
+  db: Database,
+  members: FanOutMember[],
+  body: { on?: boolean; brightness?: number },
+): Promise<FanOutSummary> {
+  const briScaled = body.brightness !== undefined ? Math.round((body.brightness / 100) * 254) : undefined
+
+  const results: FanOutResult[] = []
+  await Promise.all(members.map(async (m) => {
+    const supportsBri = m.capabilities ? !!JSON.parse(m.capabilities)?.brightness : false
+    const payload: { on?: boolean; bri?: number } = {}
+    if (body.on !== undefined) payload.on = body.on
+    if (briScaled !== undefined && supportsBri) {
+      payload.bri = briScaled
+      // Slider implies on (matches per-light behaviour)
+      if (body.on === undefined) payload.on = true
+    }
+    if (Object.keys(payload).length === 0) {
+      results.push({ sensorId: m.sensor_id, deviceId: m.device_id, ok: true })
+      return
+    }
+    try {
+      await setLightState(m.ip, m.app_key, m.hue_resource_id, payload)
+      results.push({ sensorId: m.sensor_id, deviceId: m.device_id, ok: true })
+
+      const now = Date.now()
+      db.prepare(`
+        INSERT INTO hue_light_state (device_id, on_state, brightness, reachable, updated_at)
+        VALUES (?, COALESCE(?, 0), ?, 1, ?)
+        ON CONFLICT(device_id) DO UPDATE SET
+          on_state   = COALESCE(?, on_state),
+          brightness = COALESCE(?, brightness),
+          updated_at = ?
+      `).run(
+        m.device_id,
+        payload.on === undefined ? null : (payload.on ? 1 : 0),
+        payload.bri ?? null,
+        now,
+        payload.on === undefined ? null : (payload.on ? 1 : 0),
+        payload.bri ?? null,
+        now,
+      )
+    } catch (err) {
+      let code = 'failed'
+      if (err instanceof HueUnauthorizedError) code = 'unauthorized'
+      else if (err instanceof HueUnreachableError) code = 'unreachable'
+      results.push({ sensorId: m.sensor_id, deviceId: m.device_id, ok: false, error: code })
+    }
+  }))
+
+  const okCount = results.filter(r => r.ok).length
+  return {
+    ok: okCount > 0,
+    total: results.length,
+    successCount: okCount,
+    failureCount: results.length - okCount,
+    results,
+  }
+}
 
 export interface GroupRow {
   id: number
@@ -36,16 +121,22 @@ export function fetchMembers(db: Database, groupIds?: number[]): MemberRow[] {
     .all(...groupIds) as MemberRow[]
 }
 
-export function buildGroupView(group: GroupRow, members: SensorView[]): LightGroupView {
+function computeOnOffState(members: SensorView[]): { state: LightGroupState; unreachableCount: number } {
   const reachable = members.filter(m => m.lightReachable !== false)
   const onCount = reachable.filter(m => m.lightOn === true).length
   const offCount = reachable.length - onCount
 
-  let state: LightGroupView['state']
+  let state: LightGroupState
   if (reachable.length === 0) state = 'all-off'
   else if (onCount === reachable.length) state = 'all-on'
   else if (offCount === reachable.length) state = 'all-off'
   else state = 'mixed'
+
+  return { state, unreachableCount: members.filter(m => m.lightReachable === false).length }
+}
+
+export function buildGroupView(group: GroupRow, members: SensorView[]): LightGroupView {
+  const { state, unreachableCount } = computeOnOffState(members)
 
   const briCapable = members.filter(m => m.capabilities?.brightness === true)
   const onWithBri = briCapable.filter(m => m.lightOn === true && typeof m.lightBrightness === 'number')
@@ -61,9 +152,15 @@ export function buildGroupView(group: GroupRow, members: SensorView[]): LightGro
     memberCount: members.length,
     state,
     brightness: avg === null ? null : Math.round((avg / 254) * 100),
-    unreachableCount: members.filter(m => m.lightReachable === false).length,
+    unreachableCount,
     hasBrightnessCapableMember: briCapable.length > 0,
   }
+}
+
+export function buildMasterView(members: SensorView[]): MasterState | null {
+  if (members.length === 0) return null
+  const { state, unreachableCount } = computeOnOffState(members)
+  return { state, memberCount: members.length, unreachableCount }
 }
 
 export function pruneEmptyGroups(db: Database) {

@@ -15,6 +15,7 @@ const emit = defineEmits<{
   (e: 'add-group', roomId: number): void
   (e: 'edit-group', groupId: number): void
   (e: 'ungroup', groupId: number): void
+  (e: 'master-toggled'): void
 }>()
 
 const tempSensor    = computed(() => props.room.sensors.find(s => s.type === 'temperature') ?? null)
@@ -36,6 +37,33 @@ const editName       = ref(props.room.name)
 
 const confirmRoom   = ref(false)
 const confirmSensor = ref<number | null>(null)
+
+// Master switch state — optimistic on tap, reconciles with next /api/rooms refresh.
+const masterPending = ref(false)
+const masterError = ref<string | null>(null)
+const masterPartial = ref<{ ok: number; failed: number } | null>(null)
+
+async function toggleRoomMaster(nextOn: boolean) {
+  if (masterPending.value) return
+  masterPending.value = true
+  masterError.value = null
+  masterPartial.value = null
+  try {
+    const res = await $fetch<{ successCount: number; failureCount: number; total: number }>(
+      `/api/rooms/${props.room.id}/lights-state`,
+      { method: 'POST', body: { on: nextOn } },
+    )
+    if (res.failureCount > 0) {
+      masterPartial.value = { ok: res.successCount, failed: res.failureCount }
+    }
+    emit('master-toggled')
+  } catch (err: unknown) {
+    const e = err as { data?: { error?: string }; message?: string }
+    masterError.value = e.data?.error === 'bridge_unreachable' ? 'Bridge unreachable' : (e.message ?? 'failed')
+  } finally {
+    masterPending.value = false
+  }
+}
 
 watch(() => props.room.reference, (ref) => {
   if (!editing.value) {
@@ -118,6 +146,15 @@ function isOffline(ms: number | null) {
         @keydown.escape="editing = false"
       />
       <h2 v-else class="room-name">{{ room.name }}</h2>
+      <MasterLightToggle
+        v-if="room.lightMaster"
+        class="room-master"
+        :master="room.lightMaster"
+        :pending="masterPending"
+        :error="masterError"
+        :partial="masterPartial"
+        @toggle="toggleRoomMaster"
+      />
       <div class="header-actions">
         <button class="icon-btn" title="Add sensor" @click="emit('add-sensor', room.id)">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
@@ -387,6 +424,10 @@ function isOffline(ms: number | null) {
   outline: none;
   flex: 1;
   min-width: 0;
+}
+
+.room-master {
+  margin-left: auto;
 }
 
 .header-actions {
