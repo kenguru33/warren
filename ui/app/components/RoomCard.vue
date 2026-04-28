@@ -12,6 +12,9 @@ const emit = defineEmits<{
   (e: 'open-live', sensorId: number): void
   (e: 'view-history', sensor: SensorView): void
   (e: 'edit-sensor', sensorId: number): void
+  (e: 'add-group', roomId: number): void
+  (e: 'edit-group', groupId: number): void
+  (e: 'ungroup', groupId: number): void
 }>()
 
 const tempSensor    = computed(() => props.room.sensors.find(s => s.type === 'temperature') ?? null)
@@ -19,7 +22,10 @@ const humSensor     = computed(() => props.room.sensors.find(s => s.type === 'hu
 const motionSensor  = computed(() => props.room.sensors.find(s => s.type === 'motion')      ?? null)
 const cameras       = computed(() => props.room.sensors.filter(s => s.type === 'camera'))
 const lights        = computed(() => props.room.sensors.filter(s => s.type === 'light'))
+const ungroupedLights = computed(() => lights.value.filter(l => !l.groupId))
 const hasClimate    = computed(() => tempSensor.value || humSensor.value)
+const lightGroups   = computed(() => props.room.lightGroups ?? [])
+const lightsById    = computed(() => new Map(lights.value.map(l => [l.id, l])))
 
 const editing        = ref(false)
 const refTempEnabled = ref(props.room.reference !== null && props.room.reference.refTemp !== null)
@@ -215,9 +221,20 @@ function isOffline(ms: number | null) {
         </div>
       </div>
 
-      <!-- Hue Lights -->
+      <!-- Light Groups -->
+      <LightGroupTile
+        v-for="group in lightGroups"
+        :key="`group-${group.id}`"
+        :group="group"
+        :members="group.memberSensorIds.map(id => lightsById.get(id)).filter((s): s is SensorView => !!s)"
+        :editing="editing"
+        @edit-group="(id) => emit('edit-group', id)"
+        @ungroup="(id) => emit('ungroup', id)"
+      />
+
+      <!-- Hue Lights — grouped lights are surfaced via their group tile, not here. -->
       <HueLightTile
-        v-for="light in lights"
+        v-for="light in ungroupedLights"
         :key="light.id"
         :sensor="light"
         :editing="editing"
@@ -251,6 +268,15 @@ function isOffline(ms: number | null) {
       </div>
 
     </div>
+
+    <!-- Group affordance: show in edit mode when there are at least 2 lights -->
+    <Transition name="slide">
+      <div v-if="editing && lights.length >= 2" class="group-panel">
+        <button class="btn-group" @click="emit('add-group', room.id)">
+          <span class="plus">+</span> Group lights
+        </button>
+      </div>
+    </Transition>
 
     <!-- Edit panel: per-sensor target toggles (only when climate sensors present) -->
     <Transition name="slide">
@@ -744,6 +770,29 @@ function isOffline(ms: number | null) {
   border: none;
 }
 .btn-save:hover { opacity: 0.85; }
+
+.group-panel {
+  border-top: 1px solid #2a2f45;
+  padding-top: 12px;
+  display: flex;
+  justify-content: flex-start;
+}
+.btn-group {
+  background: none;
+  color: #94a3b8;
+  border: 1px dashed #2a2f45;
+  border-radius: 8px;
+  padding: 7px 14px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.btn-group:hover { color: #a0c4ff; border-color: #4a6fa5; }
+.btn-group .plus { font-weight: 700; font-size: 0.95rem; line-height: 1; }
 
 .slide-enter-active,
 .slide-leave-active {

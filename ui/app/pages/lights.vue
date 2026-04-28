@@ -11,6 +11,9 @@ interface LightRow {
   lightOn?: boolean | null
   lightBrightness?: number | null
   lightReachable?: boolean | null
+  hueName?: string | null
+  groupId?: number | null
+  groupName?: string | null
 }
 
 const { data: sensors, refresh } = useFetch<LightRow[]>('/api/sensors', { default: () => [] })
@@ -37,7 +40,7 @@ const lights = computed(() => sensors.value.filter(s => s.type === 'light'))
 const visibleLights = computed(() => {
   let list = lights.value
   if (onlyUnused.value) list = list.filter(s => !s.roomName)
-  return list.filter(s => matchesSearch([s.label, s.deviceId, s.roomName], search.value))
+  return list.filter(s => matchesSearch([s.label, s.hueName, s.deviceId, s.roomName, s.groupName], search.value))
 })
 const visibleBlocked = computed(() => blocked.value
   .filter(b => b.type === 'light')
@@ -153,11 +156,12 @@ async function restoreBlocked(b: { deviceId: string; type: string }) {
 
         <div class="light-info">
           <span class="light-name">
-            {{ row.label || 'Light' }}
+            {{ row.label?.trim() || row.hueName?.trim() || 'Light' }}
             <span v-if="row.origin === 'hue'" class="hue-badge" title="Philips Hue">Hue</span>
           </span>
           <span class="light-room" :class="{ unassigned: !row.roomName }">
             {{ row.roomName ?? 'Unassigned' }}
+            <span v-if="row.groupName" class="group-tag" :title="`In group: ${row.groupName}`">{{ row.groupName }}</span>
           </span>
           <span v-if="row.deviceId" class="device-id">{{ row.deviceId }}</span>
         </div>
@@ -343,8 +347,17 @@ async function restoreBlocked(b: { deviceId: string; type: string }) {
   letter-spacing: 0.06em; text-transform: uppercase;
   padding: 1px 6px; border-radius: 999px;
 }
-.light-room { font-size: 0.75rem; color: #64748b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.light-room { font-size: 0.75rem; color: #64748b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: inline-flex; align-items: center; gap: 6px; }
 .light-room.unassigned { color: #475569; font-style: italic; }
+.group-tag {
+  background: rgba(74, 111, 165, 0.18);
+  color: #a0c4ff;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 1px 6px;
+  border-radius: 999px;
+}
 .device-id {
   font-size: 0.68rem; color: #475569; font-family: monospace;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 1px;

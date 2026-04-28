@@ -26,6 +26,23 @@ export interface SensorView {
   lightOn?: boolean | null
   lightBrightness?: number | null
   lightReachable?: boolean | null
+  hueName?: string | null
+  groupId?: number | null
+  groupName?: string | null
+}
+
+export type LightGroupState = 'all-on' | 'all-off' | 'mixed'
+
+export interface LightGroupView {
+  id: number
+  roomId: number
+  name: string
+  memberSensorIds: number[]
+  memberCount: number
+  state: LightGroupState
+  brightness: number | null
+  unreachableCount: number
+  hasBrightnessCapableMember: boolean
 }
 
 export interface RoomReference {
@@ -38,6 +55,7 @@ export interface RoomWithSensors {
   name: string
   reference: RoomReference | null
   sensors: SensorView[]
+  lightGroups: LightGroupView[]
 }
 
 export interface DiscoveredSensor {

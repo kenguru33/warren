@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { SensorType, SensorView } from '../../shared/types'
+import type { SensorType, SensorView, LightGroupView } from '../../shared/types'
 
 const {
   rooms,
@@ -12,6 +12,7 @@ const {
   removeSensor,
   activeSensorId,
   activeCameraContext,
+  refresh,
 } = useRooms()
 
 const showAddRoom = ref(false)
@@ -72,6 +73,46 @@ async function onAddSensor(payload: {
   })
   addSensorForRoom.value = null
 }
+
+// Light group editing state
+const groupEdit = ref<{ roomId: number; group: LightGroupView | null } | null>(null)
+
+function openCreateGroup(roomId: number) {
+  groupEdit.value = { roomId, group: null }
+}
+
+function openEditGroup(groupId: number) {
+  for (const room of rooms.value) {
+    const group = (room.lightGroups ?? []).find(g => g.id === groupId)
+    if (group) {
+      groupEdit.value = { roomId: room.id, group }
+      return
+    }
+  }
+}
+
+const groupEditRoom = computed(() => {
+  if (!groupEdit.value) return null
+  return rooms.value.find(r => r.id === groupEdit.value!.roomId) ?? null
+})
+
+const groupEditLights = computed<SensorView[]>(() => {
+  return groupEditRoom.value?.sensors.filter(s => s.type === 'light') ?? []
+})
+
+const groupEditGroups = computed<LightGroupView[]>(() => {
+  return groupEditRoom.value?.lightGroups ?? []
+})
+
+async function onGroupSaved() {
+  groupEdit.value = null
+  await refresh()
+}
+
+async function onUngroup(groupId: number) {
+  await $fetch(`/api/light-groups/${groupId}`, { method: 'DELETE' })
+  await refresh()
+}
 </script>
 
 <template>
@@ -101,6 +142,9 @@ async function onAddSensor(payload: {
         @open-live="id => activeSensorId = id"
         @view-history="sensor => historyTarget = { sensor, roomName: room.name }"
         @edit-sensor="openEditSensor"
+        @add-group="openCreateGroup"
+        @edit-group="openEditGroup"
+        @ungroup="onUngroup"
       />
     </div>
 
@@ -130,6 +174,18 @@ async function onAddSensor(payload: {
       :sensor="historyTarget.sensor"
       :room-name="historyTarget.roomName"
       @close="historyTarget = null"
+    />
+
+    <LightGroupModal
+      v-if="groupEdit && groupEditRoom"
+      :room-id="groupEditRoom.id"
+      :room-name="groupEditRoom.name"
+      :lights="groupEditLights"
+      :group="groupEdit.group"
+      :groups-in-room="groupEditGroups"
+      @close="groupEdit = null"
+      @saved="onGroupSaved"
+      @deleted="onGroupSaved"
     />
   </div>
 

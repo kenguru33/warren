@@ -138,6 +138,22 @@ export function initDb() {
       reachable  INTEGER NOT NULL DEFAULT 1,
       updated_at INTEGER NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS light_groups (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      room_id    INTEGER NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
+      name       TEXT    NOT NULL,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch('now') * 1000),
+      UNIQUE (room_id, name)
+    );
+
+    CREATE TABLE IF NOT EXISTS light_group_members (
+      group_id  INTEGER NOT NULL REFERENCES light_groups(id) ON DELETE CASCADE,
+      sensor_id INTEGER NOT NULL UNIQUE REFERENCES sensors(id) ON DELETE CASCADE,
+      PRIMARY KEY (group_id, sensor_id)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_light_groups_room ON light_groups(room_id);
   `)
 
   // Migrations: add columns that may be missing from older DB files
