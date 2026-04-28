@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import type { MasterState } from '../../shared/types'
+
 interface LightRow {
   id: number | null
   deviceId: string | null
@@ -21,11 +23,42 @@ const { data: blocked, refresh: refreshBlocked } = useFetch<{ deviceId: string; 
   '/api/sensors/blocked',
   { default: () => [] }
 )
+const { data: globalMaster, refresh: refreshGlobalMaster } = useFetch<MasterState | null>(
+  '/api/lights/master-state',
+  { default: () => null }
+)
 
 onMounted(() => {
-  const t = setInterval(() => { refresh(); refreshBlocked() }, 15_000)
+  const t = setInterval(() => { refresh(); refreshBlocked(); refreshGlobalMaster() }, 15_000)
   onUnmounted(() => clearInterval(t))
 })
+
+// Global master switch — always rendered above search/filter so search doesn't hide it.
+const globalMasterPending = ref(false)
+const globalMasterError = ref<string | null>(null)
+const globalMasterPartial = ref<{ ok: number; failed: number } | null>(null)
+
+async function toggleGlobalMaster(nextOn: boolean) {
+  if (globalMasterPending.value) return
+  globalMasterPending.value = true
+  globalMasterError.value = null
+  globalMasterPartial.value = null
+  try {
+    const res = await $fetch<{ successCount: number; failureCount: number; total: number }>(
+      '/api/lights/master-state',
+      { method: 'POST', body: { on: nextOn } },
+    )
+    if (res.failureCount > 0) {
+      globalMasterPartial.value = { ok: res.successCount, failed: res.failureCount }
+    }
+    await Promise.all([refresh(), refreshGlobalMaster()])
+  } catch (err: unknown) {
+    const e = err as { data?: { error?: string }; message?: string }
+    globalMasterError.value = e.data?.error === 'bridge_unreachable' ? 'Bridge unreachable' : (e.message ?? 'failed')
+  } finally {
+    globalMasterPending.value = false
+  }
+}
 
 const onlyUnused = ref(false)
 const search = ref('')
@@ -127,6 +160,18 @@ async function restoreBlocked(b: { deviceId: string; type: string }) {
 
 <template>
   <div class="page">
+    <MasterLightToggle
+      v-if="globalMaster"
+      class="global-master"
+      variant="wide"
+      :master="globalMaster"
+      :pending="globalMasterPending"
+      :error="globalMasterError"
+      :partial="globalMasterPartial"
+      label="All lights"
+      @toggle="toggleGlobalMaster"
+    />
+
     <header class="page-header">
       <input
         v-model="search"

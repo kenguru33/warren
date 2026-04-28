@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { SensorType, SensorView, LightGroupView } from '../../shared/types'
+import type { SensorType, SensorView, LightGroupView, MasterState } from '../../shared/types'
 
 const {
   rooms,
@@ -113,11 +113,56 @@ async function onUngroup(groupId: number) {
   await $fetch(`/api/light-groups/${groupId}`, { method: 'DELETE' })
   await refresh()
 }
+
+// Global master switch
+const { data: globalMaster, refresh: refreshGlobalMaster } = useFetch<MasterState | null>(
+  '/api/lights/master-state',
+  { default: () => null },
+)
+const globalMasterPending = ref(false)
+const globalMasterError = ref<string | null>(null)
+const globalMasterPartial = ref<{ ok: number; failed: number } | null>(null)
+
+async function toggleGlobalMaster(nextOn: boolean) {
+  if (globalMasterPending.value) return
+  globalMasterPending.value = true
+  globalMasterError.value = null
+  globalMasterPartial.value = null
+  try {
+    const res = await $fetch<{ successCount: number; failureCount: number; total: number }>(
+      '/api/lights/master-state',
+      { method: 'POST', body: { on: nextOn } },
+    )
+    if (res.failureCount > 0) {
+      globalMasterPartial.value = { ok: res.successCount, failed: res.failureCount }
+    }
+    await Promise.all([refresh(), refreshGlobalMaster()])
+  } catch (err: unknown) {
+    const e = err as { data?: { error?: string }; message?: string }
+    globalMasterError.value = e.data?.error === 'bridge_unreachable' ? 'Bridge unreachable' : (e.message ?? 'failed')
+  } finally {
+    globalMasterPending.value = false
+  }
+}
+
+async function onRoomMasterToggled() {
+  await Promise.all([refresh(), refreshGlobalMaster()])
+}
 </script>
 
 <template>
   <div class="dashboard">
     <div class="toolbar">
+      <MasterLightToggle
+        v-if="globalMaster"
+        class="global-master"
+        :master="globalMaster"
+        :pending="globalMasterPending"
+        :error="globalMasterError"
+        :partial="globalMasterPartial"
+        label="All lights"
+        @toggle="toggleGlobalMaster"
+      />
       <span class="last-updated">Updated {{ lastUpdated }}</span>
       <button class="btn-add-room" @click="showAddRoom = true">+ Add room</button>
     </div>
@@ -145,6 +190,7 @@ async function onUngroup(groupId: number) {
         @add-group="openCreateGroup"
         @edit-group="openEditGroup"
         @ungroup="onUngroup"
+        @master-toggled="onRoomMasterToggled"
       />
     </div>
 
@@ -239,6 +285,10 @@ body {
   align-items: center;
   justify-content: flex-end;
   gap: 16px;
+}
+
+.global-master {
+  margin-right: auto;
 }
 
 .last-updated {

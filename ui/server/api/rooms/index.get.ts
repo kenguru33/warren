@@ -1,6 +1,6 @@
 import { getDb } from '../../utils/db'
 import { queryInflux } from '../../utils/influxdb'
-import { fetchGroups, fetchMembers, buildGroupView } from '../../utils/light-groups'
+import { fetchGroups, fetchMembers, buildGroupView, buildMasterView } from '../../utils/light-groups'
 import type { RoomWithSensors, SensorView } from '../../../shared/types'
 
 function toMs(t: unknown): number {
@@ -134,12 +134,15 @@ export default defineEventHandler(async (): Promise<RoomWithSensors[]> => {
       return buildGroupView(g, memberSensors)
     })
 
+    const lightMaster = buildMasterView(sensorViews.filter(s => s.type === 'light'))
+
     return {
       id: room.id,
       name: room.name,
       reference: ref ? { refTemp: ref.ref_temp, refHumidity: ref.ref_humidity } : null,
       sensors: sensorViews,
       lightGroups,
+      lightMaster,
     }
   })
 })

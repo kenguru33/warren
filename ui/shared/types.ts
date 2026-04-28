@@ -45,6 +45,12 @@ export interface LightGroupView {
   hasBrightnessCapableMember: boolean
 }
 
+export interface MasterState {
+  state: LightGroupState
+  memberCount: number
+  unreachableCount: number
+}
+
 export interface RoomReference {
   refTemp: number | null
   refHumidity: number | null
@@ -56,6 +62,7 @@ export interface RoomWithSensors {
   reference: RoomReference | null
   sensors: SensorView[]
   lightGroups: LightGroupView[]
+  lightMaster: MasterState | null
 }
 
 export interface DiscoveredSensor {
