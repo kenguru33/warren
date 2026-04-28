@@ -68,6 +68,7 @@ async function commitBrightness() {
 
 const reachable = computed(() => props.sensor.lightReachable !== false)
 const hasBrightness = computed(() => props.sensor.capabilities?.brightness === true)
+const displayName = computed(() => props.sensor.label?.trim() || props.sensor.hueName?.trim() || '')
 </script>
 
 <template>
@@ -75,7 +76,10 @@ const hasBrightness = computed(() => props.sensor.capabilities?.brightness === t
     <span class="tile-icon">💡</span>
     <span class="tile-value" :class="{ off: !localOn }">{{ localOn ? 'On' : 'Off' }}</span>
     <span class="tile-label">Light</span>
-    <span v-if="sensor.label" class="tile-custom-label">{{ sensor.label }}</span>
+    <span v-if="displayName" class="tile-custom-label">{{ displayName }}</span>
+    <span v-if="sensor.groupName" class="tile-group" :title="`In group: ${sensor.groupName}`">
+      in group: {{ sensor.groupName }}
+    </span>
 
     <button
       class="toggle-btn"
@@ -164,6 +168,19 @@ const hasBrightness = computed(() => props.sensor.capabilities?.brightness === t
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 100%;
+}
+
+.tile-group {
+  font-size: 0.6rem;
+  color: #a0c4ff;
+  background: rgba(74, 111, 165, 0.12);
+  border-radius: 4px;
+  padding: 1px 5px;
+  letter-spacing: 0.04em;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .toggle-btn {

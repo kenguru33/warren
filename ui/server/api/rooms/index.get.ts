@@ -1,5 +1,6 @@
 import { getDb } from '../../utils/db'
 import { queryInflux } from '../../utils/influxdb'
+import { fetchGroups, fetchMembers, buildGroupView } from '../../utils/light-groups'
 import type { RoomWithSensors, SensorView } from '../../../shared/types'
 
 function toMs(t: unknown): number {
@@ -15,7 +16,7 @@ export default defineEventHandler(async (): Promise<RoomWithSensors[]> => {
   const sensors = db.prepare(`
     SELECT s.id, s.room_id, s.type, s.device_id, s.label, s.stream_url, s.snapshot_url,
            hls.on_state AS hue_on, hls.brightness AS hue_bri, hls.reachable AS hue_reachable,
-           hd.capabilities AS hue_capabilities
+           hd.capabilities AS hue_capabilities, hd.name AS hue_name
     FROM sensors s
     LEFT JOIN hue_light_state hls ON hls.device_id = s.device_id
     LEFT JOIN hue_devices hd ON hd.device_id = s.device_id
@@ -24,7 +25,7 @@ export default defineEventHandler(async (): Promise<RoomWithSensors[]> => {
     id: number; room_id: number; type: string; device_id: string | null
     label: string | null; stream_url: string | null; snapshot_url: string | null
     hue_on: number | null; hue_bri: number | null; hue_reachable: number | null
-    hue_capabilities: string | null
+    hue_capabilities: string | null; hue_name: string | null
   }[]
 
   const latestMap = new Map<string, { value: number; timeMs: number }>()
@@ -79,6 +80,15 @@ export default defineEventHandler(async (): Promise<RoomWithSensors[]> => {
 
   const refStmt = db.prepare('SELECT ref_temp, ref_humidity FROM room_references WHERE room_id = ?')
 
+  const allGroups = fetchGroups(db)
+  const allMembers = fetchMembers(db)
+  const sensorToGroup = new Map<number, { id: number; name: string }>()
+  const groupNameById = new Map(allGroups.map(g => [g.id, g.name]))
+  for (const m of allMembers) {
+    const name = groupNameById.get(m.group_id)
+    if (name) sensorToGroup.set(m.sensor_id, { id: m.group_id, name })
+  }
+
   return rooms.map(room => {
     const ref = refStmt.get(room.id) as { ref_temp: number | null; ref_humidity: number | null } | undefined
 
@@ -91,6 +101,7 @@ export default defineEventHandler(async (): Promise<RoomWithSensors[]> => {
           ? relayState(s.device_id, latest?.value ?? null)
           : { heaterActive: null, fanActive: null }
         const isHue = s.device_id?.startsWith('hue-') ?? false
+        const grp = sensorToGroup.get(s.id)
         return {
           id: s.id,
           roomId: s.room_id,
@@ -109,14 +120,26 @@ export default defineEventHandler(async (): Promise<RoomWithSensors[]> => {
           lightOn: s.hue_on === null ? null : s.hue_on === 1,
           lightBrightness: s.hue_bri,
           lightReachable: s.hue_reachable === null ? null : s.hue_reachable === 1,
+          hueName: s.hue_name,
+          groupId: grp?.id ?? null,
+          groupName: grp?.name ?? null,
         }
       })
+
+    const roomGroups = allGroups.filter(g => g.room_id === room.id)
+    const sensorsById = new Map(sensorViews.map(s => [s.id, s]))
+    const lightGroups = roomGroups.map(g => {
+      const memberIds = allMembers.filter(m => m.group_id === g.id).map(m => m.sensor_id)
+      const memberSensors = memberIds.map(id => sensorsById.get(id)).filter((s): s is SensorView => !!s)
+      return buildGroupView(g, memberSensors)
+    })
 
     return {
       id: room.id,
       name: room.name,
       reference: ref ? { refTemp: ref.ref_temp, refHumidity: ref.ref_humidity } : null,
       sensors: sensorViews,
+      lightGroups,
     }
   })
 })

@@ -1,4 +1,5 @@
 import { getDb } from '../../utils/db'
+import { pruneEmptyGroups } from '../../utils/light-groups'
 
 export default defineEventHandler((event) => {
   const id = Number(getRouterParam(event, 'id'))
@@ -13,6 +14,8 @@ export default defineEventHandler((event) => {
   if (sensor.device_id) {
     db.prepare('DELETE FROM sensor_announcements WHERE device_id = ? AND type = ?').run(sensor.device_id, sensor.type)
   }
+
+  pruneEmptyGroups(db)
 
   return { ok: true }
 })

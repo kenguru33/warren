@@ -1,5 +1,6 @@
 import { getDb } from '../../utils/db'
 import { queryInflux } from '../../utils/influxdb'
+import { fetchGroups, fetchMembers } from '../../utils/light-groups'
 
 function toMs(t: unknown): number {
   if (typeof t === 'bigint') return Number(t / BigInt(1_000_000))
@@ -16,7 +17,7 @@ export default defineEventHandler(async () => {
     SELECT s.id, s.type, s.label, s.device_id, s.stream_url, s.snapshot_url,
            r.id AS room_id, r.name AS room_name,
            hls.on_state AS hue_on, hls.brightness AS hue_bri, hls.reachable AS hue_reachable,
-           hd.capabilities AS hue_capabilities
+           hd.capabilities AS hue_capabilities, hd.name AS hue_name
     FROM sensors s
     LEFT JOIN rooms r ON r.id = s.room_id
     LEFT JOIN hue_light_state hls ON hls.device_id = s.device_id
@@ -27,7 +28,7 @@ export default defineEventHandler(async () => {
     stream_url: string | null; snapshot_url: string | null
     room_id: number | null; room_name: string | null
     hue_on: number | null; hue_bri: number | null; hue_reachable: number | null
-    hue_capabilities: string | null
+    hue_capabilities: string | null; hue_name: string | null
   }[]
 
   const assignedKeys = new Set(assigned.filter(s => s.device_id).map(s => `${s.device_id}:${s.type}`))
@@ -125,6 +126,15 @@ export default defineEventHandler(async () => {
     }
   }
 
+  const groups = fetchGroups(db)
+  const members = fetchMembers(db)
+  const groupNameById = new Map(groups.map(g => [g.id, g.name]))
+  const sensorToGroup = new Map<number, { id: number; name: string }>()
+  for (const m of members) {
+    const name = groupNameById.get(m.group_id)
+    if (name) sensorToGroup.set(m.sensor_id, { id: m.group_id, name })
+  }
+
   const assignedResult = assigned.map(s => {
     const key = s.device_id ? `${s.device_id}:${s.type}` : null
     const latest = key ? latestMap.get(key) : undefined
@@ -132,6 +142,7 @@ export default defineEventHandler(async () => {
       ? relayState(s.device_id, latest?.value ?? null)
       : { heaterActive: null, fanActive: null }
     const isHue = s.device_id?.startsWith('hue-') ?? false
+    const grp = sensorToGroup.get(s.id)
     return {
       id: s.id as number | null,
       type: s.type,
@@ -150,6 +161,9 @@ export default defineEventHandler(async () => {
       lightOn: s.hue_on === null ? null : s.hue_on === 1,
       lightBrightness: s.hue_bri,
       lightReachable: s.hue_reachable === null ? null : s.hue_reachable === 1,
+      hueName: s.hue_name,
+      groupId: grp?.id ?? null,
+      groupName: grp?.name ?? null,
     }
   })
 
