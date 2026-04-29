@@ -1,6 +1,7 @@
 import { getDb } from '../../utils/db'
 import {
   validateGroupName,
+  validateGroupTheme,
   assertLightSensorsInRoom,
   assertSensorsFreeForGroup,
 } from '../../utils/light-groups'
@@ -9,7 +10,7 @@ export default defineEventHandler(async (event) => {
   const groupId = Number(getRouterParam(event, 'id'))
   if (!groupId) throw createError({ statusCode: 400, message: 'invalid group id' })
 
-  const body = await readBody<{ name?: string; sensorIds?: number[] }>(event)
+  const body = await readBody<{ name?: string; sensorIds?: number[]; theme?: string | null }>(event)
 
   const db = getDb()
   const group = db.prepare('SELECT id, room_id, name FROM light_groups WHERE id = ?')
@@ -42,9 +43,16 @@ export default defineEventHandler(async (event) => {
     assertSensorsFreeForGroup(db, nextSensorIds, groupId)
   }
 
+  // `theme` semantics: missing key = no change; explicit null = reset to default; string = set.
+  const themeProvided = body !== null && body !== undefined && 'theme' in body
+  const nextTheme = themeProvided ? validateGroupTheme(body!.theme) : undefined
+
   const tx = db.transaction(() => {
     if (nextName !== null && nextName !== group.name) {
       db.prepare('UPDATE light_groups SET name = ? WHERE id = ?').run(nextName, groupId)
+    }
+    if (nextTheme !== undefined) {
+      db.prepare('UPDATE light_groups SET theme = ? WHERE id = ?').run(nextTheme, groupId)
     }
     if (nextSensorIds) {
       db.prepare('DELETE FROM light_group_members WHERE group_id = ?').run(groupId)

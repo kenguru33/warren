@@ -31,6 +31,8 @@ export interface SensorView {
   groupName?: string | null
 }
 
+import type { LightThemeKey } from './utils/light-themes'
+
 export type LightGroupState = 'all-on' | 'all-off' | 'mixed'
 
 export interface LightGroupView {
@@ -43,6 +45,7 @@ export interface LightGroupView {
   brightness: number | null
   unreachableCount: number
   hasBrightnessCapableMember: boolean
+  theme: LightThemeKey
 }
 
 export interface MasterState {

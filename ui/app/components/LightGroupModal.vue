@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { SensorView, LightGroupView } from '../../shared/types'
+import type { LightThemeKey } from '../../shared/utils/light-themes'
 
 const props = defineProps<{
   roomId: number
@@ -19,10 +20,77 @@ const emit = defineEmits<{
 }>()
 
 const name = ref(props.group?.name ?? '')
+const themeKey = ref<LightThemeKey>(props.group?.theme ?? DEFAULT_LIGHT_THEME)
 const selectedIds = ref<Set<number>>(new Set(props.group?.memberSensorIds ?? []))
 const error = ref<string | null>(null)
 const saving = ref(false)
 const confirmDelete = ref(false)
+
+const themes = Object.values(LIGHT_THEMES)
+const selectedTheme = computed(() => LIGHT_THEMES[themeKey.value])
+
+const themeOpen = ref(false)
+const themeBtnRef = ref<HTMLButtonElement | null>(null)
+const themeMenuRef = ref<HTMLDivElement | null>(null)
+const themeMenuPos = ref<{ top: number; left: number; width: number }>({ top: 0, left: 0, width: 0 })
+
+function positionMenu() {
+  const el = themeBtnRef.value
+  if (!el) return
+  const r = el.getBoundingClientRect()
+  themeMenuPos.value = { top: r.bottom + 4, left: r.left, width: r.width }
+}
+
+watch(themeOpen, (open) => {
+  if (open) {
+    positionMenu()
+    nextTick(() => positionMenu())
+  }
+})
+
+async function pickTheme(key: LightThemeKey) {
+  themeKey.value = key
+  themeOpen.value = false
+  themeBtnRef.value?.focus()
+
+  // Live preview: fire-and-forget paint with the new palette. Only meaningful for an
+  // existing group (new groups don't exist server-side yet) with at least one light on
+  // (off bulbs ignore color changes, and we never auto-turn-them-on for a preview).
+  // The Save button still persists the theme; this preview is non-persistent.
+  if (!props.group || props.group.state === 'all-off') return
+  try {
+    await $fetch(`/api/light-groups/${props.group.id}/state`, {
+      method: 'POST',
+      body: { on: true, theme: key },
+    })
+  } catch {
+    // Silent — Save still works, and the dropdown change is reflected in the tile UI
+    // via the local `themeKey` ref regardless.
+  }
+}
+
+function onDocClick(e: MouseEvent) {
+  if (!themeOpen.value) return
+  const t = e.target as Node
+  if (themeBtnRef.value?.contains(t)) return
+  if (themeMenuRef.value?.contains(t)) return
+  themeOpen.value = false
+}
+
+function onWindowChange() {
+  if (themeOpen.value) positionMenu()
+}
+
+onMounted(() => {
+  document.addEventListener('mousedown', onDocClick)
+  window.addEventListener('resize', onWindowChange)
+  window.addEventListener('scroll', onWindowChange, true)
+})
+onBeforeUnmount(() => {
+  document.removeEventListener('mousedown', onDocClick)
+  window.removeEventListener('resize', onWindowChange)
+  window.removeEventListener('scroll', onWindowChange, true)
+})
 
 // Map from sensorId → other group's name (so we can mark a light as "in: <other>")
 const otherGroupBySensor = computed<Map<number, string>>(() => {
@@ -88,12 +156,12 @@ async function save() {
     if (props.group) {
       await $fetch(`/api/light-groups/${props.group.id}`, {
         method: 'PATCH',
-        body: { name: trimmedName.value, sensorIds },
+        body: { name: trimmedName.value, sensorIds, theme: themeKey.value },
       })
     } else {
       await $fetch(`/api/rooms/${props.roomId}/light-groups`, {
         method: 'POST',
-        body: { name: trimmedName.value, sensorIds },
+        body: { name: trimmedName.value, sensorIds, theme: themeKey.value },
       })
     }
     emit('saved')
@@ -146,6 +214,68 @@ async function ungroup() {
             @keydown.escape="emit('close')"
           />
         </label>
+
+        <div class="modal-field theme-field">
+          <span>Color</span>
+          <button
+            ref="themeBtnRef"
+            type="button"
+            class="theme-trigger"
+            :aria-expanded="themeOpen"
+            aria-haspopup="listbox"
+            @click="themeOpen = !themeOpen"
+            @keydown.escape="themeOpen = false"
+          >
+            <span class="theme-swatch" :style="{ background: selectedTheme.swatch }" aria-hidden="true" />
+            <span class="theme-label">{{ selectedTheme.label }}</span>
+            <svg class="theme-chevron" :class="{ open: themeOpen }" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+              <path d="M6 9l6 6 6-6"/>
+            </svg>
+          </button>
+        </div>
+
+        <Teleport to="body">
+          <div
+            v-if="themeOpen"
+            ref="themeMenuRef"
+            class="theme-menu"
+            role="listbox"
+            :aria-activedescendant="`theme-opt-${themeKey}`"
+            :style="{ top: `${themeMenuPos.top}px`, left: `${themeMenuPos.left}px`, width: `${themeMenuPos.width}px` }"
+          >
+            <button
+              v-for="t in themes"
+              :id="`theme-opt-${t.key}`"
+              :key="t.key"
+              type="button"
+              class="theme-option"
+              :class="{ selected: themeKey === t.key }"
+              role="option"
+              :aria-selected="themeKey === t.key"
+              @click="pickTheme(t.key)"
+            >
+              <span class="theme-swatch" :style="{ background: t.swatch }" aria-hidden="true" />
+              <span class="theme-label">{{ t.label }}</span>
+              <span class="theme-palette" aria-hidden="true">
+                <span
+                  v-for="c in t.bulbPalette"
+                  :key="c"
+                  class="palette-dot"
+                  :style="{ background: c }"
+                />
+              </span>
+              <svg
+                v-if="themeKey === t.key"
+                class="theme-check"
+                width="14" height="14" viewBox="0 0 24 24"
+                fill="none" stroke="currentColor" stroke-width="2.5"
+                aria-hidden="true"
+              >
+                <path d="M20 6L9 17l-5-5"/>
+              </svg>
+            </button>
+          </div>
+        </Teleport>
 
         <div class="modal-field">
           <span>Lights</span>
@@ -217,7 +347,17 @@ async function ungroup() {
   padding: 24px; width: 100%; max-width: 440px;
   max-height: 80vh; overflow-y: auto;
   display: flex; flex-direction: column; gap: 18px;
+  scrollbar-width: thin;
+  scrollbar-color: #2a2f45 transparent;
 }
+.modal-card::-webkit-scrollbar { width: 8px; }
+.modal-card::-webkit-scrollbar-track { background: transparent; }
+.modal-card::-webkit-scrollbar-thumb {
+  background: #2a2f45;
+  border-radius: 4px;
+  border: 2px solid #1e2130;
+}
+.modal-card::-webkit-scrollbar-thumb:hover { background: #3a4055; }
 .modal-header { display: flex; align-items: center; gap: 12px; }
 .modal-icon { font-size: 1.6rem; }
 .modal-title { font-size: 1rem; font-weight: 700; color: #e2e8f0; }
@@ -235,7 +375,17 @@ async function ungroup() {
   display: flex; flex-direction: column; gap: 4px;
   background: #0f1117; border: 1px solid #2a2f45; border-radius: 8px;
   padding: 6px; max-height: 240px; overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #2a2f45 transparent;
 }
+.light-list::-webkit-scrollbar { width: 8px; }
+.light-list::-webkit-scrollbar-track { background: transparent; }
+.light-list::-webkit-scrollbar-thumb {
+  background: #2a2f45;
+  border-radius: 4px;
+  border: 2px solid #0f1117;
+}
+.light-list::-webkit-scrollbar-thumb:hover { background: #3a4055; }
 .light-row {
   display: flex; align-items: center; gap: 10px;
   padding: 8px 10px; border-radius: 6px; cursor: pointer;
@@ -267,6 +417,124 @@ async function ungroup() {
   border-radius: 6px; padding: 8px 10px;
 }
 .empty { font-size: 0.78rem; color: #475569; padding: 12px; text-align: center; }
+
+.theme-field {
+  position: relative;
+}
+
+.theme-trigger {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #0f1117;
+  border: 1px solid #2a2f45;
+  border-radius: 8px;
+  padding: 7px 10px 7px 8px;
+  color: #e2e8f0;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: border-color 0.15s;
+  text-align: left;
+  width: 100%;
+}
+.theme-trigger:hover,
+.theme-trigger[aria-expanded="true"] {
+  border-color: #4a6fa5;
+}
+
+.theme-swatch {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+}
+
+.theme-label {
+  flex: 1;
+  color: #e2e8f0;
+  font-weight: 500;
+}
+
+.theme-chevron {
+  color: #64748b;
+  transition: transform 0.15s;
+  flex-shrink: 0;
+}
+.theme-chevron.open { transform: rotate(180deg); }
+
+.theme-menu {
+  position: fixed;
+  z-index: 300;
+  background: #1e2130;
+  border: 1px solid #2a2f45;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  max-height: min(420px, 60vh);
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #2a2f45 transparent;
+}
+.theme-menu::-webkit-scrollbar { width: 8px; }
+.theme-menu::-webkit-scrollbar-track { background: transparent; }
+.theme-menu::-webkit-scrollbar-thumb {
+  background: #2a2f45;
+  border-radius: 4px;
+  border: 2px solid #1e2130;
+}
+.theme-menu::-webkit-scrollbar-thumb:hover { background: #3a4055; }
+
+.theme-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: none;
+  border: none;
+  border-radius: 6px;
+  padding: 7px 8px;
+  color: #cbd5e1;
+  font-size: 0.82rem;
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+  transition: background 0.12s;
+}
+.theme-option:hover,
+.theme-option:focus-visible {
+  background: #151825;
+  outline: none;
+}
+.theme-option.selected {
+  background: #1d2238;
+  color: #e2e8f0;
+}
+
+.theme-option .theme-label {
+  flex: 0 0 auto;
+}
+
+.theme-palette {
+  flex: 1;
+  display: flex;
+  gap: 3px;
+  justify-content: flex-end;
+}
+.palette-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.theme-check {
+  color: #a0c4ff;
+  flex-shrink: 0;
+}
 
 .modal-actions { display: flex; align-items: center; gap: 8px; }
 .spacer { flex: 1; }

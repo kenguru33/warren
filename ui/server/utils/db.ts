@@ -143,6 +143,7 @@ export function initDb() {
       id         INTEGER PRIMARY KEY AUTOINCREMENT,
       room_id    INTEGER NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
       name       TEXT    NOT NULL,
+      theme      TEXT,
       created_at INTEGER NOT NULL DEFAULT (unixepoch('now') * 1000),
       UNIQUE (room_id, name)
     );
@@ -160,6 +161,11 @@ export function initDb() {
   const columns = db.pragma('table_info(sensors)') as { name: string; notnull: number }[]
   if (!columns.some(c => c.name === 'device_id')) {
     db.exec('ALTER TABLE sensors ADD COLUMN device_id TEXT')
+  }
+
+  const lgCols = db.pragma('table_info(light_groups)') as { name: string }[]
+  if (!lgCols.some(c => c.name === 'theme')) {
+    db.exec('ALTER TABLE light_groups ADD COLUMN theme TEXT')
   }
 
   // Make sensors.room_id nullable so sensors can be unassigned from a room without being deleted

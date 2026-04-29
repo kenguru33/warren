@@ -1,5 +1,12 @@
 import type { Database } from 'better-sqlite3'
 import type { LightGroupState, LightGroupView, MasterState, SensorView } from '../../shared/types'
+import {
+  isValidLightThemeKey,
+  resolveLightTheme,
+  paletteColorFor,
+  hexToXy,
+  type LightTheme,
+} from '../../shared/utils/light-themes'
 import { setLightState, HueUnauthorizedError, HueUnreachableError } from './hue'
 
 export interface FanOutMember {
@@ -30,18 +37,32 @@ export async function fanOutLightCommand(
   db: Database,
   members: FanOutMember[],
   body: { on?: boolean; brightness?: number },
+  // When set, color-capable members get a palette color (round-robin by member index).
+  // Only applied when the command is turning lights on (or is a brightness change that
+  // implies on); never sent when explicitly turning off.
+  themeForColors?: LightTheme | null,
 ): Promise<FanOutSummary> {
   const briScaled = body.brightness !== undefined ? Math.round((body.brightness / 100) * 254) : undefined
+  // Only paint colors on an explicit master-on. Brightness drags (which set on:true implicitly
+  // via the slider auto-on path) skip the palette so we don't resend xy on every throttle tick.
+  const wantsOn = body.on === true
+  const palette = themeForColors && themeForColors.bulbPalette.length > 0 ? themeForColors : null
 
   const results: FanOutResult[] = []
-  await Promise.all(members.map(async (m) => {
-    const supportsBri = m.capabilities ? !!JSON.parse(m.capabilities)?.brightness : false
-    const payload: { on?: boolean; bri?: number } = {}
+  await Promise.all(members.map(async (m, idx) => {
+    const caps = m.capabilities ? JSON.parse(m.capabilities) : null
+    const supportsBri = !!caps?.brightness
+    const supportsColor = !!caps?.color
+    const payload: { on?: boolean; bri?: number; xy?: [number, number] } = {}
     if (body.on !== undefined) payload.on = body.on
     if (briScaled !== undefined && supportsBri) {
       payload.bri = briScaled
       // Slider implies on (matches per-light behaviour)
       if (body.on === undefined) payload.on = true
+    }
+    if (palette && wantsOn && supportsColor) {
+      const hex = paletteColorFor(palette, idx)
+      payload.xy = hexToXy(hex)
     }
     if (Object.keys(payload).length === 0) {
       results.push({ sensorId: m.sensor_id, deviceId: m.device_id, ok: true })
@@ -90,6 +111,7 @@ export interface GroupRow {
   id: number
   room_id: number
   name: string
+  theme: string | null
 }
 
 export interface MemberRow {
@@ -102,11 +124,11 @@ export const GROUP_NAME_MAX = 60
 export function fetchGroups(db: Database, roomId?: number): GroupRow[] {
   if (roomId !== undefined) {
     return db
-      .prepare('SELECT id, room_id, name FROM light_groups WHERE room_id = ? ORDER BY created_at ASC')
+      .prepare('SELECT id, room_id, name, theme FROM light_groups WHERE room_id = ? ORDER BY created_at ASC')
       .all(roomId) as GroupRow[]
   }
   return db
-    .prepare('SELECT id, room_id, name FROM light_groups ORDER BY created_at ASC')
+    .prepare('SELECT id, room_id, name, theme FROM light_groups ORDER BY created_at ASC')
     .all() as GroupRow[]
 }
 
@@ -138,10 +160,14 @@ function computeOnOffState(members: SensorView[]): { state: LightGroupState; unr
 export function buildGroupView(group: GroupRow, members: SensorView[]): LightGroupView {
   const { state, unreachableCount } = computeOnOffState(members)
 
+  // Brightness is the average of every bri-capable member's last-known level — including
+  // bulbs that are currently off. The Hue bridge retains brightness across on/off, so this
+  // gives the slider a stable "what level will the next on-command use" value, instead of
+  // collapsing to null/0 the moment the group is toggled off.
   const briCapable = members.filter(m => m.capabilities?.brightness === true)
-  const onWithBri = briCapable.filter(m => m.lightOn === true && typeof m.lightBrightness === 'number')
-  const avg = onWithBri.length
-    ? Math.round(onWithBri.reduce((s, m) => s + (m.lightBrightness ?? 0), 0) / onWithBri.length)
+  const withBri = briCapable.filter(m => typeof m.lightBrightness === 'number')
+  const avg = withBri.length
+    ? Math.round(withBri.reduce((s, m) => s + (m.lightBrightness ?? 0), 0) / withBri.length)
     : null
 
   return {
@@ -154,6 +180,7 @@ export function buildGroupView(group: GroupRow, members: SensorView[]): LightGro
     brightness: avg === null ? null : Math.round((avg / 254) * 100),
     unreachableCount,
     hasBrightnessCapableMember: briCapable.length > 0,
+    theme: resolveLightTheme(group.theme).key,
   }
 }
 
@@ -221,4 +248,14 @@ export function validateGroupName(name: unknown): string {
     throw createError({ statusCode: 400, message: `name must be ${GROUP_NAME_MAX} characters or fewer` })
   }
   return trimmed
+}
+
+// Returns the theme key if valid, null when omitted/cleared, throws 400 on unknown key.
+// Reject-over-coerce: writes are closed-client, silent coercion would mask drift bugs.
+export function validateGroupTheme(theme: unknown): string | null {
+  if (theme === undefined || theme === null) return null
+  if (!isValidLightThemeKey(theme)) {
+    throw createError({ statusCode: 400, message: 'unknown theme key' })
+  }
+  return theme
 }
