@@ -49,22 +49,53 @@ async function toggleOn() {
   }
 }
 
-async function commitBrightness() {
+// Live brightness — throttle in-flight sends so the bulb tracks the slider during drag
+// without flooding the Hue bridge. Trailing edge fires every 120ms with the latest value;
+// `pending` is intentionally NOT toggled mid-drag so the slider stays interactive.
+let briThrottleTimer: ReturnType<typeof setTimeout> | null = null
+let lastSentBri = -1
+
+async function sendBrightness(value: number) {
   if (!props.sensor.deviceId) return
-  dragging.value = false
-  pending.value = true
+  if (value === lastSentBri) return
+  lastSentBri = value
   error.value = null
   try {
-    const body: { brightness: number; on?: boolean } = { brightness: localBri.value }
-    if (localBri.value > 0 && !localOn.value) { body.on = true; localOn.value = true }
+    const body: { brightness: number; on?: boolean } = { brightness: value }
+    if (value > 0 && !localOn.value) { body.on = true; localOn.value = true }
     await $fetch(deviceUrl(), { method: 'POST', body })
   } catch (err: unknown) {
     const e = err as { data?: { error?: string }; message?: string }
     error.value = e.data?.error === 'bridge_unreachable' ? 'Bridge unreachable' : (e.message ?? 'failed')
+  }
+}
+
+function onBrightnessInput() {
+  dragging.value = true
+  if (briThrottleTimer !== null) return
+  briThrottleTimer = setTimeout(() => {
+    briThrottleTimer = null
+    sendBrightness(localBri.value)
+  }, 120)
+}
+
+async function commitBrightness() {
+  dragging.value = false
+  if (briThrottleTimer) {
+    clearTimeout(briThrottleTimer)
+    briThrottleTimer = null
+  }
+  pending.value = true
+  try {
+    await sendBrightness(localBri.value)
   } finally {
     pending.value = false
   }
 }
+
+onUnmounted(() => {
+  if (briThrottleTimer) clearTimeout(briThrottleTimer)
+})
 
 const reachable = computed(() => props.sensor.lightReachable !== false)
 const hasBrightness = computed(() => props.sensor.capabilities?.brightness === true)
@@ -73,14 +104,6 @@ const displayName = computed(() => props.sensor.label?.trim() || props.sensor.hu
 
 <template>
   <div class="sensor-tile light-tile" :class="{ 'tile-offline': !reachable, 'is-on': localOn }">
-    <span class="tile-icon">💡</span>
-    <span class="tile-value" :class="{ off: !localOn }">{{ localOn ? 'On' : 'Off' }}</span>
-    <span class="tile-label">Light</span>
-    <span v-if="displayName" class="tile-custom-label">{{ displayName }}</span>
-    <span v-if="sensor.groupName" class="tile-group" :title="`In group: ${sensor.groupName}`">
-      in group: {{ sensor.groupName }}
-    </span>
-
     <button
       class="toggle-btn"
       :class="{ on: localOn }"
@@ -88,21 +111,27 @@ const displayName = computed(() => props.sensor.label?.trim() || props.sensor.hu
       :title="localOn ? 'Turn off' : 'Turn on'"
       @click.stop="toggleOn"
     >
-      <span class="dot" />
+      <span class="bulb">💡</span>
     </button>
 
-    <div v-if="hasBrightness" class="brightness-row" @click.stop>
-      <input
-        v-model.number="localBri"
-        type="range" min="0" max="100" step="1"
-        class="bri-slider"
-        :disabled="pending || !reachable"
-        @mousedown="dragging = true"
-        @touchstart="dragging = true"
-        @change="commitBrightness"
-      />
-      <span class="bri-value">{{ localBri }}%</span>
+    <div class="chip-text">
+      <span class="chip-name" :title="displayName || 'Light'">{{ displayName || 'Light' }}</span>
+      <span class="chip-state" :class="{ off: !localOn }">{{ localOn ? 'On' : 'Off' }}</span>
     </div>
+
+    <input
+      v-if="hasBrightness"
+      v-model.number="localBri"
+      type="range" min="0" max="100" step="1"
+      class="bri-slider"
+      :disabled="!reachable"
+      :title="`Brightness ${localBri}%`"
+      @click.stop
+      @mousedown="dragging = true"
+      @touchstart="dragging = true"
+      @input="onBrightnessInput"
+      @change="commitBrightness"
+    />
 
     <span v-if="!reachable" class="tile-offline-badge">Unreachable</span>
     <span v-if="error" class="error-badge" :title="error">!</span>
@@ -129,15 +158,14 @@ const displayName = computed(() => props.sensor.label?.trim() || props.sensor.hu
 <style scoped>
 .sensor-tile {
   background: #151825;
-  border-radius: 10px;
-  padding: 14px 10px;
+  border-radius: 12px;
+  padding: 18px 14px 14px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: flex-start;
-  gap: 5px;
+  gap: 10px;
   position: relative;
-  min-height: 160px;
+  min-height: 144px;
   text-align: center;
 }
 
@@ -145,75 +173,71 @@ const displayName = computed(() => props.sensor.label?.trim() || props.sensor.hu
   background: linear-gradient(180deg, #1d2238 0%, #151825 100%);
 }
 
-.tile-icon { font-size: 1.3rem; }
-.tile-value {
-  font-size: 1rem;
-  font-weight: 700;
-  color: #a0c4ff;
+.toggle-btn {
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid #2a2f45;
+  background: #1a1d2c;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.15rem;
+  line-height: 1;
+  transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
 }
-.tile-value.off { color: #475569; }
+.toggle-btn .bulb {
+  filter: grayscale(0.6) brightness(0.7);
+  transition: filter 0.15s;
+}
+.toggle-btn.on {
+  background: #4a6fa5;
+  border-color: #a0c4ff;
+  box-shadow: 0 0 12px rgba(160, 196, 255, 0.35);
+}
+.toggle-btn.on .bulb { filter: none; }
+.toggle-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
-.tile-label {
-  font-size: 0.68rem;
-  color: #64748b;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
+.chip-text {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding-top: 2px;
+  width: 100%;
+  min-width: 0;
 }
 
-.tile-custom-label {
-  font-size: 0.72rem;
+.chip-name {
+  font-size: 0.75rem;
   font-weight: 600;
-  color: #94a3b8;
+  color: #e2e8f0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 100%;
+  line-height: 1.2;
 }
 
-.tile-group {
+.chip-state {
   font-size: 0.6rem;
   color: #a0c4ff;
-  background: rgba(74, 111, 165, 0.12);
-  border-radius: 4px;
-  padding: 1px 5px;
-  letter-spacing: 0.04em;
-  max-width: 100%;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 600;
 }
+.chip-state.off { color: #475569; }
 
-.toggle-btn {
-  margin-top: 4px;
-  width: 38px; height: 22px; padding: 0;
-  border-radius: 11px;
-  border: 1px solid #2a2f45;
-  background: #2a2f45;
-  cursor: pointer; position: relative;
-  transition: background 0.15s, border-color 0.15s;
-}
-.toggle-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-.toggle-btn .dot {
-  position: absolute; top: 2px; left: 2px;
-  width: 16px; height: 16px; border-radius: 50%;
-  background: #64748b;
-  transition: transform 0.18s, background 0.15s;
-}
-.toggle-btn.on { background: #4a6fa5; border-color: #4a6fa5; }
-.toggle-btn.on .dot { transform: translateX(16px); background: #f1f5f9; }
-
-.brightness-row {
-  display: flex; align-items: center; gap: 6px;
-  width: 100%; padding: 0 4px; margin-top: 4px;
-}
 .bri-slider {
-  flex: 1;
+  width: 100%;
   -webkit-appearance: none;
   height: 3px;
   border-radius: 2px;
   background: #2a2f45;
   outline: none;
   cursor: pointer;
+  margin-top: 2px;
 }
 .bri-slider:disabled { opacity: 0.5; cursor: not-allowed; }
 .bri-slider::-webkit-slider-thumb {
@@ -227,32 +251,28 @@ const displayName = computed(() => props.sensor.label?.trim() || props.sensor.hu
   width: 12px; height: 12px;
   border-radius: 50%;
   background: #a0c4ff;
-  cursor: pointer; border: 0;
-}
-.bri-value {
-  font-size: 0.64rem; color: #64748b; font-variant-numeric: tabular-nums;
-  min-width: 28px;
+  cursor: pointer;
+  border: 0;
 }
 
 .tile-offline-badge {
-  font-size: 0.58rem;
+  font-size: 0.55rem;
   font-weight: 700;
   color: #f87171;
   background: rgba(248, 113, 113, 0.1);
   border: 1px solid rgba(248, 113, 113, 0.25);
   border-radius: 4px;
-  padding: 1px 4px;
+  padding: 0 4px;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  margin-top: 2px;
 }
 
 .error-badge {
-  position: absolute; top: 5px; left: 5px;
+  position: absolute; top: 4px; left: 4px;
   background: #ef4444; color: #fff;
-  width: 16px; height: 16px; border-radius: 50%;
+  width: 14px; height: 14px; border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
-  font-size: 0.7rem; font-weight: 700;
+  font-size: 0.65rem; font-weight: 700;
 }
 
 .sensor-tile.tile-offline {
@@ -261,15 +281,25 @@ const displayName = computed(() => props.sensor.label?.trim() || props.sensor.hu
 }
 
 .tile-actions {
-  position: absolute; top: 5px; right: 5px;
-  display: flex; gap: 2px;
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  display: flex;
+  gap: 2px;
 }
 .tile-action-btn {
-  background: none; border: none; color: #334155;
-  cursor: pointer; font-size: 1rem; line-height: 1;
-  padding: 2px 4px; border-radius: 4px;
+  background: none;
+  border: none;
+  color: #334155;
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1;
+  padding: 2px 4px;
+  border-radius: 4px;
   transition: color 0.15s;
-  display: flex; align-items: center; justify-content: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 .tile-action-btn:hover { color: #94a3b8; }
 .tile-action-btn.remove:hover { color: #f87171; }

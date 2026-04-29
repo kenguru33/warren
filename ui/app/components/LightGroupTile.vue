@@ -71,15 +71,19 @@ async function toggleMaster() {
   }
 }
 
-async function commitBrightness() {
-  dragging.value = false
-  if (localBri.value === null) return
-  pending.value = true
+// Live brightness — same throttle pattern as HueLightTile so the group dims/brightens
+// as the slider moves, without flooding the bridge. `pending` stays off mid-drag.
+let briThrottleTimer: ReturnType<typeof setTimeout> | null = null
+let lastSentBri = -1
+
+async function sendBrightness(value: number) {
+  if (value === lastSentBri) return
+  lastSentBri = value
   error.value = null
   partial.value = null
   try {
-    const body: { brightness: number; on?: boolean } = { brightness: localBri.value }
-    if (localBri.value > 0 && displayState.value !== 'all-on') {
+    const body: { brightness: number; on?: boolean } = { brightness: value }
+    if (value > 0 && displayState.value !== 'all-on') {
       body.on = true
       localOn.value = true
     }
@@ -93,10 +97,37 @@ async function commitBrightness() {
   } catch (err: unknown) {
     const e = err as { data?: { error?: string }; message?: string }
     error.value = e.data?.error === 'bridge_unreachable' ? 'Bridge unreachable' : (e.message ?? 'failed')
+  }
+}
+
+function onBrightnessInput(e: Event) {
+  dragging.value = true
+  localBri.value = Number((e.target as HTMLInputElement).value)
+  if (briThrottleTimer !== null) return
+  briThrottleTimer = setTimeout(() => {
+    briThrottleTimer = null
+    if (localBri.value !== null) sendBrightness(localBri.value)
+  }, 140)
+}
+
+async function commitBrightness() {
+  dragging.value = false
+  if (briThrottleTimer) {
+    clearTimeout(briThrottleTimer)
+    briThrottleTimer = null
+  }
+  if (localBri.value === null) return
+  pending.value = true
+  try {
+    await sendBrightness(localBri.value)
   } finally {
     pending.value = false
   }
 }
+
+onUnmounted(() => {
+  if (briThrottleTimer) clearTimeout(briThrottleTimer)
+})
 </script>
 
 <template>
@@ -104,34 +135,41 @@ async function commitBrightness() {
     class="sensor-tile group-tile"
     :class="{ 'is-on': isOn, 'is-mixed': displayState === 'mixed' }"
   >
-    <span class="tile-icon">💡✨</span>
-    <span class="tile-name" :title="group.name">{{ group.name }}</span>
-    <span class="tile-state" :class="{ off: displayState === 'all-off' }">{{ stateLabel }}</span>
-    <span class="tile-meta">{{ group.memberCount }} {{ group.memberCount === 1 ? 'light' : 'lights' }}</span>
-
     <button
       class="toggle-btn"
-      :class="{ on: isOn }"
+      :class="{ on: isOn, mixed: displayState === 'mixed' }"
       :disabled="pending || group.memberCount === 0"
       :title="isOn ? 'Turn group off' : 'Turn group on'"
       @click.stop="toggleMaster"
     >
-      <span class="dot" />
+      <span class="bulb-stack" aria-hidden="true">
+        <span class="bulb b-back">💡</span>
+        <span class="bulb b-front">💡</span>
+        <span class="bulb b-side">💡</span>
+      </span>
     </button>
 
-    <div v-if="group.hasBrightnessCapableMember" class="brightness-row" @click.stop>
-      <input
-        :value="displayBri"
-        type="range" min="0" max="100" step="1"
-        class="bri-slider"
-        :disabled="pending || group.memberCount === 0"
-        @input="(e) => { dragging = true; localBri = Number((e.target as HTMLInputElement).value) }"
-        @change="commitBrightness"
-      />
-      <span class="bri-value">{{ displayBri }}%</span>
+    <div class="chip-text">
+      <span class="chip-name" :title="group.name">{{ group.name }}</span>
+      <span class="chip-state" :class="{ off: displayState === 'all-off' }">
+        {{ stateLabel }}
+        <span class="chip-count">· {{ group.memberCount }}</span>
+      </span>
     </div>
 
-    <div class="badge-row">
+    <input
+      v-if="group.hasBrightnessCapableMember"
+      :value="displayBri"
+      type="range" min="0" max="100" step="1"
+      class="bri-slider"
+      :disabled="group.memberCount === 0"
+      :title="`Brightness ${displayBri}%`"
+      @click.stop
+      @input="onBrightnessInput"
+      @change="commitBrightness"
+    />
+
+    <div v-if="group.unreachableCount > 0 || partial" class="badge-row">
       <span v-if="group.unreachableCount > 0" class="badge unreachable" :title="`${group.unreachableCount} light(s) unreachable`">
         {{ group.unreachableCount }} unreachable
       </span>
@@ -163,17 +201,15 @@ async function commitBrightness() {
 <style scoped>
 .sensor-tile {
   background: #151825;
-  border-radius: 10px;
-  padding: 14px 10px;
+  border-radius: 12px;
+  padding: 18px 14px 14px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: flex-start;
-  gap: 5px;
+  gap: 10px;
   position: relative;
-  min-height: 160px;
+  min-height: 156px;
   text-align: center;
-  grid-column: span 2;
   border: 1px solid #2a2f45;
 }
 
@@ -185,83 +221,117 @@ async function commitBrightness() {
   border-color: rgba(168, 85, 247, 0.45);
 }
 
-.tile-icon { font-size: 1.2rem; }
+.toggle-btn {
+  position: relative;
+  width: 64px;
+  height: 42px;
+  padding: 0;
+  border-radius: 21px;
+  border: 1px solid #2a2f45;
+  background: #1a1d2c;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
+}
+.toggle-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
-.tile-name {
-  font-size: 0.92rem;
-  font-weight: 700;
+.bulb-stack {
+  position: relative;
+  width: 42px;
+  height: 22px;
+}
+.bulb-stack .bulb {
+  position: absolute;
+  font-size: 1rem;
+  line-height: 1;
+  top: 0;
+  filter: grayscale(0.6) brightness(0.7);
+  transition: filter 0.15s, transform 0.15s;
+}
+.bulb-stack .b-back  { left: 0;  transform: rotate(-14deg) translateY(2px); opacity: 0.65; }
+.bulb-stack .b-side  { left: 21px; transform: rotate(14deg) translateY(2px); opacity: 0.65; }
+.bulb-stack .b-front { left: 11px; z-index: 1; transform: translateY(-1px); }
+
+.toggle-btn.on {
+  background: #4a6fa5;
+  border-color: #a0c4ff;
+  box-shadow: 0 0 14px rgba(160, 196, 255, 0.4);
+}
+.toggle-btn.on .bulb { filter: none; }
+.toggle-btn.on .b-back,
+.toggle-btn.on .b-side { opacity: 0.85; }
+
+.toggle-btn.mixed {
+  border-color: rgba(168, 85, 247, 0.55);
+  box-shadow: 0 0 10px rgba(168, 85, 247, 0.3);
+}
+
+.chip-text {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding-top: 2px;
+  width: 100%;
+  min-width: 0;
+}
+
+.chip-name {
+  font-size: 0.75rem;
+  font-weight: 600;
   color: #e2e8f0;
-  letter-spacing: 0.02em;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 100%;
+  line-height: 1.2;
 }
 
-.tile-state {
-  font-size: 0.78rem;
-  font-weight: 600;
+.chip-state {
+  font-size: 0.6rem;
   color: #a0c4ff;
-}
-.tile-state.off { color: #475569; }
-
-.tile-meta {
-  font-size: 0.65rem;
-  color: #64748b;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.08em;
+  font-weight: 600;
+}
+.chip-state.off { color: #475569; }
+
+.chip-count {
+  color: #64748b;
+  font-weight: 500;
+  margin-left: 2px;
 }
 
-.toggle-btn {
-  margin-top: 4px;
-  width: 44px; height: 24px; padding: 0;
-  border-radius: 12px;
-  border: 1px solid #2a2f45;
-  background: #2a2f45;
-  cursor: pointer; position: relative;
-  transition: background 0.15s, border-color 0.15s;
-}
-.toggle-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-.toggle-btn .dot {
-  position: absolute; top: 2px; left: 2px;
-  width: 18px; height: 18px; border-radius: 50%;
-  background: #64748b;
-  transition: transform 0.18s, background 0.15s;
-}
-.toggle-btn.on { background: #4a6fa5; border-color: #4a6fa5; }
-.toggle-btn.on .dot { transform: translateX(20px); background: #f1f5f9; }
-
-.brightness-row {
-  display: flex; align-items: center; gap: 6px;
-  width: 100%; padding: 0 6px; margin-top: 4px;
-}
 .bri-slider {
-  flex: 1;
+  width: 100%;
   -webkit-appearance: none;
-  height: 3px; border-radius: 2px;
-  background: #2a2f45; outline: none; cursor: pointer;
+  height: 3px;
+  border-radius: 2px;
+  background: #2a2f45;
+  outline: none;
+  cursor: pointer;
+  margin-top: 2px;
 }
 .bri-slider:disabled { opacity: 0.5; cursor: not-allowed; }
 .bri-slider::-webkit-slider-thumb {
   -webkit-appearance: none;
-  width: 13px; height: 13px;
+  width: 12px; height: 12px;
   border-radius: 50%;
   background: #a0c4ff;
   cursor: pointer;
 }
 .bri-slider::-moz-range-thumb {
-  width: 13px; height: 13px;
+  width: 12px; height: 12px;
   border-radius: 50%;
   background: #a0c4ff;
-  cursor: pointer; border: 0;
-}
-.bri-value {
-  font-size: 0.66rem; color: #64748b; font-variant-numeric: tabular-nums;
-  min-width: 30px;
+  cursor: pointer;
+  border: 0;
 }
 
 .badge-row {
-  display: flex; gap: 4px; flex-wrap: wrap; justify-content: center;
+  display: flex; gap: 6px; flex-wrap: wrap; justify-content: center;
 }
 
 .badge {
@@ -292,15 +362,25 @@ async function commitBrightness() {
 }
 
 .tile-actions {
-  position: absolute; top: 5px; right: 5px;
-  display: flex; gap: 2px;
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  display: flex;
+  gap: 2px;
 }
 .tile-action-btn {
-  background: none; border: none; color: #334155;
-  cursor: pointer; font-size: 1rem; line-height: 1;
-  padding: 2px 4px; border-radius: 4px;
+  background: none;
+  border: none;
+  color: #334155;
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1;
+  padding: 2px 4px;
+  border-radius: 4px;
   transition: color 0.15s;
-  display: flex; align-items: center; justify-content: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 .tile-action-btn:hover { color: #94a3b8; }
 .tile-action-btn.ungroup:hover { color: #f87171; }
