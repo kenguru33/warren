@@ -128,12 +128,25 @@ async function commitBrightness() {
 onUnmounted(() => {
   if (briThrottleTimer) clearTimeout(briThrottleTimer)
 })
+
+const theme = computed(() => resolveLightTheme(props.group.theme))
+const themeVars = computed(() => ({
+  '--theme-off-border':   theme.value.offBorder,
+  '--theme-on-border':    theme.value.onBorder,
+  '--theme-on-glow':      theme.value.onGlow,
+  '--theme-on-bg':        theme.value.toggleOnBg,
+  '--theme-on-grad-from': theme.value.onGradientFrom,
+  '--theme-on-grad-to':   theme.value.onGradientTo,
+  '--theme-bulb-tint':    theme.value.bulbTint,
+  '--theme-mixed-ring':   theme.value.mixedRingOverride ?? MIXED_RING_DEFAULT,
+}))
 </script>
 
 <template>
   <div
     class="sensor-tile group-tile"
     :class="{ 'is-on': isOn, 'is-mixed': displayState === 'mixed' }"
+    :style="themeVars"
   >
     <button
       class="toggle-btn"
@@ -210,15 +223,15 @@ onUnmounted(() => {
   position: relative;
   min-height: 156px;
   text-align: center;
-  border: 1px solid #2a2f45;
+  border: 1px solid var(--theme-off-border);
 }
 
 .group-tile.is-on {
-  background: linear-gradient(180deg, #1d2238 0%, #151825 100%);
-  border-color: #4a6fa5;
+  background: linear-gradient(180deg, var(--theme-on-grad-from) 0%, var(--theme-on-grad-to) 100%);
+  border-color: var(--theme-on-border);
 }
 .group-tile.is-mixed {
-  border-color: rgba(168, 85, 247, 0.45);
+  border-color: var(--theme-mixed-ring);
 }
 
 .toggle-btn {
@@ -256,17 +269,19 @@ onUnmounted(() => {
 .bulb-stack .b-front { left: 11px; z-index: 1; transform: translateY(-1px); }
 
 .toggle-btn.on {
-  background: #4a6fa5;
-  border-color: #a0c4ff;
-  box-shadow: 0 0 14px rgba(160, 196, 255, 0.4);
+  background: var(--theme-on-bg);
+  border-color: var(--theme-on-border);
+  box-shadow: 0 0 14px var(--theme-on-glow);
 }
-.toggle-btn.on .bulb { filter: none; }
+.toggle-btn.on .bulb {
+  filter: drop-shadow(0 0 4px var(--theme-bulb-tint));
+}
 .toggle-btn.on .b-back,
 .toggle-btn.on .b-side { opacity: 0.85; }
 
 .toggle-btn.mixed {
-  border-color: rgba(168, 85, 247, 0.55);
-  box-shadow: 0 0 10px rgba(168, 85, 247, 0.3);
+  border-color: var(--theme-mixed-ring);
+  box-shadow: 0 0 10px var(--theme-mixed-ring);
 }
 
 .chip-text {
