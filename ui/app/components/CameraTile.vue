@@ -34,7 +34,7 @@ const confirmRemove = ref(false)
       <div class="text-sm font-medium text-white text-left truncate">{{ sensor.label ?? 'Camera' }}</div>
     </div>
     <!-- Play overlay on hover -->
-    <div class="absolute inset-0 flex items-center justify-center bg-black/40 backdrop-blur-sm opacity-0 transition-opacity group-hover/tile:opacity-100">
+    <div v-if="!editing" class="absolute inset-0 flex items-center justify-center bg-black/40 backdrop-blur-sm opacity-0 transition-opacity group-hover/tile:opacity-100">
       <span class="inline-flex items-center gap-1.5 rounded-full bg-white/15 backdrop-blur px-4 py-2 text-sm font-semibold text-white ring-1 ring-white/25">
         <PlayIcon class="size-4" /> Live
       </span>
@@ -44,11 +44,11 @@ const confirmRemove = ref(false)
       Motion
     </span>
 
-    <div v-if="editing" class="absolute top-2 right-2 flex gap-1">
-      <span class="inline-flex items-center justify-center size-7 rounded-md bg-black/50 backdrop-blur ring-1 ring-white/15 text-white hover:bg-black/70 transition-colors" title="Edit" @click.stop="emit('edit-sensor', sensor.id)">
+    <div v-if="editing" class="absolute top-2 right-2 flex items-center gap-0.5 rounded-xl bg-black/55 p-0.5 backdrop-blur-md transition-opacity pointer-fine:opacity-0 pointer-fine:group-hover/tile:opacity-100">
+      <span class="inline-flex items-center justify-center size-7 rounded-lg text-white transition-colors hover:bg-white/15" title="Edit" @click.stop="emit('edit-sensor', sensor.id)">
         <PencilSquareIcon class="size-3.5" />
       </span>
-      <span class="inline-flex items-center justify-center size-7 rounded-md bg-black/50 backdrop-blur ring-1 ring-white/15 text-white hover:bg-error/80 transition-colors" title="Remove" @click.stop="confirmRemove = true">
+      <span class="inline-flex items-center justify-center size-7 rounded-lg text-white transition-colors hover:bg-error/80" title="Remove" @click.stop="confirmRemove = true">
         <XMarkIcon class="size-3.5" />
       </span>
     </div>

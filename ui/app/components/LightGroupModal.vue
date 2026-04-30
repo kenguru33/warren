@@ -18,10 +18,13 @@ const emit = defineEmits<{
 
 const name = ref(props.group?.name ?? '')
 const themeKey = ref<LightThemeKey>(props.group?.theme ?? DEFAULT_LIGHT_THEME)
-const selectedIds = ref<Set<number>>(new Set(props.group?.memberSensorIds ?? []))
+// Native checkbox group via v-model on an array — Vue handles add/remove automatically
+// when checkboxes are toggled. Avoids the brittleness of :checked + @change with labels.
+const selectedIds = ref<number[]>([...(props.group?.memberSensorIds ?? [])])
 const error = ref<string | null>(null)
 const saving = ref(false)
 const confirmDelete = ref(false)
+const selectedIdsSet = computed(() => new Set(selectedIds.value))
 
 // Live preview: fire-and-forget paint with the new palette. Only meaningful for an
 // existing group with at least one light on. Save still persists the theme; this
@@ -46,25 +49,18 @@ const otherGroupBySensor = computed<Map<number, string>>(() => {
   return map
 })
 
-function toggleLight(id: number) {
-  if (otherGroupBySensor.value.has(id)) return
-  if (selectedIds.value.has(id)) selectedIds.value.delete(id)
-  else selectedIds.value.add(id)
-  selectedIds.value = new Set(selectedIds.value)
-}
-
 const trimmedName = computed(() => name.value.trim())
 const isEdit = computed(() => !!props.group)
-const willUngroup = computed(() => isEdit.value && selectedIds.value.size < 2)
+const willUngroup = computed(() => isEdit.value && selectedIds.value.length < 2)
 const canSave = computed(() => {
   if (trimmedName.value.length === 0) return false
   if (isEdit.value) return true
-  return selectedIds.value.size >= 2
+  return selectedIds.value.length >= 2
 })
 
 const validationMessage = computed(() => {
   if (trimmedName.value.length === 0) return 'Group needs a name'
-  if (!isEdit.value && selectedIds.value.size < 2) return 'Pick at least two lights'
+  if (!isEdit.value && selectedIds.value.length < 2) return 'Pick at least two lights'
   return null
 })
 
@@ -85,6 +81,13 @@ const hasMixedCapability = computed(() => {
   return hasBri && hasNoBri
 })
 
+function toggleLight(id: number) {
+  if (otherGroupBySensor.value.has(id)) return
+  const i = selectedIds.value.indexOf(id)
+  if (i >= 0) selectedIds.value.splice(i, 1)
+  else selectedIds.value.push(id)
+}
+
 async function save() {
   if (!canSave.value) return
   if (willUngroup.value) {
@@ -94,7 +97,7 @@ async function save() {
   saving.value = true
   error.value = null
   try {
-    const sensorIds = [...selectedIds.value]
+    const sensorIds = selectedIds.value.slice()
     if (props.group) {
       await $fetch(`/api/light-groups/${props.group.id}`, {
         method: 'PATCH',
@@ -171,27 +174,38 @@ async function ungroup() {
           This room has no lights to group.
         </div>
         <div v-else class="mt-1.5 max-h-56 overflow-y-auto pretty-scroll rounded-lg bg-input ring-1 ring-inset ring-default p-1.5 dark:ring-white/10">
-          <label
+          <button
             v-for="l in lights"
             :key="l.id"
+            type="button"
+            role="checkbox"
+            :aria-checked="selectedIdsSet.has(l.id)"
+            :disabled="otherGroupBySensor.has(l.id)"
             :class="[
-              'flex items-center gap-3 px-3 py-2 rounded-md cursor-pointer transition-colors',
-              otherGroupBySensor.has(l.id) && 'cursor-not-allowed opacity-55',
-              !otherGroupBySensor.has(l.id) && 'hover:bg-surface-2 dark:hover:bg-white/[0.04]',
-              selectedIds.has(l.id) && 'bg-accent/10',
+              'flex w-full items-center gap-3 px-3 py-2 rounded-md text-left transition-colors',
+              'focus:outline-none focus-visible:ring-2 focus-visible:ring-accent',
+              otherGroupBySensor.has(l.id)
+                ? 'cursor-not-allowed opacity-55'
+                : 'cursor-pointer hover:bg-surface-2 dark:hover:bg-white/[0.04]',
+              selectedIdsSet.has(l.id) && !otherGroupBySensor.has(l.id) && 'bg-accent/10',
             ]"
+            @click="toggleLight(l.id)"
           >
-            <input
-              type="checkbox"
-              class="size-4 rounded-md border-default text-accent focus:ring-accent focus:ring-offset-0"
-              :checked="selectedIds.has(l.id)"
-              :disabled="otherGroupBySensor.has(l.id)"
-              @change="toggleLight(l.id)"
-            />
+            <span
+              :class="[
+                'flex size-4 shrink-0 items-center justify-center rounded-md ring-1 transition-colors',
+                selectedIdsSet.has(l.id)
+                  ? 'bg-accent ring-accent text-white'
+                  : 'bg-surface ring-default dark:ring-white/15',
+              ]"
+              aria-hidden="true"
+            >
+              <svg v-if="selectedIdsSet.has(l.id)" class="size-3" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.704 5.29a1 1 0 0 1 .006 1.414l-7.5 7.6a1 1 0 0 1-1.42.006L3.29 9.79a1 1 0 1 1 1.42-1.41l3.79 3.79 6.79-6.88a1 1 0 0 1 1.414-.006Z" clip-rule="evenodd"/></svg>
+            </span>
             <span class="flex-1 text-sm text-text truncate">{{ l.label?.trim() || l.hueName?.trim() || `Light #${l.id}` }}</span>
             <span v-if="otherGroupBySensor.has(l.id)" class="badge badge-error">in {{ otherGroupBySensor.get(l.id) }}</span>
             <span v-else-if="!l.capabilities?.brightness" class="badge badge-neutral">on/off</span>
-          </label>
+          </button>
         </div>
       </div>
 
@@ -201,7 +215,7 @@ async function ungroup() {
       <div v-if="willUngroup" class="rounded-lg bg-warning/10 ring-1 ring-warning/20 px-3 py-2 text-xs text-warning">
         A group needs at least two lights — saving with fewer will ungroup them.
       </div>
-      <div v-if="validationMessage && (name || selectedIds.size > 0)" class="rounded-lg bg-error/10 ring-1 ring-error/30 px-3 py-2 text-xs text-error">
+      <div v-if="validationMessage && (name || selectedIds.length > 0)" class="rounded-lg bg-error/10 ring-1 ring-error/30 px-3 py-2 text-xs text-error">
         {{ validationMessage }}
       </div>
       <div v-if="error" class="rounded-lg bg-error/10 ring-1 ring-error/30 px-3 py-2 text-xs text-error">{{ error }}</div>

@@ -4,8 +4,17 @@ import type { SensorType, DiscoveredSensor } from '../../shared/types'
 
 defineProps<{ roomName: string }>()
 
+interface AddPayload {
+  type: SensorType
+  sensorId?: number
+  deviceId?: string
+  label: string
+  streamUrl: string
+  snapshotUrl: string
+}
+
 const emit = defineEmits<{
-  (e: 'add', payload: { type: SensorType; sensorId?: number; deviceId?: string; label: string; streamUrl: string; snapshotUrl: string }): void
+  (e: 'add', payloads: AddPayload[]): void
   (e: 'close'): void
 }>()
 
@@ -21,7 +30,8 @@ onMounted(async () => {
 })
 
 const manual = ref(false)
-const selected = ref<DiscoveredSensor | null>(null)
+// Multi-select: keys identify discovered devices uniquely.
+const selectedKeys = ref<Set<string>>(new Set())
 const manualType = ref<SensorType>('camera')
 const label = ref('')
 const streamUrl = ref('')
@@ -34,33 +44,44 @@ const manualTypes: { value: SensorType; icon: string; label: string }[] = [
   { value: 'motion', icon: '🏃', label: 'Motion' },
 ]
 
-function isSameDevice(a: DiscoveredSensor, b: DiscoveredSensor) {
-  if (a.sensorId && b.sensorId) return a.sensorId === b.sensorId
-  return a.deviceId === b.deviceId && a.sensorType === b.sensorType
+function keyOf(d: DiscoveredSensor): string {
+  return d.sensorId != null ? `sensor:${d.sensorId}` : `${d.deviceId}:${d.sensorType}`
 }
 
-function selectDevice(d: DiscoveredSensor) {
-  selected.value = selected.value && isSameDevice(selected.value, d) ? null : d
-  if (selected.value && !label.value) label.value = ''
+function toggleDevice(d: DiscoveredSensor) {
+  const k = keyOf(d)
+  const next = new Set(selectedKeys.value)
+  if (next.has(k)) next.delete(k)
+  else next.add(k)
+  selectedKeys.value = next
 }
+
+const selectedSensors = computed<DiscoveredSensor[]>(() =>
+  discovered.value.filter(d => selectedKeys.value.has(keyOf(d))),
+)
+const selectedCount = computed(() => selectedSensors.value.length)
 
 function submit() {
   if (manual.value) {
-    emit('add', {
+    emit('add', [{
       type: manualType.value,
       label: label.value.trim(),
       streamUrl: streamUrl.value.trim(),
       snapshotUrl: snapshotUrl.value.trim(),
-    })
-  } else if (selected.value) {
-    emit('add', {
-      type: selected.value.sensorType as SensorType,
-      sensorId: selected.value.sensorId,
-      deviceId: selected.value.deviceId ?? undefined,
-      label: label.value.trim(),
+    }])
+  } else if (selectedCount.value > 0) {
+    // Custom label only applies when exactly one device is selected — bulk-add uses
+    // each device's existing label/hueName.
+    const useCustomLabel = selectedCount.value === 1 && label.value.trim().length > 0
+    const payloads: AddPayload[] = selectedSensors.value.map(d => ({
+      type: d.sensorType as SensorType,
+      sensorId: d.sensorId,
+      deviceId: d.deviceId ?? undefined,
+      label: useCustomLabel ? label.value.trim() : '',
       streamUrl: '',
       snapshotUrl: '',
-    })
+    }))
+    emit('add', payloads)
   }
 }
 
@@ -95,7 +116,7 @@ function sensorMeta(d: DiscoveredSensor): string {
   return `${d.latestValue.toFixed(1)} · ${age}`
 }
 
-const canSubmit = computed(() => manual.value ? true : selected.value !== null)
+const canSubmit = computed(() => manual.value ? true : selectedCount.value > 0)
 
 interface Group { type: string; label: string; icon: string; items: DiscoveredSensor[] }
 
@@ -146,8 +167,10 @@ const totalCount = computed(() => filteredDiscovered.value.length)
 
 const submitLabel = computed(() => {
   if (manual.value) return `Add ${typeLabelText(manualType.value).toLowerCase()}`
-  if (selected.value) return `Add ${typeLabelText(selected.value.sensorType).toLowerCase()}`
-  return 'Add to room'
+  const n = selectedCount.value
+  if (n === 0) return 'Add to room'
+  if (n === 1) return `Add ${typeLabelText(selectedSensors.value[0].sensorType).toLowerCase()}`
+  return `Add ${n} devices`
 })
 </script>
 
@@ -180,7 +203,7 @@ const submitLabel = computed(() => {
             />
           </div>
 
-          <div v-if="!pending && groupedDiscovered.length > 1" class="flex gap-2 items-center px-6 pt-4 overflow-x-auto pretty-scroll">
+          <div v-if="!pending && groupedDiscovered.length > 1" class="flex flex-wrap gap-2 items-center px-6 pt-4">
             <button
               type="button"
               :class="[
@@ -220,15 +243,18 @@ const submitLabel = computed(() => {
                 <div class="flex flex-col gap-2">
                   <button
                     v-for="d in group.items"
-                    :key="d.sensorId ? `sensor:${d.sensorId}` : `${d.deviceId}:${d.sensorType}`"
+                    :key="keyOf(d)"
                     type="button"
+                    role="checkbox"
+                    :aria-checked="selectedKeys.has(keyOf(d))"
                     :class="[
                       'flex items-center gap-4 px-4 py-3 rounded-xl ring-1 cursor-pointer text-left transition',
-                      selected && isSameDevice(selected, d)
+                      'focus:outline-none focus-visible:ring-2 focus-visible:ring-accent',
+                      selectedKeys.has(keyOf(d))
                         ? 'bg-accent/10 ring-accent/40'
                         : 'bg-surface-2/60 ring-default/70 dark:ring-white/5 hover:bg-surface-2 hover:ring-default dark:hover:ring-white/10',
                     ]"
-                    @click="selectDevice(d)"
+                    @click="toggleDevice(d)"
                   >
                     <span class="flex size-10 shrink-0 items-center justify-center bg-accent/10 rounded-xl text-lg">{{ sensorIcon(d.sensorType) }}</span>
                     <span class="flex-1 min-w-0">
@@ -240,12 +266,12 @@ const submitLabel = computed(() => {
                     </span>
                     <span
                       :class="[
-                        'flex size-5 shrink-0 items-center justify-center rounded-full ring-1 ring-inset transition-colors',
-                        selected && isSameDevice(selected, d) ? 'bg-accent ring-accent text-white' : 'ring-default',
+                        'flex size-5 shrink-0 items-center justify-center rounded-md ring-1 ring-inset transition-colors',
+                        selectedKeys.has(keyOf(d)) ? 'bg-accent ring-accent text-white' : 'ring-default',
                       ]"
                       aria-hidden="true"
                     >
-                      <svg v-if="selected && isSameDevice(selected, d)" class="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                      <svg v-if="selectedKeys.has(keyOf(d))" class="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
                         <polyline points="20 6 9 17 4 12"/>
                       </svg>
                     </span>
@@ -264,9 +290,12 @@ const submitLabel = computed(() => {
             </div>
           </div>
 
-          <div v-if="selected" class="px-6 pt-3 pb-1">
+          <div v-if="selectedCount === 1" class="px-6 pt-3 pb-1">
             <label class="label">Custom label <span class="text-subtle font-normal">(optional)</span></label>
-            <input v-model="label" class="input mt-2" :placeholder="selected.label || selected.deviceId || 'Friendly name'" maxlength="60" />
+            <input v-model="label" class="input mt-2" :placeholder="selectedSensors[0].label || selectedSensors[0].deviceId || 'Friendly name'" maxlength="60" />
+          </div>
+          <div v-else-if="selectedCount > 1" class="px-6 pt-3 pb-1 text-xs text-subtle">
+            {{ selectedCount }} devices selected — they keep their existing labels (you can rename them later).
           </div>
         </template>
 
@@ -312,7 +341,7 @@ const submitLabel = computed(() => {
         </template>
 
         <footer class="flex items-center justify-between gap-4 px-6 py-4 mt-5 border-t border-default bg-surface-2/50">
-          <button type="button" class="text-sm/6 font-medium text-accent-strong hover:underline" @click="manual = !manual; selected = null">
+          <button type="button" class="text-sm/6 font-medium text-accent-strong hover:underline" @click="manual = !manual; selectedKeys = new Set()">
             {{ manual ? '← Back to discovered devices' : 'Add a camera or motion sensor manually' }}
           </button>
           <div class="flex gap-2">

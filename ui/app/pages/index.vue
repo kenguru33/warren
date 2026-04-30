@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { SensorType, SensorView, LightGroupView, MasterState } from '../../shared/types'
+import type { SensorType, SensorView, SensorCapabilities, LightGroupView, MasterState } from '../../shared/types'
 
 const {
   rooms,
@@ -20,21 +20,38 @@ const addSensorForRoom = ref<{ id: number; name: string } | null>(null)
 const historyTarget = ref<{ sensor: SensorView; roomName: string } | null>(null)
 
 const typeIcon: Record<string, string> = {
-  temperature: '🌡️', humidity: '💧', camera: '📷', motion: '🏃',
+  temperature: '🌡️', humidity: '💧', camera: '📷', motion: '🏃', light: '💡', lightlevel: '☀️',
 }
 const typeLabel: Record<string, string> = {
-  temperature: 'Temperature', humidity: 'Humidity', camera: 'Camera', motion: 'Motion',
+  temperature: 'Temperature', humidity: 'Humidity', camera: 'Camera', motion: 'Motion', light: 'Light', lightlevel: 'Light level',
 }
 
-const editingSensor = ref<{ id: number; type: string; label: string | null } | null>(null)
+interface EditingSensor {
+  id: number
+  type: string
+  label: string | null
+  deviceId: string | null
+  capabilities?: SensorCapabilities
+}
+const editingSensor = ref<EditingSensor | null>(null)
 const editingLabel = ref('')
+const editingColor = ref<string | null>(null)
+const colorError = ref<string | null>(null)
 
 function openEditSensor(sensorId: number) {
   for (const room of rooms.value) {
     const sensor = room.sensors.find(s => s.id === sensorId)
     if (sensor) {
-      editingSensor.value = { id: sensor.id, type: sensor.type, label: sensor.label }
+      editingSensor.value = {
+        id: sensor.id,
+        type: sensor.type,
+        label: sensor.label,
+        deviceId: sensor.deviceId,
+        capabilities: sensor.capabilities,
+      }
       editingLabel.value = sensor.label ?? ''
+      editingColor.value = null
+      colorError.value = null
       return
     }
   }
@@ -48,29 +65,48 @@ async function saveSensorLabel() {
   await refresh()
 }
 
+async function applyLightColor(hex: string) {
+  editingColor.value = hex
+  colorError.value = null
+  const sensor = editingSensor.value
+  if (!sensor?.deviceId) return
+  try {
+    await $fetch(`/api/integrations/hue/lights/${encodeURIComponent(sensor.deviceId)}/state`, {
+      method: 'POST',
+      body: { on: true, color: hex },
+    })
+  } catch (err: unknown) {
+    const e = err as { data?: { error?: string }; message?: string }
+    colorError.value = e.data?.error === 'bridge_unreachable' ? 'Bridge unreachable' : (e.message ?? 'Failed to set color')
+  }
+}
+
 async function onAddRoom(name: string) {
   await addRoom(name)
   showAddRoom.value = false
 }
 
-async function onAddSensor(payload: {
+async function onAddSensor(payloads: {
   type: SensorType
   sensorId?: number
   deviceId?: string
   label: string
   streamUrl: string
   snapshotUrl: string
-}) {
+}[]) {
   if (!addSensorForRoom.value) return
-  await addSensor({
-    roomId: addSensorForRoom.value.id,
-    type: payload.type,
-    sensorId: payload.sensorId,
-    deviceId: payload.deviceId,
-    label: payload.label || undefined,
-    streamUrl: payload.streamUrl || undefined,
-    snapshotUrl: payload.snapshotUrl || undefined,
-  })
+  const roomId = addSensorForRoom.value.id
+  for (const payload of payloads) {
+    await addSensor({
+      roomId,
+      type: payload.type,
+      sensorId: payload.sensorId,
+      deviceId: payload.deviceId,
+      label: payload.label || undefined,
+      streamUrl: payload.streamUrl || undefined,
+      snapshotUrl: payload.snapshotUrl || undefined,
+    })
+  }
   addSensorForRoom.value = null
 }
 
@@ -269,6 +305,13 @@ async function onRoomMasterToggled() {
           @keydown.enter="saveSensorLabel"
           @keydown.escape="editingSensor = null"
         />
+      </div>
+      <div v-if="editingSensor.type === 'light' && editingSensor.capabilities?.color">
+        <label class="label">Color</label>
+        <div class="mt-2">
+          <LightColorPicker :model-value="editingColor" @update:model-value="applyLightColor" />
+        </div>
+        <p v-if="colorError" class="mt-2 rounded-lg bg-error/10 ring-1 ring-error/30 px-3 py-2 text-xs text-error">{{ colorError }}</p>
       </div>
       <div class="flex justify-end gap-2 pt-2">
         <button class="btn-secondary" @click="editingSensor = null">Cancel</button>

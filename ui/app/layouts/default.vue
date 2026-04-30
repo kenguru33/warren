@@ -69,15 +69,13 @@ const initial = computed(() => (user.value?.name ?? '?').slice(0, 1).toUpperCase
         <!-- Brand header -->
         <div class="flex flex-col border-b border-default p-4">
           <NuxtLink to="/" class="flex items-center gap-3 rounded-lg p-1.5 hover:bg-default">
-            <span class="inline-flex size-8 items-center justify-center rounded-lg bg-stone-900 text-white dark:bg-white dark:text-stone-950">
-              <svg class="size-5" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <ellipse cx="8.5" cy="6" rx="2.5" ry="5" fill="currentColor" />
-                <ellipse cx="15.5" cy="6" rx="2.5" ry="5" fill="currentColor" />
-                <circle cx="12" cy="17" r="6" fill="currentColor" />
-                <circle cx="10" cy="16" r="0.9" class="fill-stone-900 dark:fill-white" />
-                <circle cx="14" cy="16" r="0.9" class="fill-stone-900 dark:fill-white" />
-              </svg>
-            </span>
+            <svg class="size-8 shrink-0 text-text" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+              <ellipse cx="8.5" cy="6" rx="2.5" ry="5" fill="currentColor" />
+              <ellipse cx="15.5" cy="6" rx="2.5" ry="5" fill="currentColor" />
+              <circle cx="12" cy="17" r="6" fill="currentColor" />
+              <circle cx="10" cy="16" r="0.9" class="fill-surface" />
+              <circle cx="14" cy="16" r="0.9" class="fill-surface" />
+            </svg>
             <div class="flex flex-col">
               <span class="text-sm/5 font-semibold text-text">Warren</span>
               <span class="text-xs/4 text-subtle">Home dashboard</span>
@@ -181,13 +179,11 @@ const initial = computed(() => (user.value?.name ?? '?').slice(0, 1).toUpperCase
         </button>
       </div>
       <NuxtLink to="/" class="min-w-0 flex-1 ml-2 flex items-center gap-2">
-        <span class="inline-flex size-7 items-center justify-center rounded-lg bg-stone-900 text-white dark:bg-white dark:text-stone-950">
-          <svg class="size-4" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <ellipse cx="8.5" cy="6" rx="2.5" ry="5" fill="currentColor" />
-            <ellipse cx="15.5" cy="6" rx="2.5" ry="5" fill="currentColor" />
-            <circle cx="12" cy="17" r="6" fill="currentColor" />
-          </svg>
-        </span>
+        <svg class="size-7 shrink-0 text-text" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <ellipse cx="8.5" cy="6" rx="2.5" ry="5" fill="currentColor" />
+          <ellipse cx="15.5" cy="6" rx="2.5" ry="5" fill="currentColor" />
+          <circle cx="12" cy="17" r="6" fill="currentColor" />
+        </svg>
         <span class="text-sm/5 font-semibold tracking-tight text-text">Warren</span>
       </NuxtLink>
 
@@ -312,9 +308,7 @@ const initial = computed(() => (user.value?.name ?? '?').slice(0, 1).toUpperCase
     <!-- ─── Main content panel ────────────────────────────────────── -->
     <main class="flex flex-1 flex-col pb-2 lg:min-w-0 lg:pl-64 lg:pr-2 lg:pt-2">
       <div class="grow p-6 lg:rounded-lg lg:bg-surface lg:p-10 lg:shadow-sm lg:ring-1 lg:ring-default dark:lg:ring-white/10">
-        <div class="mx-auto max-w-6xl">
-          <slot />
-        </div>
+        <slot />
       </div>
     </main>
 

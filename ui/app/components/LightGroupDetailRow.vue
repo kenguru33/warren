@@ -1,10 +1,12 @@
 <script setup lang="ts">
+import { PencilSquareIcon } from '@heroicons/vue/20/solid'
 import type { SensorView } from '../../shared/types'
 
 const props = defineProps<{ sensor: SensorView }>()
 
 const emit = defineEmits<{
   (e: 'toggled'): void
+  (e: 'edit-sensor', sensorId: number): void
 }>()
 
 const localOn = ref<boolean | null>(props.sensor.lightOn ?? false)
@@ -101,7 +103,7 @@ const displayName = computed(() => props.sensor.label?.trim() || props.sensor.hu
 <template>
   <div
     :class="[
-      'grid grid-cols-[40px_minmax(0,1fr)_minmax(120px,220px)] items-center gap-4 px-3 py-2.5 rounded-xl ring-1 transition-colors',
+      'grid grid-cols-[40px_minmax(0,1fr)_minmax(120px,220px)_auto] items-center gap-4 px-3 py-2.5 rounded-xl ring-1 transition-colors',
       !reachable
         ? 'bg-error/5 ring-error/25'
         : localOn
@@ -157,5 +159,13 @@ const displayName = computed(() => props.sensor.label?.trim() || props.sensor.hu
       />
       <span v-else class="w-full text-right text-xs italic text-subtle">on/off only</span>
     </div>
+
+    <button
+      class="btn-icon size-8 shrink-0"
+      title="Edit light"
+      @click.stop="emit('edit-sensor', sensor.id)"
+    >
+      <PencilSquareIcon class="size-4" />
+    </button>
   </div>
 </template>

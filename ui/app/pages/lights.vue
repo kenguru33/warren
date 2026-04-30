@@ -253,7 +253,7 @@ async function restoreBlocked(b: { deviceId: string; type: string }) {
         </div>
 
         <!-- Trailing actions — fixed width reservation so toggles stay aligned across rows. -->
-        <div class="flex w-[72px] shrink-0 items-center justify-end gap-0.5 opacity-0 transition-opacity group-hover/row:opacity-100 group-focus-within/row:opacity-100">
+        <div class="flex w-[72px] shrink-0 items-center justify-end gap-0.5 transition-opacity pointer-fine:opacity-0 pointer-fine:group-hover/row:opacity-100 pointer-fine:group-focus-within/row:opacity-100">
           <button v-if="row.id !== null" class="btn-icon !size-8" title="Edit" @click="openEdit(row)">
             <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>
           </button>

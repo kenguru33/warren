@@ -83,7 +83,7 @@ const deviationDirection = computed(() => {
       </span>
     </div>
 
-    <div v-if="editing" class="absolute top-1.5 right-1.5 flex gap-1 opacity-0 transition-opacity group-hover/tile:opacity-100">
+    <div v-if="editing" class="absolute top-1.5 right-1.5 flex items-center gap-0.5 rounded-xl bg-surface/75 p-0.5 backdrop-blur-md transition-opacity pointer-fine:opacity-0 pointer-fine:group-hover/tile:opacity-100 dark:bg-surface/65">
       <span class="btn-icon size-7" title="Edit" @click.stop="emit('edit-sensor', sensor.id)">
         <PencilSquareIcon class="size-3.5" />
       </span>

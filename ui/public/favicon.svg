@@ -1,0 +1,15 @@
+<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+  <style>
+    .body { fill: #18181b; }
+    .eye  { fill: #fafafa; }
+    @media (prefers-color-scheme: dark) {
+      .body { fill: #fafafa; }
+      .eye  { fill: #18181b; }
+    }
+  </style>
+  <ellipse class="body" cx="8.5" cy="6" rx="2.5" ry="5"/>
+  <ellipse class="body" cx="15.5" cy="6" rx="2.5" ry="5"/>
+  <circle  class="body" cx="12" cy="17" r="6"/>
+  <circle  class="eye"  cx="10" cy="16" r="0.9"/>
+  <circle  class="eye"  cx="14" cy="16" r="0.9"/>
+</svg>

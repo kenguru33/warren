@@ -11,6 +11,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'close'): void
   (e: 'toggled'): void
+  (e: 'edit-sensor', sensorId: number): void
 }>()
 
 const sortedMembers = computed(() =>
@@ -90,7 +91,11 @@ async function onThemeChange(key: LightThemeKey) {
       </p>
       <ul v-else role="list" class="flex flex-col gap-2">
         <li v-for="m in sortedMembers" :key="m.id">
-          <LightGroupDetailRow :sensor="m" @toggled="emit('toggled')" />
+          <LightGroupDetailRow
+            :sensor="m"
+            @toggled="emit('toggled')"
+            @edit-sensor="(id) => emit('edit-sensor', id)"
+          />
         </li>
       </ul>
     </div>

@@ -31,15 +31,13 @@ async function submit() {
     <div class="w-full max-w-sm">
       <!-- Brand mark -->
       <div class="flex flex-col items-center gap-3">
-        <span class="inline-flex size-12 items-center justify-center rounded-xl bg-stone-900 text-white shadow-sm dark:bg-white dark:text-stone-950">
-          <svg class="size-7" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <ellipse cx="8.5" cy="6" rx="2.5" ry="5" fill="currentColor" />
-            <ellipse cx="15.5" cy="6" rx="2.5" ry="5" fill="currentColor" />
-            <circle cx="12" cy="17" r="6" fill="currentColor" />
-            <circle cx="10" cy="16" r="0.9" class="fill-stone-900 dark:fill-white" />
-            <circle cx="14" cy="16" r="0.9" class="fill-stone-900 dark:fill-white" />
-          </svg>
-        </span>
+        <svg class="size-12 text-text" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <ellipse cx="8.5" cy="6" rx="2.5" ry="5" fill="currentColor" />
+          <ellipse cx="15.5" cy="6" rx="2.5" ry="5" fill="currentColor" />
+          <circle cx="12" cy="17" r="6" fill="currentColor" />
+          <circle cx="10" cy="16" r="0.9" class="fill-surface-2" />
+          <circle cx="14" cy="16" r="0.9" class="fill-surface-2" />
+        </svg>
         <h1 class="text-xl/7 font-semibold tracking-tight text-text">
           Sign in to Warren
         </h1>

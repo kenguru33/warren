@@ -165,7 +165,7 @@ function isOffline(ms: number | null) {
           :partial="masterPartial"
           @toggle="toggleRoomMaster"
         />
-        <div :class="['flex items-center gap-0.5 transition-opacity', editing ? 'opacity-100' : 'opacity-0 group-hover/room:opacity-100 group-focus-within/room:opacity-100']">
+        <div :class="['flex items-center gap-0.5 transition-opacity', editing ? 'opacity-100' : 'pointer-fine:opacity-0 pointer-fine:group-hover/room:opacity-100 pointer-fine:group-focus-within/room:opacity-100']">
           <button class="btn-icon !size-8" title="Add sensor" @click="emit('add-sensor', room.id)">
             <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
           </button>
@@ -325,6 +325,7 @@ function isOffline(ms: number | null) {
     :members="detailGroupMembers"
     @close="detailGroupId = null"
     @toggled="emit('master-toggled')"
+    @edit-sensor="(id) => emit('edit-sensor', id)"
   />
 </template>
 
