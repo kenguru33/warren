@@ -32,20 +32,32 @@ export type LightThemeKey =
   | 'nord'
   | 'gruvbox'
 
-export interface LightTheme {
-  key: LightThemeKey
-  label: string
-  swatch: string
+// Surface-dependent fields that need to flip between light and dark UI modes.
+// `bulbTint` and `toggleOnBg` are intentionally not included — they sit on
+// always-saturated chrome that reads well on either surface.
+export interface LightThemeSurfaceVariant {
   offBorder: string
   onBorder: string
   onGlow: string
   onGradientFrom: string
   onGradientTo: string
+  mixedRingOverride?: string
+}
+
+export interface LightTheme extends LightThemeSurfaceVariant {
+  key: LightThemeKey
+  label: string
+  swatch: string
   bulbTint: string
   toggleOnBg: string
-  mixedRingOverride?: string
   bulbPalette: string[]
+  // Light-mode counterparts. When absent, the dark values are used in both modes
+  // (server callers and any consumer that doesn't pass a mode get the dark values
+  // — same behavior as before this field was added).
+  light?: LightThemeSurfaceVariant
 }
+
+export type ThemeMode = 'light' | 'dark'
 
 const MIXED_DEFAULT = 'rgba(168, 85, 247, 0.45)'
 const MIXED_AMBER_OVERRIDE = 'rgba(251, 191, 36, 0.55)'
@@ -65,6 +77,13 @@ export const LIGHT_THEMES: Record<LightThemeKey, LightTheme> = {
     bulbTint: 'rgba(160, 196, 255, 0.45)',
     toggleOnBg: '#4a6fa5',
     bulbPalette: ['#a0c4ff', '#6b8cc7', '#cbd5e1', '#4a6fa5'],
+    light: {
+      offBorder: '#cbd5e1',
+      onBorder: '#3b6db5',
+      onGlow: 'rgba(74, 111, 165, 0.25)',
+      onGradientFrom: '#eef2f7',
+      onGradientTo: '#ffffff',
+    },
   },
   // Popular palette themes — each picks colors directly from the upstream scheme.
   catppuccin: {
@@ -81,6 +100,14 @@ export const LIGHT_THEMES: Record<LightThemeKey, LightTheme> = {
     mixedRingOverride: MIXED_AMBER_OVERRIDE,
     // Mocha accents: pink, mauve, teal, yellow, green
     bulbPalette: ['#f5c2e7', '#cba6f7', '#94e2d5', '#f9e2af', '#a6e3a1'],
+    light: {
+      offBorder: '#e9d8fd',
+      onBorder: '#9d6df1',
+      onGlow: 'rgba(157, 109, 241, 0.25)',
+      onGradientFrom: '#f4eafd',
+      onGradientTo: '#ffffff',
+      mixedRingOverride: MIXED_AMBER_OVERRIDE,
+    },
   },
   tokyoNight: {
     key: 'tokyoNight',
@@ -94,6 +121,13 @@ export const LIGHT_THEMES: Record<LightThemeKey, LightTheme> = {
     bulbTint: 'rgba(122, 162, 247, 0.45)',
     toggleOnBg: '#1e3a8a',
     bulbPalette: ['#7aa2f7', '#bb9af7', '#7dcfff', '#9ece6a', '#f7768e'],
+    light: {
+      offBorder: '#cbd5e1',
+      onBorder: '#4f7fd6',
+      onGlow: 'rgba(122, 162, 247, 0.25)',
+      onGradientFrom: '#e8eef7',
+      onGradientTo: '#ffffff',
+    },
   },
   dracula: {
     key: 'dracula',
@@ -108,6 +142,14 @@ export const LIGHT_THEMES: Record<LightThemeKey, LightTheme> = {
     toggleOnBg: '#6d28d9',
     mixedRingOverride: MIXED_AMBER_OVERRIDE,
     bulbPalette: ['#bd93f9', '#ff79c6', '#8be9fd', '#50fa7b', '#ffb86c'],
+    light: {
+      offBorder: '#e9d8fd',
+      onBorder: '#7c3aed',
+      onGlow: 'rgba(124, 58, 237, 0.25)',
+      onGradientFrom: '#f1eafd',
+      onGradientTo: '#ffffff',
+      mixedRingOverride: MIXED_AMBER_OVERRIDE,
+    },
   },
   nord: {
     key: 'nord',
@@ -121,6 +163,13 @@ export const LIGHT_THEMES: Record<LightThemeKey, LightTheme> = {
     bulbTint: 'rgba(136, 192, 208, 0.45)',
     toggleOnBg: '#5e81ac',
     bulbPalette: ['#8fbcbb', '#88c0d0', '#81a1c1', '#5e81ac', '#b48ead'],
+    light: {
+      offBorder: '#bae6fd',
+      onBorder: '#5e81ac',
+      onGlow: 'rgba(94, 129, 172, 0.25)',
+      onGradientFrom: '#eaf3f8',
+      onGradientTo: '#ffffff',
+    },
   },
   gruvbox: {
     key: 'gruvbox',
@@ -134,6 +183,13 @@ export const LIGHT_THEMES: Record<LightThemeKey, LightTheme> = {
     bulbTint: 'rgba(250, 189, 47, 0.45)',
     toggleOnBg: '#d65d0e',
     bulbPalette: ['#fb4934', '#fabd2f', '#b8bb26', '#83a598', '#d3869b'],
+    light: {
+      offBorder: '#fde68a',
+      onBorder: '#d97706',
+      onGlow: 'rgba(217, 119, 6, 0.3)',
+      onGradientFrom: '#fef3c7',
+      onGradientTo: '#ffffff',
+    },
   },
   // Solid single-hue themes — picker colors plus a tonal palette per theme.
   amber: {
@@ -148,6 +204,13 @@ export const LIGHT_THEMES: Record<LightThemeKey, LightTheme> = {
     bulbTint: 'rgba(251, 191, 36, 0.5)',
     toggleOnBg: '#b45309',
     bulbPalette: ['#fde68a', '#fcd34d', '#fbbf24', '#f59e0b'],
+    light: {
+      offBorder: '#fde68a',
+      onBorder: '#b45309',
+      onGlow: 'rgba(180, 83, 9, 0.3)',
+      onGradientFrom: '#fef3c7',
+      onGradientTo: '#ffffff',
+    },
   },
   emerald: {
     key: 'emerald',
@@ -161,6 +224,13 @@ export const LIGHT_THEMES: Record<LightThemeKey, LightTheme> = {
     bulbTint: 'rgba(52, 211, 153, 0.45)',
     toggleOnBg: '#047857',
     bulbPalette: ['#a7f3d0', '#6ee7b7', '#34d399', '#10b981'],
+    light: {
+      offBorder: '#a7f3d0',
+      onBorder: '#047857',
+      onGlow: 'rgba(4, 120, 87, 0.25)',
+      onGradientFrom: '#d1fae5',
+      onGradientTo: '#ffffff',
+    },
   },
   rose: {
     key: 'rose',
@@ -174,6 +244,13 @@ export const LIGHT_THEMES: Record<LightThemeKey, LightTheme> = {
     bulbTint: 'rgba(244, 114, 182, 0.45)',
     toggleOnBg: '#be185d',
     bulbPalette: ['#fbcfe8', '#fda4af', '#f472b6', '#ec4899'],
+    light: {
+      offBorder: '#fbcfe8',
+      onBorder: '#be185d',
+      onGlow: 'rgba(190, 24, 93, 0.25)',
+      onGradientFrom: '#fce7f3',
+      onGradientTo: '#ffffff',
+    },
   },
   indigo: {
     key: 'indigo',
@@ -188,6 +265,14 @@ export const LIGHT_THEMES: Record<LightThemeKey, LightTheme> = {
     toggleOnBg: '#4338ca',
     mixedRingOverride: MIXED_AMBER_OVERRIDE,
     bulbPalette: ['#a5b4fc', '#818cf8', '#6366f1', '#4338ca'],
+    light: {
+      offBorder: '#c7d2fe',
+      onBorder: '#4338ca',
+      onGlow: 'rgba(67, 56, 202, 0.25)',
+      onGradientFrom: '#e0e7ff',
+      onGradientTo: '#ffffff',
+      mixedRingOverride: MIXED_AMBER_OVERRIDE,
+    },
   },
   teal: {
     key: 'teal',
@@ -201,6 +286,13 @@ export const LIGHT_THEMES: Record<LightThemeKey, LightTheme> = {
     bulbTint: 'rgba(45, 212, 191, 0.45)',
     toggleOnBg: '#0f766e',
     bulbPalette: ['#5eead4', '#2dd4bf', '#14b8a6', '#0f766e'],
+    light: {
+      offBorder: '#99f6e4',
+      onBorder: '#0f766e',
+      onGlow: 'rgba(15, 118, 110, 0.25)',
+      onGradientFrom: '#ccfbf1',
+      onGradientTo: '#ffffff',
+    },
   },
   plum: {
     key: 'plum',
@@ -215,6 +307,14 @@ export const LIGHT_THEMES: Record<LightThemeKey, LightTheme> = {
     toggleOnBg: '#7e22ce',
     mixedRingOverride: MIXED_AMBER_OVERRIDE,
     bulbPalette: ['#d8b4fe', '#c084fc', '#a855f7', '#7e22ce'],
+    light: {
+      offBorder: '#e9d5ff',
+      onBorder: '#7e22ce',
+      onGlow: 'rgba(126, 34, 206, 0.25)',
+      onGradientFrom: '#f3e8ff',
+      onGradientTo: '#ffffff',
+      mixedRingOverride: MIXED_AMBER_OVERRIDE,
+    },
   },
   terracotta: {
     key: 'terracotta',
@@ -228,6 +328,13 @@ export const LIGHT_THEMES: Record<LightThemeKey, LightTheme> = {
     bulbTint: 'rgba(251, 146, 60, 0.45)',
     toggleOnBg: '#9a3412',
     bulbPalette: ['#fdba74', '#fb923c', '#ea580c', '#9a3412'],
+    light: {
+      offBorder: '#fed7aa',
+      onBorder: '#9a3412',
+      onGlow: 'rgba(154, 52, 18, 0.3)',
+      onGradientFrom: '#fff7ed',
+      onGradientTo: '#ffffff',
+    },
   },
 }
 
@@ -235,9 +342,15 @@ export const DEFAULT_LIGHT_THEME: LightThemeKey = 'slate'
 
 export const MIXED_RING_DEFAULT = MIXED_DEFAULT
 
-export function resolveLightTheme(key: string | null | undefined): LightTheme {
-  if (key && key in LIGHT_THEMES) return LIGHT_THEMES[key as LightThemeKey]
-  return LIGHT_THEMES[DEFAULT_LIGHT_THEME]
+export function resolveLightTheme(
+  key: string | null | undefined,
+  mode: ThemeMode = 'dark',
+): LightTheme {
+  const base = (key && key in LIGHT_THEMES)
+    ? LIGHT_THEMES[key as LightThemeKey]
+    : LIGHT_THEMES[DEFAULT_LIGHT_THEME]
+  if (mode !== 'light' || !base.light) return base
+  return { ...base, ...base.light }
 }
 
 export function isValidLightThemeKey(key: unknown): key is LightThemeKey {

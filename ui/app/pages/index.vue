@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { SensorType, SensorView, LightGroupView, MasterState } from '../../shared/types'
+import type { SensorType, SensorView, SensorCapabilities, LightGroupView, MasterState } from '../../shared/types'
 
 const {
   rooms,
@@ -20,21 +20,38 @@ const addSensorForRoom = ref<{ id: number; name: string } | null>(null)
 const historyTarget = ref<{ sensor: SensorView; roomName: string } | null>(null)
 
 const typeIcon: Record<string, string> = {
-  temperature: '🌡️', humidity: '💧', camera: '📷', motion: '🏃',
+  temperature: '🌡️', humidity: '💧', camera: '📷', motion: '🏃', light: '💡', lightlevel: '☀️',
 }
 const typeLabel: Record<string, string> = {
-  temperature: 'Temperature', humidity: 'Humidity', camera: 'Camera', motion: 'Motion',
+  temperature: 'Temperature', humidity: 'Humidity', camera: 'Camera', motion: 'Motion', light: 'Light', lightlevel: 'Light level',
 }
 
-const editingSensor = ref<{ id: number; type: string; label: string | null } | null>(null)
+interface EditingSensor {
+  id: number
+  type: string
+  label: string | null
+  deviceId: string | null
+  capabilities?: SensorCapabilities
+}
+const editingSensor = ref<EditingSensor | null>(null)
 const editingLabel = ref('')
+const editingColor = ref<string | null>(null)
+const colorError = ref<string | null>(null)
 
 function openEditSensor(sensorId: number) {
   for (const room of rooms.value) {
     const sensor = room.sensors.find(s => s.id === sensorId)
     if (sensor) {
-      editingSensor.value = { id: sensor.id, type: sensor.type, label: sensor.label }
+      editingSensor.value = {
+        id: sensor.id,
+        type: sensor.type,
+        label: sensor.label,
+        deviceId: sensor.deviceId,
+        capabilities: sensor.capabilities,
+      }
       editingLabel.value = sensor.label ?? ''
+      editingColor.value = null
+      colorError.value = null
       return
     }
   }
@@ -48,29 +65,48 @@ async function saveSensorLabel() {
   await refresh()
 }
 
+async function applyLightColor(hex: string) {
+  editingColor.value = hex
+  colorError.value = null
+  const sensor = editingSensor.value
+  if (!sensor?.deviceId) return
+  try {
+    await $fetch(`/api/integrations/hue/lights/${encodeURIComponent(sensor.deviceId)}/state`, {
+      method: 'POST',
+      body: { on: true, color: hex },
+    })
+  } catch (err: unknown) {
+    const e = err as { data?: { error?: string }; message?: string }
+    colorError.value = e.data?.error === 'bridge_unreachable' ? 'Bridge unreachable' : (e.message ?? 'Failed to set color')
+  }
+}
+
 async function onAddRoom(name: string) {
   await addRoom(name)
   showAddRoom.value = false
 }
 
-async function onAddSensor(payload: {
+async function onAddSensor(payloads: {
   type: SensorType
   sensorId?: number
   deviceId?: string
   label: string
   streamUrl: string
   snapshotUrl: string
-}) {
+}[]) {
   if (!addSensorForRoom.value) return
-  await addSensor({
-    roomId: addSensorForRoom.value.id,
-    type: payload.type,
-    sensorId: payload.sensorId,
-    deviceId: payload.deviceId,
-    label: payload.label || undefined,
-    streamUrl: payload.streamUrl || undefined,
-    snapshotUrl: payload.snapshotUrl || undefined,
-  })
+  const roomId = addSensorForRoom.value.id
+  for (const payload of payloads) {
+    await addSensor({
+      roomId,
+      type: payload.type,
+      sensorId: payload.sensorId,
+      deviceId: payload.deviceId,
+      label: payload.label || undefined,
+      streamUrl: payload.streamUrl || undefined,
+      snapshotUrl: payload.snapshotUrl || undefined,
+    })
+  }
   addSensorForRoom.value = null
 }
 
@@ -151,30 +187,48 @@ async function onRoomMasterToggled() {
 </script>
 
 <template>
-  <div class="dashboard">
-    <div class="toolbar">
-      <MasterLightToggle
-        v-if="globalMaster"
-        class="global-master"
-        :master="globalMaster"
-        :pending="globalMasterPending"
-        :error="globalMasterError"
-        :partial="globalMasterPartial"
-        label="All lights"
-        @toggle="toggleGlobalMaster"
-      />
-      <span class="last-updated">Updated {{ lastUpdated }}</span>
-      <button class="btn-add-room" @click="showAddRoom = true">+ Add room</button>
+  <div class="space-y-8">
+    <!-- Page header — Catalyst Heading pattern -->
+    <div class="flex flex-wrap items-end justify-between gap-4 border-b border-strong pb-5">
+      <div class="max-sm:w-full sm:flex-1">
+        <h1 class="text-2xl/8 font-semibold tracking-tight text-text sm:text-xl/8">
+          Dashboard
+        </h1>
+        <p class="mt-1 text-sm/6 text-subtle">Updated {{ lastUpdated }}</p>
+      </div>
+      <div class="flex items-center gap-3">
+        <MasterLightToggle
+          v-if="globalMaster"
+          :master="globalMaster"
+          :pending="globalMasterPending"
+          :error="globalMasterError"
+          :partial="globalMasterPartial"
+          label="All lights"
+          @toggle="toggleGlobalMaster"
+        />
+        <button class="btn-primary" @click="showAddRoom = true">
+          <svg class="size-4 -ml-0.5" viewBox="0 0 20 20" fill="currentColor"><path d="M10.75 4.75a.75.75 0 0 0-1.5 0v4.5h-4.5a.75.75 0 0 0 0 1.5h4.5v4.5a.75.75 0 0 0 1.5 0v-4.5h4.5a.75.75 0 0 0 0-1.5h-4.5z" /></svg>
+          Add room
+        </button>
+      </div>
     </div>
 
     <!-- Empty state -->
-    <div v-if="rooms.length === 0" class="empty">
-      <p>No rooms yet.</p>
-      <button class="btn-add-room" @click="showAddRoom = true">Add your first room</button>
+    <div v-if="rooms.length === 0" class="rounded-xl bg-surface p-12 text-center ring-1 ring-default dark:ring-white/10">
+      <div class="mx-auto flex size-12 items-center justify-center rounded-xl bg-surface-2 dark:bg-white/5">
+        <svg class="size-6 text-subtle" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+          <path stroke-linecap="round" stroke-linejoin="round" d="m2.25 12 8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25" />
+        </svg>
+      </div>
+      <h3 class="mt-4 text-base/6 font-semibold text-text">No rooms yet</h3>
+      <p class="mt-1 text-sm/6 text-subtle">Get started by creating your first room.</p>
+      <div class="mt-6">
+        <button class="btn-primary" @click="showAddRoom = true">Add your first room</button>
+      </div>
     </div>
 
     <!-- Room grid -->
-    <div v-else class="grid">
+    <div v-else class="grid grid-cols-[repeat(auto-fill,minmax(380px,1fr))] gap-6">
       <RoomCard
         v-for="room in rooms"
         :key="room.id"
@@ -194,7 +248,6 @@ async function onRoomMasterToggled() {
       />
     </div>
 
-    <!-- Modals -->
     <AddRoomModal
       v-if="showAddRoom"
       @add="onAddRoom"
@@ -235,185 +288,35 @@ async function onRoomMasterToggled() {
     />
   </div>
 
-  <Teleport to="body">
-    <div v-if="editingSensor" class="modal-overlay" @click.self="editingSensor = null">
-      <div class="modal-card">
-        <div class="modal-header">
-          <span class="modal-icon">{{ typeIcon[editingSensor.type] ?? '?' }}</span>
-          <div class="modal-title">{{ typeLabel[editingSensor.type] || editingSensor.type }}</div>
+  <AppDialog v-if="editingSensor" :open="true" max-width-class="max-w-md" @close="editingSensor = null">
+    <div class="p-6 space-y-4">
+      <div class="flex items-center gap-3">
+        <span class="text-2xl">{{ typeIcon[editingSensor.type] ?? '?' }}</span>
+        <h3 class="text-base font-semibold text-text">{{ typeLabel[editingSensor.type] || editingSensor.type }}</h3>
+      </div>
+      <div>
+        <label class="label">Label</label>
+        <input
+          v-model="editingLabel"
+          class="input mt-2"
+          placeholder="Custom label…"
+          maxlength="60"
+          autofocus
+          @keydown.enter="saveSensorLabel"
+          @keydown.escape="editingSensor = null"
+        />
+      </div>
+      <div v-if="editingSensor.type === 'light' && editingSensor.capabilities?.color">
+        <label class="label">Color</label>
+        <div class="mt-2">
+          <LightColorPicker :model-value="editingColor" @update:model-value="applyLightColor" />
         </div>
-        <label class="modal-field">
-          <span>Label</span>
-          <input
-            v-model="editingLabel"
-            class="modal-input"
-            placeholder="Custom label…"
-            maxlength="60"
-            autofocus
-            @keydown.enter="saveSensorLabel"
-            @keydown.escape="editingSensor = null"
-          />
-        </label>
-        <div class="modal-actions">
-          <button class="btn-cancel" @click="editingSensor = null">Cancel</button>
-          <button class="btn-save" @click="saveSensorLabel">Save</button>
-        </div>
+        <p v-if="colorError" class="mt-2 rounded-lg bg-error/10 ring-1 ring-error/30 px-3 py-2 text-xs text-error">{{ colorError }}</p>
+      </div>
+      <div class="flex justify-end gap-2 pt-2">
+        <button class="btn-secondary" @click="editingSensor = null">Cancel</button>
+        <button class="btn-primary" @click="saveSensorLabel">Save</button>
       </div>
     </div>
-  </Teleport>
+  </AppDialog>
 </template>
-
-<style>
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-body {
-  background: #0f1117;
-  color: #e2e8f0;
-  font-family: system-ui, -apple-system, sans-serif;
-  min-height: 100vh;
-}
-</style>
-
-<style scoped>
-.dashboard {
-  display: flex;
-  flex-direction: column;
-  gap: 28px;
-}
-
-.toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 16px;
-}
-
-.global-master {
-  margin-right: auto;
-}
-
-.last-updated {
-  font-size: 0.8rem;
-  color: #475569;
-}
-
-.btn-add-room {
-  background: #4a6fa5;
-  color: #fff;
-  border: none;
-  border-radius: 8px;
-  padding: 8px 16px;
-  font-size: 0.85rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 0.15s;
-}
-
-.btn-add-room:hover { background: #6b93c7; }
-
-.modal-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.6);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 200;
-  padding: 24px;
-}
-
-.modal-card {
-  background: #1e2130;
-  border: 1px solid #2a2f45;
-  border-radius: 12px;
-  padding: 24px;
-  width: 100%;
-  max-width: 360px;
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-}
-
-.modal-header {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.modal-icon { font-size: 1.6rem; }
-
-.modal-title {
-  font-size: 1rem;
-  font-weight: 700;
-  color: #e2e8f0;
-}
-
-.modal-field {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  font-size: 0.8rem;
-  color: #94a3b8;
-}
-
-.modal-input {
-  background: #0f1117;
-  border: 1px solid #2a2f45;
-  border-radius: 8px;
-  padding: 9px 12px;
-  color: #e2e8f0;
-  font-size: 0.9rem;
-  outline: none;
-  transition: border-color 0.15s;
-}
-
-.modal-input:focus { border-color: #4a6fa5; }
-
-.modal-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-}
-
-.btn-cancel {
-  background: none;
-  color: #64748b;
-  border: 1px solid #2a2f45;
-  border-radius: 8px;
-  padding: 7px 16px;
-  font-size: 0.85rem;
-  cursor: pointer;
-  transition: color 0.15s;
-}
-
-.btn-cancel:hover { color: #94a3b8; }
-
-.btn-save {
-  background: #4a6fa5;
-  color: #fff;
-  border: none;
-  border-radius: 8px;
-  padding: 7px 16px;
-  font-size: 0.85rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 0.15s;
-}
-
-.btn-save:hover { background: #6b93c7; }
-
-.empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 16px;
-  padding: 80px 0;
-  color: #475569;
-  font-size: 0.95rem;
-}
-
-.grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 420px));
-  gap: 16px;
-}
-</style>

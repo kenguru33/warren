@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { PlayIcon } from '@heroicons/vue/20/solid'
+
 const props = defineProps<{
   id: string
   name: string
@@ -27,140 +29,41 @@ const recentMotion = computed(() =>
 </script>
 
 <template>
-  <div class="camera-card">
-    <div class="snapshot-area" @click="emit('open-live', id)">
-      <img v-if="snapshotUrl" :src="snapshotUrl" :alt="name" class="snapshot" />
-      <div v-else class="snapshot-placeholder">
-        <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+  <div class="card overflow-hidden transition hover:ring-default dark:hover:ring-white/10">
+    <button
+      class="group/snapshot relative aspect-video w-full bg-surface-2 cursor-pointer overflow-hidden block"
+      @click="emit('open-live', id)"
+    >
+      <img v-if="snapshotUrl" :src="snapshotUrl" :alt="name" class="size-full object-cover" />
+      <div v-else class="size-full flex flex-col items-center justify-center gap-2.5 text-subtle text-sm">
+        <svg class="size-9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
           <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/>
           <circle cx="12" cy="13" r="3"/>
         </svg>
         <span>No snapshot</span>
       </div>
-      <div class="live-overlay">
-        <span class="live-btn">&#9654; Live</span>
+      <div class="absolute inset-0 flex items-center justify-center bg-black/40 backdrop-blur-sm opacity-0 transition-opacity group-hover/snapshot:opacity-100">
+        <span class="inline-flex items-center gap-1.5 rounded-full bg-white/15 backdrop-blur px-4 py-2 text-sm font-semibold text-white ring-1 ring-white/25">
+          <PlayIcon class="size-4" /> Live
+        </span>
       </div>
-      <div v-if="recentMotion" class="motion-badge">Motion</div>
-    </div>
+      <span v-if="recentMotion" class="absolute top-2.5 left-2.5 inline-flex items-center gap-1 rounded-full bg-error/90 px-2 py-0.5 text-[0.65rem] font-bold uppercase tracking-wider text-white">
+        <span class="size-1.5 rounded-full bg-white animate-warren-pulse" />
+        Motion
+      </span>
+    </button>
 
-    <div class="camera-info">
-      <div>
-        <p class="camera-name">{{ name }}</p>
-        <p class="camera-location">{{ location }}</p>
+    <div class="flex items-center justify-between gap-3 px-4 py-3">
+      <div class="min-w-0">
+        <p class="text-sm font-semibold text-text truncate">{{ name }}</p>
+        <p class="text-xs text-subtle mt-0.5 truncate">{{ location }}</p>
       </div>
-      <span v-if="motionLabel" class="motion-time" :class="{ recent: recentMotion }">
+      <span
+        v-if="motionLabel"
+        :class="['text-xs whitespace-nowrap', recentMotion ? 'text-error font-medium' : 'text-subtle']"
+      >
         {{ motionLabel }}
       </span>
     </div>
   </div>
 </template>
-
-<style scoped>
-.camera-card {
-  background: #1e2130;
-  border: 1px solid #2a2f45;
-  border-radius: 16px;
-  overflow: hidden;
-  transition: border-color 0.2s;
-}
-
-.camera-card:hover {
-  border-color: #4a6fa5;
-}
-
-.snapshot-area {
-  position: relative;
-  aspect-ratio: 16 / 9;
-  background: #151825;
-  cursor: pointer;
-  overflow: hidden;
-}
-
-.snapshot {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-}
-
-.snapshot-placeholder {
-  width: 100%;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  color: #334155;
-  font-size: 0.8rem;
-}
-
-.live-overlay {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(0, 0, 0, 0.45);
-  opacity: 0;
-  transition: opacity 0.2s;
-}
-
-.snapshot-area:hover .live-overlay {
-  opacity: 1;
-}
-
-.live-btn {
-  background: rgba(74, 111, 165, 0.9);
-  color: #fff;
-  font-size: 0.85rem;
-  font-weight: 600;
-  padding: 8px 18px;
-  border-radius: 20px;
-  letter-spacing: 0.04em;
-}
-
-.motion-badge {
-  position: absolute;
-  top: 10px;
-  left: 10px;
-  background: #ef4444;
-  color: #fff;
-  font-size: 0.7rem;
-  font-weight: 700;
-  padding: 3px 8px;
-  border-radius: 6px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
-.camera-info {
-  padding: 14px 16px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.camera-name {
-  font-size: 0.95rem;
-  font-weight: 600;
-  color: #e2e8f0;
-}
-
-.camera-location {
-  font-size: 0.75rem;
-  color: #64748b;
-  margin-top: 2px;
-}
-
-.motion-time {
-  font-size: 0.75rem;
-  color: #475569;
-  white-space: nowrap;
-}
-
-.motion-time.recent {
-  color: #f87171;
-}
-</style>

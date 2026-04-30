@@ -159,10 +159,22 @@ async function restoreBlocked(b: { deviceId: string; type: string }) {
 </script>
 
 <template>
-  <div class="page">
+  <div class="space-y-6">
+    <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <div>
+        <h1 class="text-2xl font-bold tracking-tight text-text">Lights</h1>
+        <p class="mt-1 text-sm text-muted">Toggle and dim every light, or filter to ones not yet placed in a room.</p>
+      </div>
+      <input
+        v-model="search"
+        type="search"
+        class="input w-full sm:w-72"
+        placeholder="Search lights…"
+      />
+    </div>
+
     <MasterLightToggle
       v-if="globalMaster"
-      class="global-master"
       variant="wide"
       :master="globalMaster"
       :pending="globalMasterPending"
@@ -172,100 +184,98 @@ async function restoreBlocked(b: { deviceId: string; type: string }) {
       @toggle="toggleGlobalMaster"
     />
 
-    <header class="page-header">
-      <input
-        v-model="search"
-        type="search"
-        class="search-input"
-        placeholder="Search lights…"
-      />
-      <label class="toggle-label">
-        <input v-model="onlyUnused" type="checkbox" class="toggle-input" />
-        <span class="toggle-track"><span class="toggle-thumb" /></span>
-        Only show unused
-      </label>
-    </header>
+    <div class="flex items-center gap-2.5 text-sm text-muted">
+      <AppSwitch :model-value="onlyUnused" @update:model-value="(v) => (onlyUnused = v)" label="Show only unused" />
+      <span>Show only unused</span>
+    </div>
 
-    <div v-if="visibleLights.length === 0" class="empty">
+    <div v-if="visibleLights.length === 0" class="card p-12 text-center text-sm text-muted">
       {{ onlyUnused ? 'No unused lights.' : 'No lights registered. Connect a Hue Bridge from Integrations.' }}
     </div>
 
-    <div v-else class="light-list">
-      <div
+    <ul v-else role="list" class="card divide-y divide-default dark:divide-white/10 overflow-hidden">
+      <li
         v-for="(row, i) in visibleLights"
         :key="row.id ?? `${row.deviceId}:${row.type}:${i}`"
-        class="light-row"
-        :class="{ 'light-offline': row.lightReachable === false, 'light-on': row.lightOn }"
+        :class="[
+          'group/row flex items-center gap-x-4 px-5 py-4 transition-colors',
+          row.lightReachable === false ? 'bg-red-500/[0.04]' : 'hover:bg-default/50 dark:hover:bg-white/[0.02]',
+        ]"
       >
-        <span class="light-icon">💡</span>
-
-        <div class="light-info">
-          <span class="light-name">
-            {{ row.label?.trim() || row.hueName?.trim() || 'Light' }}
-            <span v-if="row.origin === 'hue'" class="hue-badge" title="Philips Hue">Hue</span>
-          </span>
-          <span class="light-room" :class="{ unassigned: !row.roomName }">
-            {{ row.roomName ?? 'Unassigned' }}
-            <span v-if="row.groupName" class="group-tag" :title="`In group: ${row.groupName}`">{{ row.groupName }}</span>
-          </span>
-          <span v-if="row.deviceId" class="device-id">{{ row.deviceId }}</span>
+        <!-- Leading icon -->
+        <div :class="[
+          'flex size-10 flex-none items-center justify-center rounded-lg text-lg ring-1 transition',
+          row.lightOn && row.lightReachable !== false
+            ? 'bg-accent/20 ring-accent/40 text-accent-strong'
+            : 'bg-surface-2 ring-default text-subtle dark:bg-white/5 dark:ring-white/10',
+        ]">
+          💡
         </div>
 
-        <div class="light-controls" @click.stop>
-          <div class="controls-top">
-            <div v-if="row.capabilities?.brightness" class="brightness">
+        <!-- Middle: title + subtitle -->
+        <div class="min-w-0 flex-auto">
+          <div class="flex items-center gap-2 flex-wrap">
+            <p class="text-sm/6 font-semibold text-text truncate">{{ row.label?.trim() || row.hueName?.trim() || 'Light' }}</p>
+            <span v-if="row.origin === 'hue'" class="badge badge-warning">Hue</span>
+            <span v-if="row.lightReachable === false" class="badge badge-error">Unreachable</span>
+            <span v-if="row.groupName" class="badge badge-accent">{{ row.groupName }}</span>
+          </div>
+          <div class="mt-0.5 flex items-center gap-1.5 text-xs/5 text-subtle truncate">
+            <span :class="row.roomName ? '' : 'italic'">{{ row.roomName ?? 'Unassigned' }}</span>
+            <span v-if="row.deviceId" aria-hidden="true">·</span>
+            <span v-if="row.deviceId" class="font-mono">{{ row.deviceId }}</span>
+          </div>
+        </div>
+
+        <!-- Trailing controls — fixed widths so columns align across rows -->
+        <div class="flex shrink-0 items-center gap-4" @click.stop>
+          <div class="hidden sm:flex items-center gap-2 w-44">
+            <template v-if="row.capabilities?.brightness">
               <input
                 type="range" min="0" max="100" step="1"
                 :value="briFromHue(row.lightBrightness)"
                 :disabled="!row.deviceId || pendingById[row.deviceId ?? ''] || row.lightReachable === false"
-                class="bri-slider"
+                class="slider slider-sm flex-1"
                 @change="(e) => setBrightness(row, Number((e.target as HTMLInputElement).value))"
               />
-              <span class="bri-value">{{ briFromHue(row.lightBrightness) }}%</span>
-            </div>
-            <button
-              class="toggle-btn"
-              :class="{ on: row.lightOn }"
-              :disabled="!row.deviceId || pendingById[row.deviceId] || row.lightReachable === false"
-              :title="row.lightOn ? 'Turn off' : 'Turn on'"
-              @click="toggle(row)"
-            >
-              <span class="dot" />
-            </button>
+              <span class="text-xs/5 text-subtle tabular-nums w-9 text-right">{{ briFromHue(row.lightBrightness) }}%</span>
+            </template>
           </div>
-          <div v-if="row.lightReachable === false || (row.deviceId && errorById[row.deviceId])" class="controls-bottom">
-            <span v-if="row.lightReachable === false" class="offline-badge">Unreachable</span>
-            <span v-if="row.deviceId && errorById[row.deviceId]" class="error-msg" :title="errorById[row.deviceId]">!</span>
+          <AppSwitch
+            :model-value="!!row.lightOn"
+            :disabled="!row.deviceId || pendingById[row.deviceId ?? ''] || row.lightReachable === false"
+            label="On/Off"
+            @update:model-value="() => toggle(row)"
+          />
+          <div class="w-5 shrink-0">
+            <span v-if="row.deviceId && errorById[row.deviceId]" class="badge badge-error" :title="errorById[row.deviceId]">!</span>
           </div>
         </div>
 
-        <div class="row-actions">
-          <button v-if="row.id !== null" class="action-btn" title="Edit light" @click="openEdit(row)">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/>
-            </svg>
+        <!-- Trailing actions — fixed width reservation so toggles stay aligned across rows. -->
+        <div class="flex w-[72px] shrink-0 items-center justify-end gap-0.5 transition-opacity pointer-fine:opacity-0 pointer-fine:group-hover/row:opacity-100 pointer-fine:group-focus-within/row:opacity-100">
+          <button v-if="row.id !== null" class="btn-icon !size-8" title="Edit" @click="openEdit(row)">
+            <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>
           </button>
-          <button class="action-btn delete" title="Remove light" @click="pendingDelete = row">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/>
-            </svg>
+          <button class="btn-icon !size-8 hover:!text-red-600 dark:hover:!text-red-400" title="Remove" @click="pendingDelete = row">
+            <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></svg>
           </button>
         </div>
-      </div>
-    </div>
+      </li>
+    </ul>
 
-    <section v-if="visibleBlocked.length" class="blocked-section">
-      <h2 class="blocked-title">Hidden lights ({{ visibleBlocked.length }})</h2>
-      <div class="blocked-list">
-        <div v-for="b in visibleBlocked" :key="`${b.deviceId}:${b.type}`" class="blocked-row">
-          <span class="light-icon">💡</span>
-          <div class="light-info">
-            <span class="light-name">Light</span>
-            <span class="device-id">{{ b.deviceId }}</span>
+    <section v-if="visibleBlocked.length">
+      <h2 class="text-xs font-semibold uppercase tracking-wider text-subtle mb-2">Hidden lights ({{ visibleBlocked.length }})</h2>
+      <ul role="list" class="rounded-2xl ring-1 ring-default/70 dark:ring-white/5 divide-y divide-default">
+        <li v-for="b in visibleBlocked" :key="`${b.deviceId}:${b.type}`" class="flex items-center gap-4 px-5 py-3 first:rounded-t-2xl last:rounded-b-2xl bg-surface-2/60">
+          <span class="text-base">💡</span>
+          <div class="flex-1 min-w-0">
+            <div class="text-sm font-medium text-muted">Light</div>
+            <div class="text-xs text-subtle font-mono truncate">{{ b.deviceId }}</div>
           </div>
-          <button class="btn-restore" @click="restoreBlocked(b)">Restore</button>
-        </div>
-      </div>
+          <button class="btn-secondary btn-sm" @click="restoreBlocked(b)">Restore</button>
+        </li>
+      </ul>
     </section>
   </div>
 
@@ -279,258 +289,31 @@ async function restoreBlocked(b: { deviceId: string; type: string }) {
     @cancel="pendingDelete = null"
   />
 
-  <Teleport to="body">
-    <div v-if="editingLight" class="modal-overlay" @click.self="editingLight = null">
-      <div class="modal-card">
-        <div class="modal-header">
-          <span class="modal-icon">💡</span>
-          <div>
-            <div class="modal-title">Light</div>
-            <div v-if="editingLight.deviceId" class="modal-device-id">{{ editingLight.deviceId }}</div>
-          </div>
-        </div>
-
-        <label class="modal-field">
-          <span>Label</span>
-          <input
-            v-model="editingLabel"
-            class="modal-input"
-            placeholder="Custom label…"
-            maxlength="60"
-            autofocus
-            @keydown.enter="saveEdit"
-            @keydown.escape="editingLight = null"
-          />
-        </label>
-
-        <div class="modal-actions">
-          <button class="btn-cancel" @click="editingLight = null">Cancel</button>
-          <button class="btn-save" @click="saveEdit">Save</button>
+  <AppDialog v-if="editingLight" :open="true" max-width-class="max-w-md" @close="editingLight = null">
+    <div class="p-6 space-y-4">
+      <div class="flex items-center gap-3">
+        <span class="text-2xl">💡</span>
+        <div>
+          <h3 class="text-base font-semibold text-text">Light</h3>
+          <div v-if="editingLight.deviceId" class="text-xs text-subtle font-mono mt-0.5">{{ editingLight.deviceId }}</div>
         </div>
       </div>
+      <div>
+        <label class="label">Label</label>
+        <input
+          v-model="editingLabel"
+          class="input mt-2"
+          placeholder="Custom label…"
+          maxlength="60"
+          autofocus
+          @keydown.enter="saveEdit"
+          @keydown.escape="editingLight = null"
+        />
+      </div>
+      <div class="flex justify-end gap-2 pt-2">
+        <button class="btn-secondary" @click="editingLight = null">Cancel</button>
+        <button class="btn-primary" @click="saveEdit">Save</button>
+      </div>
     </div>
-  </Teleport>
+  </AppDialog>
 </template>
-
-<style scoped>
-.page { display: flex; flex-direction: column; gap: 24px; }
-
-.page-header { display: flex; align-items: center; justify-content: flex-end; gap: 14px; flex-wrap: wrap; }
-
-.search-input {
-  flex: 1;
-  min-width: 200px;
-  max-width: 360px;
-  background: #151825;
-  border: 1px solid #2a2f45;
-  border-radius: 8px;
-  padding: 8px 12px;
-  color: #e2e8f0;
-  font-size: 0.85rem;
-  outline: none;
-  transition: border-color 0.15s;
-}
-.search-input::placeholder { color: #475569; }
-.search-input:focus { border-color: #4a6fa5; }
-
-.toggle-label {
-  display: flex; align-items: center; gap: 8px;
-  font-size: 0.8rem; color: #64748b;
-  cursor: pointer; user-select: none; padding-bottom: 4px;
-}
-.toggle-input { display: none; }
-.toggle-track {
-  width: 32px; height: 18px; background: #2a2f45; border-radius: 9px;
-  position: relative; transition: background 0.2s; flex-shrink: 0;
-}
-.toggle-input:checked + .toggle-track { background: #4a6fa5; }
-.toggle-thumb {
-  position: absolute; top: 2px; left: 2px;
-  width: 14px; height: 14px; border-radius: 50%;
-  background: #475569; transition: left 0.2s, background 0.2s;
-}
-.toggle-input:checked + .toggle-track .toggle-thumb { left: 16px; background: #fff; }
-
-.empty { color: #475569; font-size: 0.95rem; padding: 60px 0; text-align: center; }
-
-.light-list {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));
-  gap: 8px;
-}
-
-.light-row {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  background: #1e2130;
-  border: 1px solid #2a2f45;
-  border-radius: 10px;
-  padding: 18px 18px;
-  height: 104px;
-  transition: border-color 0.15s;
-}
-.light-row:hover { border-color: #4a6fa5; }
-.light-row.light-on { background: linear-gradient(180deg, #1d2238 0%, #1e2130 60%); }
-.light-row.light-offline { border-color: rgba(248, 113, 113, 0.4); background: rgba(248, 113, 113, 0.04); }
-
-.light-icon { font-size: 1.2rem; flex-shrink: 0; }
-
-.light-info {
-  display: flex; flex-direction: column; gap: 2px;
-  flex: 1; min-width: 0; overflow: hidden;
-}
-.light-name {
-  font-size: 0.9rem; font-weight: 600; color: #e2e8f0;
-  display: inline-flex; align-items: center; gap: 6px;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  max-width: 100%;
-}
-.hue-badge {
-  background: rgba(251, 146, 60, 0.18); color: #fdba74;
-  font-size: 0.6rem; font-weight: 700;
-  letter-spacing: 0.06em; text-transform: uppercase;
-  padding: 1px 6px; border-radius: 999px;
-}
-.light-room { font-size: 0.75rem; color: #64748b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: inline-flex; align-items: center; gap: 6px; }
-.light-room.unassigned { color: #475569; font-style: italic; }
-.group-tag {
-  background: rgba(74, 111, 165, 0.18);
-  color: #a0c4ff;
-  font-size: 0.62rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  padding: 1px 6px;
-  border-radius: 999px;
-}
-.device-id {
-  font-size: 0.68rem; color: #475569; font-family: monospace;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 1px;
-}
-
-.light-controls {
-  display: flex; flex-direction: column;
-  align-items: flex-end; gap: 4px;
-  flex-shrink: 0;
-}
-
-.controls-top { display: flex; align-items: center; gap: 8px; }
-
-.toggle-btn {
-  width: 38px; height: 22px; padding: 0;
-  border-radius: 11px; border: 1px solid #2a2f45;
-  background: #2a2f45; cursor: pointer; position: relative;
-  transition: background 0.15s, border-color 0.15s;
-}
-.toggle-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-.toggle-btn .dot {
-  position: absolute; top: 2px; left: 2px;
-  width: 16px; height: 16px; border-radius: 50%;
-  background: #64748b; transition: transform 0.18s, background 0.15s;
-}
-.toggle-btn.on { background: #4a6fa5; border-color: #4a6fa5; }
-.toggle-btn.on .dot { transform: translateX(16px); background: #f1f5f9; }
-
-.brightness { display: flex; align-items: center; gap: 6px; }
-.bri-slider {
-  width: 110px;
-  -webkit-appearance: none;
-  height: 3px; border-radius: 2px;
-  background: #2a2f45; outline: none; cursor: pointer;
-}
-.bri-slider:disabled { opacity: 0.5; cursor: not-allowed; }
-.bri-slider::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  width: 13px; height: 13px; border-radius: 50%;
-  background: #a0c4ff; cursor: pointer;
-}
-.bri-slider::-moz-range-thumb {
-  width: 13px; height: 13px; border-radius: 50%;
-  background: #a0c4ff; cursor: pointer; border: 0;
-}
-.bri-value { font-size: 0.7rem; color: #64748b; min-width: 32px; font-variant-numeric: tabular-nums; }
-
-.offline-badge {
-  font-size: 0.6rem; font-weight: 700; color: #f87171;
-  background: rgba(248, 113, 113, 0.1);
-  border: 1px solid rgba(248, 113, 113, 0.25);
-  border-radius: 4px; padding: 1px 5px;
-  letter-spacing: 0.04em; text-transform: uppercase;
-}
-
-.error-msg {
-  background: #ef4444; color: #fff;
-  width: 18px; height: 18px; border-radius: 50%;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 0.75rem; font-weight: 700;
-}
-
-.row-actions { display: flex; gap: 4px; flex-shrink: 0; }
-
-.action-btn {
-  background: none; border: 1px solid transparent;
-  color: #334155; border-radius: 7px;
-  width: 30px; height: 30px;
-  display: flex; align-items: center; justify-content: center;
-  cursor: pointer; transition: color 0.15s, border-color 0.15s;
-}
-.light-row:hover .action-btn { color: #475569; border-color: #2a2f45; }
-.action-btn:hover { color: #94a3b8 !important; border-color: #4a6fa5 !important; }
-.action-btn.delete:hover { color: #f87171 !important; border-color: #ef4444 !important; }
-
-.blocked-section { margin-top: 28px; display: flex; flex-direction: column; gap: 8px; }
-.blocked-title {
-  font-size: 0.78rem; font-weight: 600; color: #64748b;
-  letter-spacing: 0.04em; text-transform: uppercase; margin: 0 0 4px;
-}
-.blocked-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(420px, 1fr)); gap: 8px; }
-.blocked-row {
-  display: flex; align-items: center; gap: 14px;
-  background: #161924; border: 1px dashed #2a2f45;
-  border-radius: 10px; padding: 10px 14px;
-}
-.blocked-row .light-name { color: #94a3b8; }
-
-.btn-restore {
-  background: none; border: 1px solid #2a2f45; color: #64748b;
-  border-radius: 7px; padding: 5px 12px; font-size: 0.78rem;
-  cursor: pointer; transition: color 0.15s, border-color 0.15s;
-}
-.btn-restore:hover { color: #a0c4ff; border-color: #4a6fa5; }
-
-.modal-overlay {
-  position: fixed; inset: 0; background: rgba(0,0,0,0.6);
-  display: flex; align-items: center; justify-content: center;
-  z-index: 200; padding: 24px;
-}
-.modal-card {
-  background: #1e2130; border: 1px solid #2a2f45; border-radius: 12px;
-  padding: 24px; width: 100%; max-width: 360px;
-  display: flex; flex-direction: column; gap: 18px;
-}
-.modal-header { display: flex; align-items: center; gap: 12px; }
-.modal-icon { font-size: 1.6rem; }
-.modal-title { font-size: 1rem; font-weight: 700; color: #e2e8f0; }
-.modal-device-id { font-size: 0.7rem; color: #475569; font-family: monospace; margin-top: 2px; }
-.modal-field { display: flex; flex-direction: column; gap: 6px; font-size: 0.8rem; color: #94a3b8; }
-.modal-input {
-  background: #0f1117; border: 1px solid #2a2f45;
-  border-radius: 8px; padding: 9px 12px;
-  color: #e2e8f0; font-size: 0.9rem; outline: none;
-  transition: border-color 0.15s;
-}
-.modal-input:focus { border-color: #4a6fa5; }
-.modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
-.btn-cancel {
-  background: none; color: #64748b; border: 1px solid #2a2f45;
-  border-radius: 8px; padding: 7px 16px; font-size: 0.85rem;
-  cursor: pointer; transition: color 0.15s;
-}
-.btn-cancel:hover { color: #94a3b8; }
-.btn-save {
-  background: #4a6fa5; color: #fff; border: none;
-  border-radius: 8px; padding: 7px 16px; font-size: 0.85rem; font-weight: 600;
-  cursor: pointer; transition: background 0.15s;
-}
-.btn-save:hover { background: #6b93c7; }
-</style>

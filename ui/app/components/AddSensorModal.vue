@@ -1,10 +1,20 @@
 <script setup lang="ts">
+import { XMarkIcon } from '@heroicons/vue/20/solid'
 import type { SensorType, DiscoveredSensor } from '../../shared/types'
 
 defineProps<{ roomName: string }>()
 
+interface AddPayload {
+  type: SensorType
+  sensorId?: number
+  deviceId?: string
+  label: string
+  streamUrl: string
+  snapshotUrl: string
+}
+
 const emit = defineEmits<{
-  (e: 'add', payload: { type: SensorType; sensorId?: number; deviceId?: string; label: string; streamUrl: string; snapshotUrl: string }): void
+  (e: 'add', payloads: AddPayload[]): void
   (e: 'close'): void
 }>()
 
@@ -20,7 +30,8 @@ onMounted(async () => {
 })
 
 const manual = ref(false)
-const selected = ref<DiscoveredSensor | null>(null)
+// Multi-select: keys identify discovered devices uniquely.
+const selectedKeys = ref<Set<string>>(new Set())
 const manualType = ref<SensorType>('camera')
 const label = ref('')
 const streamUrl = ref('')
@@ -33,38 +44,45 @@ const manualTypes: { value: SensorType; icon: string; label: string }[] = [
   { value: 'motion', icon: '🏃', label: 'Motion' },
 ]
 
-function isSameDevice(a: DiscoveredSensor, b: DiscoveredSensor) {
-  if (a.sensorId && b.sensorId) return a.sensorId === b.sensorId
-  return a.deviceId === b.deviceId && a.sensorType === b.sensorType
+function keyOf(d: DiscoveredSensor): string {
+  return d.sensorId != null ? `sensor:${d.sensorId}` : `${d.deviceId}:${d.sensorType}`
 }
 
-function selectDevice(d: DiscoveredSensor) {
-  selected.value = selected.value && isSameDevice(selected.value, d) ? null : d
-  if (selected.value && !label.value) label.value = ''
+function toggleDevice(d: DiscoveredSensor) {
+  const k = keyOf(d)
+  const next = new Set(selectedKeys.value)
+  if (next.has(k)) next.delete(k)
+  else next.add(k)
+  selectedKeys.value = next
 }
+
+const selectedSensors = computed<DiscoveredSensor[]>(() =>
+  discovered.value.filter(d => selectedKeys.value.has(keyOf(d))),
+)
+const selectedCount = computed(() => selectedSensors.value.length)
 
 function submit() {
   if (manual.value) {
-    emit('add', {
+    emit('add', [{
       type: manualType.value,
       label: label.value.trim(),
       streamUrl: streamUrl.value.trim(),
       snapshotUrl: snapshotUrl.value.trim(),
-    })
-  } else if (selected.value) {
-    emit('add', {
-      type: selected.value.sensorType as SensorType,
-      sensorId: selected.value.sensorId,
-      deviceId: selected.value.deviceId ?? undefined,
-      label: label.value.trim(),
+    }])
+  } else if (selectedCount.value > 0) {
+    // Custom label only applies when exactly one device is selected — bulk-add uses
+    // each device's existing label/hueName.
+    const useCustomLabel = selectedCount.value === 1 && label.value.trim().length > 0
+    const payloads: AddPayload[] = selectedSensors.value.map(d => ({
+      type: d.sensorType as SensorType,
+      sensorId: d.sensorId,
+      deviceId: d.deviceId ?? undefined,
+      label: useCustomLabel ? label.value.trim() : '',
       streamUrl: '',
       snapshotUrl: '',
-    })
+    }))
+    emit('add', payloads)
   }
-}
-
-function onBackdropClick(e: MouseEvent) {
-  if (e.target === e.currentTarget) emit('close')
 }
 
 function timeAgo(ms: number): string {
@@ -98,7 +116,7 @@ function sensorMeta(d: DiscoveredSensor): string {
   return `${d.latestValue.toFixed(1)} · ${age}`
 }
 
-const canSubmit = computed(() => manual.value ? true : selected.value !== null)
+const canSubmit = computed(() => manual.value ? true : selectedCount.value > 0)
 
 interface Group { type: string; label: string; icon: string; items: DiscoveredSensor[] }
 
@@ -148,500 +166,190 @@ const visibleGroups = computed<Group[]>(() => {
 const totalCount = computed(() => filteredDiscovered.value.length)
 
 const submitLabel = computed(() => {
-  if (manual.value) {
-    return `Add ${typeLabelText(manualType.value).toLowerCase()}`
-  }
-  if (selected.value) {
-    return `Add ${typeLabelText(selected.value.sensorType).toLowerCase()}`
-  }
-  return 'Add to room'
+  if (manual.value) return `Add ${typeLabelText(manualType.value).toLowerCase()}`
+  const n = selectedCount.value
+  if (n === 0) return 'Add to room'
+  if (n === 1) return `Add ${typeLabelText(selectedSensors.value[0].sensorType).toLowerCase()}`
+  return `Add ${n} devices`
 })
 </script>
 
 <template>
-  <Teleport to="body">
-    <div class="backdrop" @click="onBackdropClick">
-      <div class="modal">
-        <header class="modal-header">
-          <div>
-            <h2 class="title">Add device</h2>
-            <p class="subtitle">to <strong>{{ roomName }}</strong></p>
+  <AppDialog :open="true" max-width-class="max-w-2xl" @close="emit('close')">
+    <div class="flex flex-col flex-1 min-h-0">
+      <header class="flex items-start justify-between gap-4 px-6 pt-5 pb-4 border-b border-default">
+        <div>
+          <h3 class="text-base/6 font-semibold text-text">Add device</h3>
+          <p class="mt-1 text-sm/6 text-muted">to <span class="font-semibold text-text">{{ roomName }}</span></p>
+        </div>
+        <button class="btn-icon size-8" aria-label="Close" @click="emit('close')">
+          <XMarkIcon class="size-4" />
+        </button>
+      </header>
+
+      <form class="flex flex-col flex-1 min-h-0" @submit.prevent="submit">
+        <template v-if="!manual">
+          <div class="px-6 pt-5">
+            <input
+              v-model="search"
+              type="text"
+              class="input"
+              placeholder="Search by name, device ID, type…"
+              autocomplete="off"
+              autocorrect="off"
+              autocapitalize="off"
+              spellcheck="false"
+              role="searchbox"
+            />
           </div>
-          <button type="button" class="close" aria-label="Close" @click="emit('close')">×</button>
-        </header>
 
-        <form class="form" @submit.prevent="submit">
-          <!-- Discovered devices -->
-          <template v-if="!manual">
-            <div class="toolbar">
-              <input
-                v-model="search"
-                type="text"
-                class="search-input"
-                placeholder="Search by name, device ID, type…"
-                autocomplete="off"
-                autocorrect="off"
-                autocapitalize="off"
-                spellcheck="false"
-                role="searchbox"
-              />
-            </div>
+          <div v-if="!pending && groupedDiscovered.length > 1" class="flex flex-wrap gap-2 items-center px-6 pt-4">
+            <button
+              type="button"
+              :class="[
+                'inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium whitespace-nowrap shrink-0 transition ring-1 ring-inset',
+                activeFilter === 'all' ? 'bg-accent/10 text-accent-strong ring-accent/30' : 'bg-surface-2 text-muted ring-default hover:text-text hover:ring-accent',
+              ]"
+              @click="activeFilter = 'all'"
+            >
+              All <span class="text-[0.65rem] tabular-nums opacity-70">{{ totalCount }}</span>
+            </button>
+            <button
+              v-for="group in groupedDiscovered"
+              :key="group.type"
+              type="button"
+              :class="[
+                'inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium whitespace-nowrap shrink-0 transition ring-1 ring-inset',
+                activeFilter === group.type ? 'bg-accent/10 text-accent-strong ring-accent/30' : 'bg-surface-2 text-muted ring-default hover:text-text hover:ring-accent',
+              ]"
+              @click="activeFilter = group.type"
+            >
+              <span>{{ group.icon }}</span>
+              {{ group.label }}
+              <span class="text-[0.65rem] tabular-nums opacity-70">{{ group.items.length }}</span>
+            </button>
+          </div>
 
-            <div v-if="!pending && groupedDiscovered.length > 1" class="filter-tabs">
-              <button
-                type="button"
-                class="filter-tab"
-                :class="{ active: activeFilter === 'all' }"
-                @click="activeFilter = 'all'"
-              >
-                All <span class="filter-count">{{ totalCount }}</span>
-              </button>
-              <button
-                v-for="group in groupedDiscovered"
-                :key="group.type"
-                type="button"
-                class="filter-tab"
-                :class="{ active: activeFilter === group.type }"
-                @click="activeFilter = group.type"
-              >
-                <span class="filter-icon">{{ group.icon }}</span>
-                {{ group.label }}
-                <span class="filter-count">{{ group.items.length }}</span>
-              </button>
-            </div>
+          <div class="flex-1 overflow-y-auto pretty-scroll px-6 py-5 flex flex-col gap-6 min-h-[200px]">
+            <div v-if="pending" class="text-center py-12 px-6 text-sm text-subtle">Loading…</div>
 
-            <div class="device-scroll">
-              <div v-if="pending" class="empty-state">Loading…</div>
-
-              <template v-else-if="visibleGroups.length">
-                <section v-for="group in visibleGroups" :key="group.type" class="group">
-                  <h3 class="group-heading">
-                    <span class="group-icon">{{ group.icon }}</span>
-                    <span>{{ group.label }}</span>
-                    <span class="group-count">{{ group.items.length }}</span>
-                  </h3>
-                  <div class="device-list">
-                    <button
-                      v-for="d in group.items"
-                      :key="d.sensorId ? `sensor:${d.sensorId}` : `${d.deviceId}:${d.sensorType}`"
-                      type="button"
-                      class="device-row"
-                      :class="{ selected: !!selected && isSameDevice(selected, d) }"
-                      @click="selectDevice(d)"
+            <template v-else-if="visibleGroups.length">
+              <section v-for="group in visibleGroups" :key="group.type" class="flex flex-col gap-3">
+                <h3 class="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-subtle">
+                  <span>{{ group.icon }}</span>
+                  <span>{{ group.label }}</span>
+                  <span class="ml-auto badge badge-neutral">{{ group.items.length }}</span>
+                </h3>
+                <div class="flex flex-col gap-2">
+                  <button
+                    v-for="d in group.items"
+                    :key="keyOf(d)"
+                    type="button"
+                    role="checkbox"
+                    :aria-checked="selectedKeys.has(keyOf(d))"
+                    :class="[
+                      'flex items-center gap-4 px-4 py-3 rounded-xl ring-1 cursor-pointer text-left transition',
+                      'focus:outline-none focus-visible:ring-2 focus-visible:ring-accent',
+                      selectedKeys.has(keyOf(d))
+                        ? 'bg-accent/10 ring-accent/40'
+                        : 'bg-surface-2/60 ring-default/70 dark:ring-white/5 hover:bg-surface-2 hover:ring-default dark:hover:ring-white/10',
+                    ]"
+                    @click="toggleDevice(d)"
+                  >
+                    <span class="flex size-10 shrink-0 items-center justify-center bg-accent/10 rounded-xl text-lg">{{ sensorIcon(d.sensorType) }}</span>
+                    <span class="flex-1 min-w-0">
+                      <span class="flex items-center gap-2">
+                        <span class="text-sm text-text font-semibold truncate">{{ d.label || d.deviceId || typeLabelText(d.sensorType) }}</span>
+                        <span v-if="d.origin === 'hue'" class="badge badge-warning">Hue</span>
+                      </span>
+                      <span class="block mt-0.5 text-xs text-subtle truncate capitalize">{{ sensorMeta(d) }}</span>
+                    </span>
+                    <span
+                      :class="[
+                        'flex size-5 shrink-0 items-center justify-center rounded-md ring-1 ring-inset transition-colors',
+                        selectedKeys.has(keyOf(d)) ? 'bg-accent ring-accent text-white' : 'ring-default',
+                      ]"
+                      aria-hidden="true"
                     >
-                      <span class="device-icon">{{ sensorIcon(d.sensorType) }}</span>
-                      <span class="device-info">
-                        <span class="device-name">
-                          {{ d.label || d.deviceId || typeLabelText(d.sensorType) }}
-                          <span v-if="d.origin === 'hue'" class="hue-badge" title="Philips Hue">Hue</span>
-                        </span>
-                        <span class="device-meta">{{ sensorMeta(d) }}</span>
-                      </span>
-                      <span class="device-check" aria-hidden="true">
-                        <svg v-if="selected && isSameDevice(selected, d)" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
-                          <polyline points="20 6 9 17 4 12"/>
-                        </svg>
-                      </span>
-                    </button>
-                  </div>
-                </section>
-              </template>
+                      <svg v-if="selectedKeys.has(keyOf(d))" class="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="20 6 9 17 4 12"/>
+                      </svg>
+                    </span>
+                  </button>
+                </div>
+              </section>
+            </template>
 
-              <div v-else-if="search" class="empty-state">
-                No devices match <strong>"{{ search }}"</strong>.
-              </div>
-
-              <div v-else class="empty-state">
-                <p class="empty-title">Nothing to discover yet</p>
-                <p class="hint">Make sure your devices are powered on. ESP32 sensors publish over MQTT; Hue lights and sensors appear after pairing the bridge.</p>
-              </div>
+            <div v-else-if="search" class="text-center py-10 text-sm text-subtle">
+              No devices match <strong class="text-muted">"{{ search }}"</strong>.
             </div>
 
-            <div v-if="selected" class="field">
-              <label class="field-label">Custom label <span class="optional">(optional)</span></label>
-              <input v-model="label" class="input" :placeholder="selected.label || selected.deviceId || 'Friendly name'" maxlength="60" />
+            <div v-else class="text-center py-10 px-6 max-w-md mx-auto">
+              <p class="text-base font-semibold text-text">Nothing to discover yet</p>
+              <p class="mt-1 text-sm text-muted">Make sure your devices are powered on. ESP32 sensors publish over MQTT; Hue lights and sensors appear after pairing the bridge.</p>
             </div>
-          </template>
+          </div>
 
-          <!-- Manual entry (camera / motion) -->
-          <template v-else>
-            <div class="field">
-              <label class="field-label">Type</label>
-              <div class="type-grid">
+          <div v-if="selectedCount === 1" class="px-6 pt-3 pb-1">
+            <label class="label">Custom label <span class="text-subtle font-normal">(optional)</span></label>
+            <input v-model="label" class="input mt-2" :placeholder="selectedSensors[0].label || selectedSensors[0].deviceId || 'Friendly name'" maxlength="60" />
+          </div>
+          <div v-else-if="selectedCount > 1" class="px-6 pt-3 pb-1 text-xs text-subtle">
+            {{ selectedCount }} devices selected — they keep their existing labels (you can rename them later).
+          </div>
+        </template>
+
+        <template v-else>
+          <div class="px-6 pt-5 space-y-4">
+            <div>
+              <label class="label">Type</label>
+              <div class="mt-2 grid grid-cols-2 gap-2">
                 <button
                   v-for="opt in manualTypes"
                   :key="opt.value"
                   type="button"
-                  class="type-btn"
-                  :class="{ selected: manualType === opt.value }"
+                  :class="[
+                    'flex flex-col items-center gap-1.5 px-2 py-4 rounded-xl ring-1 ring-inset text-sm font-medium transition cursor-pointer',
+                    manualType === opt.value
+                      ? 'bg-accent/10 text-accent-strong ring-accent/40'
+                      : 'bg-surface-2 text-muted ring-default hover:text-text hover:ring-accent',
+                  ]"
                   @click="manualType = opt.value"
                 >
-                  <span class="type-icon">{{ opt.icon }}</span>
+                  <span class="text-2xl">{{ opt.icon }}</span>
                   <span>{{ opt.label }}</span>
                 </button>
               </div>
             </div>
 
-            <div class="field">
-              <label class="field-label">Label <span class="optional">(optional)</span></label>
-              <input v-model="label" class="input" placeholder="e.g. Front door, Living room…" maxlength="60" />
+            <div>
+              <label class="label">Label <span class="text-subtle font-normal">(optional)</span></label>
+              <input v-model="label" class="input mt-2" placeholder="e.g. Front door, Living room…" maxlength="60" />
             </div>
 
             <template v-if="manualType === 'camera'">
-              <div class="field">
-                <label class="field-label">Stream URL <span class="optional">(MJPEG / HLS)</span></label>
-                <input v-model="streamUrl" class="input" placeholder="http://…" />
+              <div>
+                <label class="label">Stream URL <span class="text-subtle font-normal">(MJPEG / HLS)</span></label>
+                <input v-model="streamUrl" class="input mt-2" placeholder="http://…" />
               </div>
-              <div class="field">
-                <label class="field-label">Snapshot URL <span class="optional">(optional)</span></label>
-                <input v-model="snapshotUrl" class="input" placeholder="http://…" />
+              <div>
+                <label class="label">Snapshot URL <span class="text-subtle font-normal">(optional)</span></label>
+                <input v-model="snapshotUrl" class="input mt-2" placeholder="http://…" />
               </div>
             </template>
-          </template>
+          </div>
+        </template>
 
-          <footer class="modal-footer">
-            <button type="button" class="btn-toggle" @click="manual = !manual; selected = null">
-              {{ manual ? '← Back to discovered devices' : 'Add a camera or motion sensor manually' }}
-            </button>
-            <div class="actions">
-              <button type="button" class="btn-cancel" @click="emit('close')">Cancel</button>
-              <button type="submit" class="btn-add" :disabled="!canSubmit">{{ submitLabel }}</button>
-            </div>
-          </footer>
-        </form>
-      </div>
+        <footer class="flex items-center justify-between gap-4 px-6 py-4 mt-5 border-t border-default bg-surface-2/50">
+          <button type="button" class="text-sm/6 font-medium text-accent-strong hover:underline" @click="manual = !manual; selectedKeys = new Set()">
+            {{ manual ? '← Back to discovered devices' : 'Add a camera or motion sensor manually' }}
+          </button>
+          <div class="flex gap-2">
+            <button type="button" class="btn-secondary" @click="emit('close')">Cancel</button>
+            <button type="submit" class="btn-primary" :disabled="!canSubmit">{{ submitLabel }}</button>
+          </div>
+        </footer>
+      </form>
     </div>
-  </Teleport>
+  </AppDialog>
 </template>
-
-<style scoped>
-.backdrop {
-  position: fixed; inset: 0;
-  background: rgba(0, 0, 0, 0.7);
-  display: flex; align-items: center; justify-content: center;
-  z-index: 100; padding: 24px;
-}
-
-.modal {
-  background: #1e2130;
-  border: 1px solid #2a2f45;
-  border-radius: 18px;
-  width: 100%;
-  max-width: 620px;
-  max-height: 90vh;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
-}
-
-/* ── Header ──────────────────────────────────────────────── */
-.modal-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 20px;
-  padding: 32px 40px 28px;
-}
-
-.title { margin: 0; font-size: 1.15rem; font-weight: 600; color: #e2e8f0; letter-spacing: -0.01em; }
-.subtitle { margin: 6px 0 0; font-size: 0.85rem; color: #64748b; }
-.subtitle strong { color: #94a3b8; font-weight: 600; }
-
-.close {
-  background: none; border: none; color: #475569;
-  font-size: 1.6rem; line-height: 1;
-  cursor: pointer; padding: 0;
-  width: 32px; height: 32px;
-  border-radius: 8px;
-  display: flex; align-items: center; justify-content: center;
-  transition: color 0.12s, background 0.12s;
-}
-.close:hover { color: #e2e8f0; background: rgba(255, 255, 255, 0.04); }
-
-/* ── Form layout ────────────────────────────────────────── */
-.form {
-  display: flex; flex-direction: column;
-  flex: 1; min-height: 0;
-}
-
-.toolbar { padding: 0 40px 22px; }
-
-.search-input {
-  width: 100%;
-  background: #151825;
-  border: 1px solid #2a2f45;
-  border-radius: 10px;
-  padding: 11px 14px;
-  font-size: 0.9rem;
-  color: #e2e8f0;
-  outline: none;
-  transition: border-color 0.15s, box-shadow 0.15s;
-}
-.search-input::placeholder { color: #475569; }
-.search-input:focus {
-  border-color: #4a6fa5;
-  box-shadow: 0 0 0 2px rgba(74, 111, 165, 0.18);
-}
-
-.filter-tabs {
-  display: flex; gap: 8px; align-items: center;
-  padding: 28px 40px 20px;
-  margin-top: 4px;
-  border-top: 1px solid #2a2f45;
-  overflow-x: auto;
-  scrollbar-width: none;
-  -ms-overflow-style: none;
-}
-.filter-tabs::-webkit-scrollbar { display: none; }
-
-.filter-tab {
-  display: inline-flex; align-items: center; gap: 7px;
-  background: #151825;
-  border: 1px solid #2a2f45;
-  border-radius: 999px;
-  padding: 7px 14px;
-  min-height: 32px;
-  line-height: 1.2;
-  font-size: 0.78rem;
-  color: #94a3b8;
-  cursor: pointer;
-  white-space: nowrap;
-  flex-shrink: 0;
-  transition: border-color 0.12s, color 0.12s, background 0.12s;
-}
-.filter-tab:hover { color: #e2e8f0; border-color: #4a6fa5; }
-.filter-tab.active {
-  background: rgba(74, 111, 165, 0.15);
-  border-color: #4a6fa5;
-  color: #a0c4ff;
-}
-.filter-icon { font-size: 0.9rem; line-height: 1; }
-.filter-count {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(255, 255, 255, 0.06);
-  font-size: 0.68rem;
-  font-variant-numeric: tabular-nums;
-  border-radius: 999px;
-  padding: 2px 8px;
-  min-width: 22px;
-  min-height: 18px;
-  line-height: 1;
-  color: inherit;
-}
-
-/* ── Scrollable device area ─────────────────────────────── */
-.device-scroll {
-  flex: 1;
-  overflow-y: auto;
-  padding: 12px 40px 16px;
-  display: flex; flex-direction: column; gap: 28px;
-  min-height: 160px;
-  scrollbar-width: thin;
-  scrollbar-color: #2a2f45 transparent;
-}
-.device-scroll::-webkit-scrollbar { width: 8px; }
-.device-scroll::-webkit-scrollbar-track { background: transparent; }
-.device-scroll::-webkit-scrollbar-thumb {
-  background: #2a2f45;
-  border-radius: 4px;
-  border: 2px solid #1e2130;
-}
-.device-scroll::-webkit-scrollbar-thumb:hover { background: #3b4263; }
-
-.group { display: flex; flex-direction: column; gap: 12px; }
-
-.group-heading {
-  display: flex; align-items: center; gap: 10px;
-  margin: 0;
-  padding: 0 4px;
-  font-size: 0.72rem;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: #64748b;
-}
-.group-icon { font-size: 0.95rem; }
-.group-count {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  margin-left: auto;
-  background: #151825;
-  border: 1px solid #2a2f45;
-  border-radius: 999px;
-  padding: 2px 8px;
-  min-width: 22px;
-  min-height: 18px;
-  line-height: 1;
-  font-size: 0.68rem;
-  color: #94a3b8;
-  letter-spacing: 0;
-  font-weight: 500;
-}
-
-.device-list { display: flex; flex-direction: column; gap: 10px; }
-
-.device-row {
-  display: flex; align-items: center; gap: 16px;
-  padding: 16px 18px;
-  background: #151825;
-  border: 1px solid #2a2f45;
-  border-radius: 12px;
-  cursor: pointer;
-  text-align: left;
-  transition: border-color 0.15s, background 0.15s, transform 0.08s;
-  color: inherit;
-  font: inherit;
-}
-.device-row:hover { border-color: #3b4263; background: #181b29; }
-.device-row:active { transform: scale(0.998); }
-.device-row.selected {
-  border-color: #4a6fa5;
-  background: linear-gradient(180deg, #1a2540 0%, #16202f 100%);
-}
-
-.device-icon {
-  font-size: 1.4rem; flex-shrink: 0;
-  width: 42px; height: 42px;
-  display: flex; align-items: center; justify-content: center;
-  background: rgba(255, 255, 255, 0.03);
-  border-radius: 10px;
-}
-.device-info { display: flex; flex-direction: column; gap: 5px; flex: 1; min-width: 0; }
-.device-name {
-  display: inline-flex; align-items: center; gap: 6px;
-  font-size: 0.92rem; color: #e2e8f0; font-weight: 500;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  max-width: 100%;
-}
-
-.hue-badge {
-  background: rgba(251, 146, 60, 0.18);
-  color: #fdba74;
-  font-size: 0.6rem; font-weight: 700;
-  letter-spacing: 0.06em; text-transform: uppercase;
-  padding: 1px 6px; border-radius: 999px;
-  flex-shrink: 0;
-}
-
-.device-meta {
-  font-size: 0.76rem; color: #64748b;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  text-transform: capitalize;
-}
-
-.device-check {
-  width: 22px; height: 22px;
-  border-radius: 50%;
-  border: 1.5px solid #2a2f45;
-  display: flex; align-items: center; justify-content: center;
-  flex-shrink: 0;
-  color: #4a6fa5;
-  transition: border-color 0.12s, background 0.12s, color 0.12s;
-}
-.device-row.selected .device-check {
-  border-color: #4a6fa5;
-  background: #4a6fa5;
-  color: #fff;
-}
-
-/* ── Empty state ────────────────────────────────────────── */
-.empty-state {
-  font-size: 0.88rem;
-  color: #64748b;
-  padding: 40px 24px;
-  text-align: center;
-  background: #151825;
-  border: 1px dashed #2a2f45;
-  border-radius: 12px;
-  line-height: 1.6;
-}
-.empty-title { font-weight: 600; color: #94a3b8; margin: 0 0 6px; font-size: 0.95rem; }
-.empty-state strong { color: #94a3b8; }
-.hint { font-size: 0.82rem; color: #475569; margin: 0; }
-
-/* ── Form fields ────────────────────────────────────────── */
-.field {
-  display: flex; flex-direction: column; gap: 12px;
-  padding: 22px 40px 0;
-}
-.field-label { font-size: 0.78rem; color: #94a3b8; font-weight: 500; }
-.optional { color: #475569; font-weight: 400; }
-
-.type-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
-.type-btn {
-  background: #151825;
-  border: 1px solid #2a2f45;
-  border-radius: 10px;
-  padding: 12px 6px;
-  display: flex; flex-direction: column; align-items: center; gap: 6px;
-  cursor: pointer;
-  color: #64748b;
-  font-size: 0.8rem; font-weight: 500;
-  transition: border-color 0.12s, color 0.12s, background 0.12s;
-}
-.type-btn:hover { border-color: #4a6fa5; color: #94a3b8; }
-.type-btn.selected { border-color: #4a6fa5; background: #1a2540; color: #a0c4ff; }
-.type-icon { font-size: 1.4rem; }
-
-.input {
-  background: #151825;
-  border: 1px solid #2a2f45;
-  border-radius: 10px;
-  padding: 11px 14px;
-  color: #e2e8f0;
-  font-size: 0.9rem;
-  outline: none;
-  transition: border-color 0.15s, box-shadow 0.15s;
-}
-.input:focus {
-  border-color: #4a6fa5;
-  box-shadow: 0 0 0 3px rgba(74, 111, 165, 0.18);
-}
-
-/* ── Footer ─────────────────────────────────────────────── */
-.modal-footer {
-  display: flex; align-items: center; justify-content: space-between;
-  gap: 20px;
-  padding: 22px 40px;
-  border-top: 1px solid #2a2f45;
-  background: #1a1d2c;
-  margin-top: 22px;
-}
-
-.btn-toggle {
-  background: none; border: none;
-  color: #93c5fd;
-  font-size: 0.8rem;
-  cursor: pointer;
-  padding: 0;
-  text-align: left;
-  transition: color 0.12s;
-}
-.btn-toggle:hover { color: #c7dbff; text-decoration: underline; }
-
-.actions { display: flex; gap: 8px; }
-
-.btn-cancel, .btn-add {
-  padding: 10px 20px;
-  border-radius: 10px;
-  font-size: 0.88rem;
-  font-weight: 600;
-  cursor: pointer;
-  border: none;
-  transition: background 0.15s, color 0.15s, border-color 0.15s;
-}
-.btn-cancel { background: transparent; color: #64748b; border: 1px solid #2a2f45; }
-.btn-cancel:hover { color: #94a3b8; border-color: #475569; }
-.btn-add { background: #4a6fa5; color: #fff; }
-.btn-add:hover:not(:disabled) { background: #5b80b8; }
-.btn-add:disabled { opacity: 0.4; cursor: default; }
-
-@media (max-width: 540px) {
-  .modal-footer { flex-direction: column; align-items: stretch; }
-  .actions { justify-content: flex-end; }
-}
-</style>

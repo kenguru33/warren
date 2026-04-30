@@ -1,88 +1,35 @@
 <script setup lang="ts">
-withDefaults(defineProps<{ message: string; confirmLabel?: string }>(), { confirmLabel: 'Delete' })
+import { ExclamationTriangleIcon } from '@heroicons/vue/24/outline'
+
+withDefaults(defineProps<{
+  message: string
+  confirmLabel?: string
+  title?: string
+}>(), {
+  confirmLabel: 'Delete',
+  title: 'Are you sure?',
+})
 
 const emit = defineEmits<{
   (e: 'confirm'): void
   (e: 'cancel'): void
 }>()
-
-function onBackdropClick(e: MouseEvent) {
-  if (e.target === e.currentTarget) emit('cancel')
-}
 </script>
 
 <template>
-  <Teleport to="body">
-    <div class="backdrop" @click="onBackdropClick">
-      <div class="modal">
-        <p class="message">{{ message }}</p>
-        <div class="actions">
-          <button class="btn-cancel" @click="emit('cancel')">Cancel</button>
-          <button class="btn-delete" @click="emit('confirm')">{{ confirmLabel }}</button>
-        </div>
+  <AppDialog :open="true" max-width-class="max-w-md" @close="emit('cancel')">
+    <div class="px-6 py-6 sm:flex sm:items-start gap-4">
+      <div class="mx-auto flex size-10 shrink-0 items-center justify-center rounded-full bg-error/10 ring-1 ring-error/20 sm:mx-0">
+        <ExclamationTriangleIcon class="size-5 text-error" aria-hidden="true" />
+      </div>
+      <div class="mt-3 text-center sm:mt-0 sm:text-left">
+        <h3 class="text-base font-semibold text-text">{{ title }}</h3>
+        <p class="mt-2 text-sm text-muted leading-relaxed">{{ message }}</p>
       </div>
     </div>
-  </Teleport>
+    <div class="px-6 pb-5 pt-2 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+      <button class="btn-secondary" @click="emit('cancel')">Cancel</button>
+      <button class="btn-danger" @click="emit('confirm')">{{ confirmLabel }}</button>
+    </div>
+  </AppDialog>
 </template>
-
-<style scoped>
-.backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(0,0,0,0.7);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 200;
-  padding: 24px;
-}
-
-.modal {
-  background: #1e2130;
-  border: 1px solid #2a2f45;
-  border-radius: 16px;
-  padding: 28px;
-  width: 100%;
-  max-width: 360px;
-  display: flex;
-  flex-direction: column;
-  gap: 24px;
-}
-
-.message {
-  font-size: 0.95rem;
-  color: #e2e8f0;
-  line-height: 1.5;
-}
-
-.actions {
-  display: flex;
-  gap: 8px;
-  justify-content: flex-end;
-}
-
-.btn-cancel,
-.btn-delete {
-  padding: 8px 18px;
-  border-radius: 8px;
-  font-size: 0.85rem;
-  font-weight: 600;
-  cursor: pointer;
-  border: none;
-  transition: background 0.15s, color 0.15s;
-}
-
-.btn-cancel {
-  background: #151825;
-  color: #64748b;
-}
-
-.btn-cancel:hover { color: #94a3b8; }
-
-.btn-delete {
-  background: #7f1d1d;
-  color: #fca5a5;
-}
-
-.btn-delete:hover { background: #991b1b; color: #fecaca; }
-</style>

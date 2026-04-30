@@ -9,12 +9,15 @@ export default defineEventHandler(async (event) => {
 
   const db = getDb()
 
+  // Source: every light known to the bridge — registered or not. Unregistered
+  // lights have no sensor row, so we coalesce sensor_id to 0 (only used for
+  // result tracking, not a foreign key).
   const members = db.prepare(`
-    SELECT s.id AS sensor_id, s.device_id, hd.hue_resource_id, hb.ip, hb.app_key, hd.capabilities
-    FROM sensors s
-    INNER JOIN hue_devices hd ON hd.device_id = s.device_id
+    SELECT COALESCE(s.id, 0) AS sensor_id, hd.device_id, hd.hue_resource_id, hb.ip, hb.app_key, hd.capabilities
+    FROM hue_devices hd
     INNER JOIN hue_bridge hb ON hb.bridge_id = hd.bridge_id
-    WHERE s.type = 'light' AND s.room_id IS NOT NULL AND hd.kind = 'light'
+    LEFT JOIN sensors s ON s.device_id = hd.device_id AND s.type = 'light'
+    WHERE hd.kind = 'light'
   `).all() as FanOutMember[]
 
   if (members.length === 0) {
