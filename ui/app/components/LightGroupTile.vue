@@ -10,6 +10,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'edit-group', groupId: number): void
   (e: 'ungroup', groupId: number): void
+  (e: 'open-detail', groupId: number): void
 }>()
 
 const confirmUngroup = ref(false)
@@ -147,6 +148,11 @@ const themeVars = computed(() => ({
     class="sensor-tile group-tile"
     :class="{ 'is-on': isOn, 'is-mixed': displayState === 'mixed' }"
     :style="themeVars"
+    role="button"
+    tabindex="0"
+    @click="emit('open-detail', group.id)"
+    @keydown.enter.self.prevent="emit('open-detail', group.id)"
+    @keydown.space.self.prevent="emit('open-detail', group.id)"
   >
     <button
       class="toggle-btn"
@@ -224,6 +230,19 @@ const themeVars = computed(() => ({
   min-height: 156px;
   text-align: center;
   border: 1px solid var(--theme-off-border);
+}
+
+.group-tile {
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s, transform 0.15s;
+}
+.group-tile:hover {
+  border-color: var(--theme-on-border);
+  box-shadow: 0 0 10px var(--theme-on-glow);
+}
+.group-tile:focus-visible {
+  outline: 2px solid var(--theme-on-border);
+  outline-offset: 2px;
 }
 
 .group-tile.is-on {
