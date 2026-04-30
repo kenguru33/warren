@@ -41,6 +41,20 @@ const refHumidity    = ref(props.room.reference?.refHumidity ?? 50)
 const editName       = ref(props.room.name)
 
 const confirmRoom   = ref(false)
+const detailGroupId = ref<number | null>(null)
+
+const detailGroup = computed(() => {
+  if (detailGroupId.value === null) return null
+  return lightGroups.value.find(g => g.id === detailGroupId.value) ?? null
+})
+
+const detailGroupMembers = computed<SensorView[]>(() => {
+  const g = detailGroup.value
+  if (!g) return []
+  return g.memberSensorIds
+    .map(id => lightsById.value.get(id))
+    .filter((s): s is SensorView => !!s)
+})
 
 // Master switch state — optimistic on tap, reconciles with next /api/rooms refresh.
 const masterPending = ref(false)
@@ -236,6 +250,7 @@ function isOffline(ms: number | null) {
             :editing="editing"
             @edit-group="(id) => emit('edit-group', id)"
             @ungroup="(id) => emit('ungroup', id)"
+            @open-detail="(id) => detailGroupId = id"
           />
         </div>
         <div v-if="ungroupedLights.length" class="light-chips">
@@ -315,6 +330,13 @@ function isOffline(ms: number | null) {
     :message="`Delete room &quot;${room.name}&quot;? This will also remove all its sensors.`"
     @confirm="emit('remove-room', room.id); confirmRoom = false"
     @cancel="confirmRoom = false"
+  />
+
+  <LightGroupDetailModal
+    v-if="detailGroup"
+    :group="detailGroup"
+    :members="detailGroupMembers"
+    @close="detailGroupId = null"
   />
 </template>
 
