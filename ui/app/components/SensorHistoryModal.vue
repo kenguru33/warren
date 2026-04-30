@@ -102,252 +102,119 @@ const motionEvents = computed(() => {
 </script>
 
 <template>
-  <Teleport to="body">
-    <div class="modal-backdrop" @click.self="emit('close')">
-      <div class="modal">
-        <div class="modal-header">
-          <div class="modal-title-group">
-            <span class="modal-title">{{ title }}</span>
-            <span class="modal-subtitle">{{ roomName }} &mdash; last 24 hours</span>
-          </div>
-          <button class="close-btn" @click="emit('close')">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-              <path d="M18 6 6 18M6 6l12 12"/>
-            </svg>
-          </button>
+  <AppDialog :open="true" max-width-class="max-w-3xl" @close="emit('close')">
+    <div class="px-6 pt-5 pb-4 border-b border-default flex items-start justify-between gap-3">
+      <div class="min-w-0">
+        <h3 class="text-base/6 font-semibold text-text truncate">{{ title }}</h3>
+        <p class="text-xs text-subtle mt-0.5">{{ roomName }} · last 24 hours</p>
+      </div>
+      <button class="btn-icon size-8" aria-label="Close" @click="emit('close')">
+        <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+
+    <div class="px-6 py-5 space-y-5">
+      <div class="rounded-xl bg-surface-2/60 ring-1 ring-default p-4 min-h-[180px] flex items-center justify-center">
+        <div v-if="pending" class="text-sm text-subtle">Loading…</div>
+        <div v-else-if="!readings.length && sensor.type !== 'motion'" class="text-sm text-subtle">
+          No data in the last 24 hours
+        </div>
+        <div v-else-if="sensor.type === 'motion' && !motionEvents.length" class="text-sm text-subtle">
+          No motion detected in the last 24 hours
         </div>
 
-        <div class="chart-area">
-          <!-- Loading -->
-          <div v-if="pending" class="state-msg">Loading…</div>
-
-          <!-- No data -->
-          <div v-else-if="!readings.length && sensor.type !== 'motion'" class="state-msg">
-            No data in the last 24 hours
-          </div>
-
-          <!-- Motion: no events -->
-          <div v-else-if="sensor.type === 'motion' && !motionEvents.length" class="state-msg">
-            No motion detected in the last 24 hours
-          </div>
-
-          <!-- SVG chart (line / area) -->
-          <svg v-else-if="sensor.type !== 'motion'" :viewBox="`0 0 ${W} ${H}`" class="chart-svg">
-            <defs>
-              <linearGradient :id="`grad-${sensor.id}`" x1="0" :y1="PT" x2="0" :y2="PT + plotH" gradientUnits="userSpaceOnUse">
-                <stop offset="0%" :stop-color="lineColor" stop-opacity="0.25"/>
-                <stop offset="100%" :stop-color="lineColor" stop-opacity="0.03"/>
-              </linearGradient>
-            </defs>
-
-            <!-- Horizontal grid lines -->
-            <g v-if="chart">
-              <line
-                v-for="label in chart.yLabels"
-                :key="label.y"
-                :x1="PL" :y1="label.y" :x2="W - PR" :y2="label.y"
-                stroke="#2a2f45" stroke-width="1"
-              />
-            </g>
-
-            <!-- Vertical grid lines at X labels -->
-            <g>
-              <line
-                v-for="xl in xLabels"
-                :key="xl.x"
-                :x1="xl.x" :y1="PT" :x2="xl.x" :y2="PT + plotH"
-                stroke="#2a2f45" stroke-width="1"
-              />
-            </g>
-
-            <!-- Area fill -->
-            <path
-              v-if="chart"
-              :d="chart.areaPath"
-              :fill="`url(#grad-${sensor.id})`"
-            />
-
-            <!-- Line -->
-            <path
-              v-if="chart"
-              :d="chart.linePath"
-              fill="none"
-              :stroke="lineColor"
-              stroke-width="1.5"
-              stroke-linejoin="round"
-              stroke-linecap="round"
-            />
-
-            <!-- Y axis labels -->
-            <g v-if="chart" font-size="9" fill="#475569" text-anchor="end">
-              <text
-                v-for="yl in chart.yLabels"
-                :key="yl.y"
-                :x="PL - 5"
-                :y="yl.y + 3"
-              >{{ yl.label }}{{ unit }}</text>
-            </g>
-
-            <!-- X axis labels -->
-            <g font-size="9" fill="#475569" text-anchor="middle">
-              <text
-                v-for="xl in xLabels"
-                :key="xl.x"
-                :x="xl.x"
-                :y="PT + plotH + 18"
-              >{{ xl.label }}</text>
-            </g>
-          </svg>
-
-          <!-- Motion timeline -->
-          <svg v-else :viewBox="`0 0 ${W} 80`" class="chart-svg motion-svg">
-            <!-- Track line -->
-            <line :x1="PL" y1="40" :x2="W - PR" y2="40" stroke="#2a2f45" stroke-width="1"/>
-
-            <!-- Event ticks -->
+        <svg v-else-if="sensor.type !== 'motion'" :viewBox="`0 0 ${W} ${H}`" class="w-full h-auto block overflow-visible">
+          <defs>
+            <linearGradient :id="`grad-${sensor.id}`" x1="0" :y1="PT" x2="0" :y2="PT + plotH" gradientUnits="userSpaceOnUse">
+              <stop offset="0%" :stop-color="lineColor" stop-opacity="0.25"/>
+              <stop offset="100%" :stop-color="lineColor" stop-opacity="0.03"/>
+            </linearGradient>
+          </defs>
+          <g v-if="chart">
             <line
-              v-for="(x, i) in motionEvents"
-              :key="i"
-              :x1="x" y1="20" :x2="x" y2="60"
-              stroke="#f87171" stroke-width="2"
-              stroke-linecap="round"
+              v-for="label in chart.yLabels"
+              :key="label.y"
+              :x1="PL" :y1="label.y" :x2="W - PR" :y2="label.y"
+              stroke="var(--color-border)" stroke-width="1"
             />
+          </g>
+          <g>
+            <line
+              v-for="xl in xLabels"
+              :key="xl.x"
+              :x1="xl.x" :y1="PT" :x2="xl.x" :y2="PT + plotH"
+              stroke="var(--color-border)" stroke-width="1"
+            />
+          </g>
+          <path v-if="chart" :d="chart.areaPath" :fill="`url(#grad-${sensor.id})`" />
+          <path
+            v-if="chart"
+            :d="chart.linePath"
+            fill="none"
+            :stroke="lineColor"
+            stroke-width="1.5"
+            stroke-linejoin="round"
+            stroke-linecap="round"
+          />
+          <g v-if="chart" font-size="9" fill="var(--color-text-subtle)" text-anchor="end">
+            <text
+              v-for="yl in chart.yLabels"
+              :key="yl.y"
+              :x="PL - 5"
+              :y="yl.y + 3"
+            >{{ yl.label }}{{ unit }}</text>
+          </g>
+          <g font-size="9" fill="var(--color-text-subtle)" text-anchor="middle">
+            <text
+              v-for="xl in xLabels"
+              :key="xl.x"
+              :x="xl.x"
+              :y="PT + plotH + 18"
+            >{{ xl.label }}</text>
+          </g>
+        </svg>
 
-            <!-- X axis labels -->
-            <g font-size="9" fill="#475569" text-anchor="middle">
-              <text
-                v-for="xl in xLabels"
-                :key="xl.x"
-                :x="xl.x"
-                y="74"
-              >{{ xl.label }}</text>
-            </g>
-          </svg>
-        </div>
+        <svg v-else :viewBox="`0 0 ${W} 80`" class="w-full h-auto block overflow-visible max-h-[90px]">
+          <line :x1="PL" y1="40" :x2="W - PR" y2="40" stroke="var(--color-border)" stroke-width="1"/>
+          <line
+            v-for="(x, i) in motionEvents"
+            :key="i"
+            :x1="x" y1="20" :x2="x" y2="60"
+            stroke="var(--color-error)" stroke-width="2"
+            stroke-linecap="round"
+          />
+          <g font-size="9" fill="var(--color-text-subtle)" text-anchor="middle">
+            <text
+              v-for="xl in xLabels"
+              :key="xl.x"
+              :x="xl.x"
+              y="74"
+            >{{ xl.label }}</text>
+          </g>
+        </svg>
+      </div>
 
-        <!-- Summary row -->
-        <div v-if="!pending && readings.length && sensor.type !== 'motion'" class="summary">
-          <span>
-            Min <strong>{{ Math.min(...readings.map(r => r.value)).toFixed(1) }}{{ unit }}</strong>
-          </span>
-          <span>
-            Max <strong>{{ Math.max(...readings.map(r => r.value)).toFixed(1) }}{{ unit }}</strong>
-          </span>
-          <span>
-            Latest <strong>{{ readings.at(-1)!.value.toFixed(1) }}{{ unit }}</strong>
-          </span>
-          <span>
-            {{ readings.length }} readings
-          </span>
+      <dl v-if="!pending && readings.length && sensor.type !== 'motion'" class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <div>
+          <dt class="text-xs text-subtle">Min</dt>
+          <dd class="mt-0.5 text-sm font-semibold text-text tabular-nums">{{ Math.min(...readings.map(r => r.value)).toFixed(1) }}{{ unit }}</dd>
         </div>
-        <div v-else-if="!pending && sensor.type === 'motion' && motionEvents.length" class="summary">
-          <span>{{ motionEvents.length }} event{{ motionEvents.length === 1 ? '' : 's' }} in the last 24 hours</span>
+        <div>
+          <dt class="text-xs text-subtle">Max</dt>
+          <dd class="mt-0.5 text-sm font-semibold text-text tabular-nums">{{ Math.max(...readings.map(r => r.value)).toFixed(1) }}{{ unit }}</dd>
         </div>
+        <div>
+          <dt class="text-xs text-subtle">Latest</dt>
+          <dd class="mt-0.5 text-sm font-semibold text-accent-strong tabular-nums">{{ readings.at(-1)!.value.toFixed(1) }}{{ unit }}</dd>
+        </div>
+        <div>
+          <dt class="text-xs text-subtle">Readings</dt>
+          <dd class="mt-0.5 text-sm font-semibold text-text tabular-nums">{{ readings.length }}</dd>
+        </div>
+      </dl>
+      <div v-else-if="!pending && sensor.type === 'motion' && motionEvents.length" class="text-sm text-muted">
+        {{ motionEvents.length }} event{{ motionEvents.length === 1 ? '' : 's' }} in the last 24 hours.
       </div>
     </div>
-  </Teleport>
+  </AppDialog>
 </template>
-
-<style scoped>
-.modal-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.7);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 100;
-  padding: 24px;
-}
-
-.modal {
-  background: #1e2130;
-  border: 1px solid #2a2f45;
-  border-radius: 16px;
-  padding: 24px;
-  width: 100%;
-  max-width: 620px;
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-}
-
-.modal-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.modal-title-group {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-
-.modal-title {
-  font-size: 1.1rem;
-  font-weight: 700;
-  color: #e2e8f0;
-}
-
-.modal-subtitle {
-  font-size: 0.78rem;
-  color: #64748b;
-}
-
-.close-btn {
-  background: none;
-  border: 1px solid #2a2f45;
-  color: #475569;
-  border-radius: 7px;
-  width: 28px;
-  height: 28px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  flex-shrink: 0;
-  transition: color 0.15s, border-color 0.15s;
-}
-
-.close-btn:hover { color: #94a3b8; border-color: #4a6fa5; }
-
-.chart-area {
-  background: #151825;
-  border-radius: 10px;
-  padding: 12px 8px 8px;
-  min-height: 120px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.state-msg {
-  color: #475569;
-  font-size: 0.85rem;
-}
-
-.chart-svg {
-  width: 100%;
-  height: auto;
-  display: block;
-  overflow: visible;
-}
-
-.motion-svg {
-  max-height: 90px;
-}
-
-.summary {
-  display: flex;
-  gap: 20px;
-  font-size: 0.78rem;
-  color: #64748b;
-  flex-wrap: wrap;
-}
-
-.summary strong {
-  color: #a0c4ff;
-}
-</style>

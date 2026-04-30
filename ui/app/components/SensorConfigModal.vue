@@ -30,7 +30,7 @@ const pending = computed(() => {
 onMounted(async () => {
   try {
     const data = await $fetch<typeof form.value & { updatedAt: string | null; lastFetchedAt: string | null }>(
-      `/api/sensors/config/${props.deviceId}`
+      `/api/sensors/config/${props.deviceId}`,
     )
     form.value = {
       refTemp: data.refTemp,
@@ -61,219 +61,75 @@ async function save() {
 </script>
 
 <template>
-  <Teleport to="body">
-    <div class="modal-overlay" @click.self="emit('close')">
-      <div class="modal-card">
-        <div class="modal-header">
-          <span class="modal-icon">⚙️</span>
+  <AppDialog :open="true" max-width-class="max-w-lg" @close="emit('close')">
+    <div class="px-6 pt-5 pb-4 border-b border-default">
+      <div class="flex items-center gap-3">
+        <div class="flex size-10 items-center justify-center rounded-2xl bg-accent-soft ring-1 ring-accent/20 text-xl">⚙️</div>
+        <div class="min-w-0 flex-1">
+          <h3 class="text-base/6 font-semibold text-text truncate">{{ label || 'Temperature sensor' }}</h3>
+          <div class="text-xs text-subtle font-mono mt-0.5 truncate">{{ deviceId }}</div>
+        </div>
+        <span v-if="pending" class="badge badge-warning">Pending sync</span>
+        <span v-else-if="lastFetchedAt" class="badge badge-success">Synced</span>
+      </div>
+    </div>
+
+    <div class="px-6 py-5 space-y-4">
+      <div v-if="loading" class="text-center py-6 text-sm text-subtle">Loading…</div>
+      <div v-else-if="fetchError" class="rounded-lg bg-error/10 ring-1 ring-error/30 px-3 py-2 text-sm text-error">{{ fetchError }}</div>
+
+      <template v-else>
+        <div>
+          <label class="label">Target temperature (°C)</label>
+          <input
+            v-model.number="form.refTemp"
+            type="number"
+            step="0.5"
+            class="input mt-1.5"
+            placeholder="Use room reference"
+          />
+          <p class="help-text">Leave blank to fall back to the room reference.</p>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <div class="modal-title">{{ label || 'Temperature sensor' }}</div>
-            <div class="modal-device-id">{{ deviceId }}</div>
+            <label class="label">Heater ON offset</label>
+            <input v-model.number="form.heaterOnOffset" type="number" step="0.5" min="0" class="input mt-1.5" />
+            <p class="help-text">°C below target.</p>
+          </div>
+          <div>
+            <label class="label">Heater OFF offset</label>
+            <input v-model.number="form.heaterOffOffset" type="number" step="0.5" min="0" class="input mt-1.5" />
+            <p class="help-text">°C above target.</p>
           </div>
         </div>
 
-        <div v-if="loading" class="loading">Loading…</div>
-        <div v-else-if="fetchError" class="loading" style="color:#f87171">{{ fetchError }}</div>
+        <div>
+          <label class="label">Fan threshold</label>
+          <input v-model.number="form.fanThreshold" type="number" step="0.5" min="0" class="input mt-1.5" />
+          <p class="help-text">°C above target before the fan runs.</p>
+        </div>
 
-        <template v-else>
-          <div class="fields">
-            <label class="field">
-              <span class="field-label">Target temperature (°C)</span>
-              <input
-                v-model.number="form.refTemp"
-                type="number"
-                step="0.5"
-                class="field-input"
-                placeholder="Use room reference"
-              />
-            </label>
-
-            <div class="field-row">
-              <label class="field">
-                <span class="field-label">Heater ON offset (°C below target)</span>
-                <input v-model.number="form.heaterOnOffset" type="number" step="0.5" min="0" class="field-input" />
-              </label>
-              <label class="field">
-                <span class="field-label">Heater OFF offset (°C above target)</span>
-                <input v-model.number="form.heaterOffOffset" type="number" step="0.5" min="0" class="field-input" />
-              </label>
-            </div>
-
-            <label class="field">
-              <span class="field-label">Fan threshold (°C above target)</span>
-              <input v-model.number="form.fanThreshold" type="number" step="0.5" min="0" class="field-input" />
-            </label>
-
-            <div class="field-row">
-              <label class="field">
-                <span class="field-label">Sensor poll interval (s)</span>
-                <input v-model.number="form.pollInterval" type="number" step="1" min="1" class="field-input" />
-              </label>
-              <label class="field">
-                <span class="field-label">Config fetch interval (s)</span>
-                <input v-model.number="form.configFetchInterval" type="number" step="1" min="10" class="field-input" />
-              </label>
-            </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label class="label">Sensor poll interval</label>
+            <input v-model.number="form.pollInterval" type="number" step="1" min="1" class="input mt-1.5" />
+            <p class="help-text">Seconds.</p>
           </div>
-
-          <div v-if="pending" class="status pending">
-            Pending device acknowledgement
+          <div>
+            <label class="label">Config fetch interval</label>
+            <input v-model.number="form.configFetchInterval" type="number" step="1" min="10" class="input mt-1.5" />
+            <p class="help-text">Seconds.</p>
           </div>
-          <div v-else-if="lastFetchedAt" class="status synced">
-            Device synced
-          </div>
-
-          <div class="modal-actions">
-            <button class="btn-cancel" @click="emit('close')">Cancel</button>
-            <button class="btn-save" :disabled="saving" @click="save">
-              {{ saving ? 'Saving…' : 'Save' }}
-            </button>
-          </div>
-        </template>
-      </div>
+        </div>
+      </template>
     </div>
-  </Teleport>
+
+    <div v-if="!loading && !fetchError" class="flex items-center justify-end gap-2 px-6 py-4 border-t border-default bg-surface-2/50">
+      <button class="btn-secondary" @click="emit('close')">Cancel</button>
+      <button class="btn-primary" :disabled="saving" @click="save">
+        {{ saving ? 'Saving…' : 'Save' }}
+      </button>
+    </div>
+  </AppDialog>
 </template>
-
-<style scoped>
-.modal-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.6);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 200;
-  padding: 24px;
-}
-
-.modal-card {
-  background: #1e2130;
-  border: 1px solid #2a2f45;
-  border-radius: 12px;
-  padding: 24px;
-  width: 100%;
-  max-width: 480px;
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-}
-
-.modal-header {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.modal-icon { font-size: 1.6rem; }
-
-.modal-title {
-  font-size: 1rem;
-  font-weight: 700;
-  color: #e2e8f0;
-}
-
-.modal-device-id {
-  font-size: 0.7rem;
-  color: #475569;
-  font-family: monospace;
-  margin-top: 2px;
-}
-
-.loading {
-  color: #64748b;
-  font-size: 0.85rem;
-  text-align: center;
-  padding: 16px 0;
-}
-
-.fields {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.field-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-}
-
-.field {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-}
-
-.field-label {
-  font-size: 0.75rem;
-  color: #94a3b8;
-}
-
-.field-input {
-  background: #0f1117;
-  border: 1px solid #2a2f45;
-  border-radius: 8px;
-  padding: 8px 10px;
-  color: #e2e8f0;
-  font-size: 0.88rem;
-  outline: none;
-  transition: border-color 0.15s;
-  width: 100%;
-  box-sizing: border-box;
-}
-
-.field-input:focus { border-color: #4a6fa5; }
-
-.status {
-  font-size: 0.75rem;
-  padding: 6px 10px;
-  border-radius: 6px;
-}
-
-.status.pending {
-  background: rgba(251, 191, 36, 0.1);
-  color: #fbbf24;
-  border: 1px solid rgba(251, 191, 36, 0.2);
-}
-
-.status.synced {
-  background: rgba(52, 211, 153, 0.1);
-  color: #34d399;
-  border: 1px solid rgba(52, 211, 153, 0.2);
-}
-
-.modal-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-}
-
-.btn-cancel {
-  background: none;
-  color: #64748b;
-  border: 1px solid #2a2f45;
-  border-radius: 8px;
-  padding: 7px 16px;
-  font-size: 0.85rem;
-  cursor: pointer;
-  transition: color 0.15s;
-}
-
-.btn-cancel:hover { color: #94a3b8; }
-
-.btn-save {
-  background: #4a6fa5;
-  color: #fff;
-  border: none;
-  border-radius: 8px;
-  padding: 7px 16px;
-  font-size: 0.85rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 0.15s;
-}
-
-.btn-save:hover:not(:disabled) { background: #6b93c7; }
-.btn-save:disabled { opacity: 0.5; cursor: default; }
-</style>

@@ -1,34 +1,41 @@
 <script setup lang="ts">
+import {
+  Bars3Icon,
+  XMarkIcon,
+  HomeIcon,
+  CpuChipIcon,
+  LightBulbIcon,
+  Squares2X2Icon,
+  ChevronUpIcon,
+  ChevronDownIcon,
+} from '@heroicons/vue/20/solid'
+
 const { loggedIn, user, clear } = useUserSession()
 const route = useRoute()
-const sidebarOpen = ref(true)
+const sidebarOpen = ref(false) // mobile drawer
 const menuOpen = ref(false)
 const showChangePassword = ref(false)
-const userSectionRef = ref<HTMLElement | null>(null)
-
-function handleResize() {
-  sidebarOpen.value = window.innerWidth > 768
-}
+const userSectionDesktopRef = ref<HTMLElement | null>(null)
+const userSectionMobileRef = ref<HTMLElement | null>(null)
 
 function handleDocumentClick(e: MouseEvent) {
-  if (userSectionRef.value && !userSectionRef.value.contains(e.target as Node)) {
-    menuOpen.value = false
-  }
+  const t = e.target as Node
+  const insideDesktop = userSectionDesktopRef.value?.contains(t) ?? false
+  const insideMobile = userSectionMobileRef.value?.contains(t) ?? false
+  if (!insideDesktop && !insideMobile) menuOpen.value = false
 }
 
 onMounted(() => {
-  sidebarOpen.value = window.innerWidth > 768
-  window.addEventListener('resize', handleResize)
   document.addEventListener('click', handleDocumentClick)
 })
 
 onBeforeUnmount(() => {
-  window.removeEventListener('resize', handleResize)
   document.removeEventListener('click', handleDocumentClick)
 })
 
 watch(() => route.path, () => {
-  if (window.innerWidth <= 768) sidebarOpen.value = false
+  sidebarOpen.value = false
+  menuOpen.value = false
 })
 
 async function logout() {
@@ -43,331 +50,274 @@ function openChangePassword() {
 }
 
 const navLinks = [
-  { to: '/', label: 'Dashboard' },
-  { to: '/sensors', label: 'Sensors' },
-  { to: '/lights', label: 'Lights' },
-  { to: '/integrations/hue', label: 'Hue Bridge' },
+  { to: '/', label: 'Dashboard', icon: HomeIcon },
+  { to: '/sensors', label: 'Sensors', icon: CpuChipIcon },
+  { to: '/lights', label: 'Lights', icon: LightBulbIcon },
+  { to: '/integrations/hue', label: 'Hue Bridge', icon: Squares2X2Icon },
 ]
+
+const initial = computed(() => (user.value?.name ?? '?').slice(0, 1).toUpperCase())
 </script>
 
 <template>
-  <div class="layout">
-    <!-- Header — always visible, full width -->
-    <header class="topbar">
-      <button
-        class="hamburger"
-        :aria-label="sidebarOpen ? 'Close menu' : 'Open menu'"
-        @click="sidebarOpen = !sidebarOpen"
-      >
-        <!-- Sidebar open: double chevron left = collapse -->
-        <svg v-if="sidebarOpen" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M11 17l-5-5 5-5"/>
-          <path d="M18 17l-5-5 5-5"/>
-        </svg>
-        <!-- Sidebar closed: double chevron right = expand -->
-        <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M6 7l5 5-5 5"/>
-          <path d="M13 7l5 5-5 5"/>
-        </svg>
-      </button>
-      <div class="brand">
-        <svg class="brand-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <!-- Ears -->
-          <ellipse cx="8.5" cy="6" rx="2.5" ry="5" fill="currentColor"/>
-          <ellipse cx="15.5" cy="6" rx="2.5" ry="5" fill="currentColor"/>
-          <!-- Inner ears -->
-          <ellipse cx="8.5" cy="6.5" rx="1.2" ry="3.5" fill="#4a6fa5"/>
-          <ellipse cx="15.5" cy="6.5" rx="1.2" ry="3.5" fill="#4a6fa5"/>
-          <!-- Head -->
-          <circle cx="12" cy="17" r="6" fill="currentColor"/>
-          <!-- Eyes -->
-          <circle cx="10" cy="16" r="0.9" fill="#161a26"/>
-          <circle cx="14" cy="16" r="0.9" fill="#161a26"/>
-          <!-- Nose -->
-          <circle cx="12" cy="18.5" r="0.7" fill="#4a6fa5"/>
-        </svg>
-        <span class="brand-name">Warren</span>
-      </div>
-      <div v-if="loggedIn" ref="userSectionRef" class="user-section">
-        <button class="btn-username" @click="menuOpen = !menuOpen">{{ user?.name }}</button>
-        <div v-if="menuOpen" class="user-menu">
-          <button class="menu-item" @click="openChangePassword">Change password</button>
-          <button class="menu-item menu-item--danger" @click="logout">Log out</button>
+  <!-- Catalyst SidebarLayout: tinted shell, surface main panel "card" -->
+  <div class="relative isolate flex min-h-svh w-full bg-surface max-lg:flex-col lg:bg-surface-2">
+
+    <!-- ─── Sidebar (desktop) ─────────────────────────────────────── -->
+    <div class="fixed inset-y-0 left-0 w-64 max-lg:hidden">
+      <nav class="flex h-full min-h-0 flex-col">
+        <!-- Brand header -->
+        <div class="flex flex-col border-b border-default p-4">
+          <NuxtLink to="/" class="flex items-center gap-3 rounded-lg p-1.5 hover:bg-default">
+            <span class="inline-flex size-8 items-center justify-center rounded-lg bg-stone-900 text-white dark:bg-white dark:text-stone-950">
+              <svg class="size-5" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <ellipse cx="8.5" cy="6" rx="2.5" ry="5" fill="currentColor" />
+                <ellipse cx="15.5" cy="6" rx="2.5" ry="5" fill="currentColor" />
+                <circle cx="12" cy="17" r="6" fill="currentColor" />
+                <circle cx="10" cy="16" r="0.9" class="fill-stone-900 dark:fill-white" />
+                <circle cx="14" cy="16" r="0.9" class="fill-stone-900 dark:fill-white" />
+              </svg>
+            </span>
+            <div class="flex flex-col">
+              <span class="text-sm/5 font-semibold text-text">Warren</span>
+              <span class="text-xs/4 text-subtle">Home dashboard</span>
+            </div>
+          </NuxtLink>
         </div>
-      </div>
-      <ChangePasswordModal v-if="showChangePassword" @close="showChangePassword = false" />
-    </header>
 
-    <!-- Below header: sidebar + content -->
-    <div class="body">
-      <!-- Mobile overlay -->
-      <Transition name="fade">
-        <div v-if="sidebarOpen" class="overlay" @click="sidebarOpen = false" />
-      </Transition>
-
-      <!-- Sidebar — sits below header -->
-      <aside class="sidebar" :class="{ open: sidebarOpen }">
-        <nav class="sidebar-nav">
+        <!-- Nav links (scrollable) -->
+        <div class="flex flex-1 flex-col gap-0.5 overflow-y-auto p-4">
           <NuxtLink
             v-for="link in navLinks"
             :key="link.to"
             :to="link.to"
-            class="nav-link"
-            :class="{ active: route.path === link.to }"
+            :class="[
+              'group relative flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left text-sm/5 font-medium',
+              route.path === link.to
+                ? 'bg-accent-soft text-accent-strong ring-1 ring-inset ring-accent/30'
+                : 'text-muted hover:bg-default hover:text-text',
+            ]"
           >
+            <component
+              :is="link.icon"
+              :class="[
+                'size-5 shrink-0',
+                route.path === link.to
+                  ? 'text-accent-strong'
+                  : 'text-subtle group-hover:text-text',
+              ]"
+            />
+            <span class="truncate">{{ link.label }}</span>
+          </NuxtLink>
+        </div>
+
+        <!-- User footer + dropdown (desktop) -->
+        <div v-if="loggedIn" ref="userSectionDesktopRef" class="relative border-t border-default p-3">
+          <button
+            type="button"
+            class="flex w-full items-center gap-3 rounded-lg p-2 text-left hover:bg-default"
+            @click="menuOpen = !menuOpen"
+          >
+            <span class="inline-flex size-9 shrink-0 items-center justify-center rounded-full bg-stone-900 text-sm font-medium text-white dark:bg-white dark:text-stone-950">
+              {{ initial }}
+            </span>
+            <span class="min-w-0 flex-1">
+              <span class="block truncate text-sm/5 font-medium text-text">{{ user?.name }}</span>
+              <span class="block truncate text-xs/4 text-subtle">Signed in</span>
+            </span>
+            <ChevronUpIcon class="size-4 text-subtle" />
+          </button>
+          <Transition
+            enter-active-class="transition duration-100 ease-out"
+            enter-from-class="transform opacity-0 scale-95"
+            enter-to-class="transform opacity-100 scale-100"
+            leave-active-class="transition duration-75 ease-in"
+            leave-from-class="transform opacity-100 scale-100"
+            leave-to-class="transform opacity-0 scale-95"
+          >
+            <div
+              v-if="menuOpen"
+              class="absolute bottom-full left-3 right-3 mb-2 origin-bottom rounded-xl bg-modal p-2 shadow-lg ring-1 ring-default focus:outline-none dark:ring-white/10"
+            >
+              <div class="px-2 pt-1 pb-2 space-y-3">
+                <div>
+                  <div class="text-[0.65rem] font-semibold uppercase tracking-wider text-subtle mb-1.5">Color scheme</div>
+                  <ColorSchemePicker />
+                </div>
+                <div class="flex items-center justify-between">
+                  <span class="text-sm/5 text-text">Appearance</span>
+                  <ThemeToggle />
+                </div>
+              </div>
+              <div class="my-1 border-t border-default" />
+              <button
+                class="block w-full rounded-md px-3 py-2 text-left text-sm/5 text-text hover:bg-default"
+                @click="openChangePassword"
+              >
+                Change password
+              </button>
+              <button
+                class="block w-full rounded-md px-3 py-2 text-left text-sm/5 text-red-700 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-500/10"
+                @click="logout"
+              >
+                Sign out
+              </button>
+            </div>
+          </Transition>
+        </div>
+      </nav>
+    </div>
+
+    <!-- ─── Mobile top bar ─────────────────────────────────────────── -->
+    <header class="flex items-center px-4 lg:hidden">
+      <div class="py-2.5">
+        <button
+          type="button"
+          class="-ml-1 inline-flex items-center justify-center rounded-lg p-2 text-muted hover:bg-default"
+          aria-label="Open navigation"
+          @click="sidebarOpen = true"
+        >
+          <Bars3Icon class="size-5" />
+        </button>
+      </div>
+      <NuxtLink to="/" class="min-w-0 flex-1 ml-2 flex items-center gap-2">
+        <span class="inline-flex size-7 items-center justify-center rounded-lg bg-stone-900 text-white dark:bg-white dark:text-stone-950">
+          <svg class="size-4" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <ellipse cx="8.5" cy="6" rx="2.5" ry="5" fill="currentColor" />
+            <ellipse cx="15.5" cy="6" rx="2.5" ry="5" fill="currentColor" />
+            <circle cx="12" cy="17" r="6" fill="currentColor" />
+          </svg>
+        </span>
+        <span class="text-sm/5 font-semibold tracking-tight text-text">Warren</span>
+      </NuxtLink>
+
+      <!-- User pill + dropdown (mobile) -->
+      <div v-if="loggedIn" ref="userSectionMobileRef" class="relative">
+        <button
+          type="button"
+          class="inline-flex items-center gap-2 rounded-full bg-default p-1 pr-3 hover:bg-surface-2"
+          @click="menuOpen = !menuOpen"
+        >
+          <span class="inline-flex size-7 shrink-0 items-center justify-center rounded-full bg-stone-900 text-xs font-medium text-white dark:bg-white dark:text-stone-950">
+            {{ initial }}
+          </span>
+          <ChevronDownIcon class="size-4 text-subtle" />
+        </button>
+        <Transition
+          enter-active-class="transition duration-100 ease-out"
+          enter-from-class="transform opacity-0 scale-95"
+          enter-to-class="transform opacity-100 scale-100"
+          leave-active-class="transition duration-75 ease-in"
+          leave-from-class="transform opacity-100 scale-100"
+          leave-to-class="transform opacity-0 scale-95"
+        >
+          <div
+            v-if="menuOpen"
+            class="absolute right-0 top-full mt-2 w-64 origin-top-right rounded-xl bg-modal p-2 shadow-lg ring-1 ring-default focus:outline-none dark:ring-white/10 z-30"
+          >
+            <div class="px-2 pt-1 pb-2 space-y-3">
+              <div class="text-sm/5 font-medium text-text truncate">{{ user?.name }}</div>
+              <div>
+                <div class="text-[0.65rem] font-semibold uppercase tracking-wider text-subtle mb-1.5">Color scheme</div>
+                <ColorSchemePicker />
+              </div>
+              <div class="flex items-center justify-between">
+                <span class="text-sm/5 text-text">Appearance</span>
+                <ThemeToggle />
+              </div>
+            </div>
+            <div class="my-1 border-t border-default" />
+            <button
+              class="block w-full rounded-md px-3 py-2 text-left text-sm/5 text-text hover:bg-default"
+              @click="openChangePassword"
+            >
+              Change password
+            </button>
+            <button
+              class="block w-full rounded-md px-3 py-2 text-left text-sm/5 text-red-700 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-500/10"
+              @click="logout"
+            >
+              Sign out
+            </button>
+          </div>
+        </Transition>
+      </div>
+    </header>
+
+    <!-- ─── Mobile drawer ──────────────────────────────────────────── -->
+    <Transition
+      enter-active-class="transition duration-200 ease-out"
+      enter-from-class="opacity-0"
+      enter-to-class="opacity-100"
+      leave-active-class="transition duration-150 ease-in"
+      leave-from-class="opacity-100"
+      leave-to-class="opacity-0"
+    >
+      <div
+        v-if="sidebarOpen"
+        class="fixed inset-0 z-40 bg-black/30 dark:bg-black/60 lg:hidden"
+        @click="sidebarOpen = false"
+      />
+    </Transition>
+    <Transition
+      enter-active-class="transition duration-200 ease-out"
+      enter-from-class="-translate-x-full"
+      enter-to-class="translate-x-0"
+      leave-active-class="transition duration-150 ease-in"
+      leave-from-class="translate-x-0"
+      leave-to-class="-translate-x-full"
+    >
+      <div
+        v-if="sidebarOpen"
+        class="fixed inset-y-0 left-0 z-50 flex w-72 max-w-[85vw] flex-col bg-surface p-2 shadow-xl ring-1 ring-default lg:hidden dark:ring-white/10"
+      >
+        <div class="flex items-center justify-between p-2">
+          <span class="text-sm/5 font-semibold text-text">Warren</span>
+          <button
+            type="button"
+            class="inline-flex items-center justify-center rounded-lg p-2 text-muted hover:bg-default"
+            aria-label="Close navigation"
+            @click="sidebarOpen = false"
+          >
+            <XMarkIcon class="size-5" />
+          </button>
+        </div>
+        <div class="mt-2 flex flex-col gap-0.5 px-2">
+          <NuxtLink
+            v-for="link in navLinks"
+            :key="link.to"
+            :to="link.to"
+            :class="[
+              'flex items-center gap-3 rounded-lg px-2 py-2 text-sm/5 font-medium',
+              route.path === link.to
+                ? 'bg-accent-soft text-accent-strong ring-1 ring-inset ring-accent/30'
+                : 'text-muted hover:bg-default hover:text-text',
+            ]"
+          >
+            <component
+              :is="link.icon"
+              :class="[
+                'size-5 shrink-0',
+                route.path === link.to
+                  ? 'text-accent-strong'
+                  : 'text-subtle',
+              ]"
+            />
             {{ link.label }}
           </NuxtLink>
-        </nav>
-      </aside>
+        </div>
+      </div>
+    </Transition>
 
-      <main class="main-content" :class="{ 'sidebar-visible': sidebarOpen }">
-        <div class="page-frame">
+    <!-- ─── Main content panel ────────────────────────────────────── -->
+    <main class="flex flex-1 flex-col pb-2 lg:min-w-0 lg:pl-64 lg:pr-2 lg:pt-2">
+      <div class="grow p-6 lg:rounded-lg lg:bg-surface lg:p-10 lg:shadow-sm lg:ring-1 lg:ring-default dark:lg:ring-white/10">
+        <div class="mx-auto max-w-6xl">
           <slot />
         </div>
-      </main>
-    </div>
+      </div>
+    </main>
+
+    <ChangePasswordModal v-if="showChangePassword" @close="showChangePassword = false" />
   </div>
 </template>
-
-<style scoped>
-/* ── Overall shell ───────────────────────────────────────── */
-.layout {
-  display: flex;
-  flex-direction: column;
-  min-height: 100vh;
-}
-
-/* ── Top header ──────────────────────────────────────────── */
-.topbar {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 64px;
-  background: #161a26;
-  border-bottom: 1px solid #2a2f45;
-  z-index: 100;
-  display: flex;
-  align-items: center;
-  padding: 0 16px;
-  gap: 12px;
-}
-
-.brand {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex: 1;
-}
-
-.brand-name {
-  font-size: 1.45rem;
-  font-weight: 900;
-  letter-spacing: -0.03em;
-  background: linear-gradient(135deg, #f1f5f9 20%, #7ab3e0 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-}
-
-.brand-icon {
-  width: 38px;
-  height: 38px;
-  color: #e2e8f0;
-  flex-shrink: 0;
-  filter: drop-shadow(0 0 6px rgba(74, 111, 165, 0.5));
-}
-
-.user-section {
-  position: relative;
-  flex-shrink: 0;
-}
-
-.btn-username {
-  background: none;
-  color: #64748b;
-  border: 1px solid #2a2f45;
-  border-radius: 6px;
-  padding: 5px 12px;
-  font-size: 0.78rem;
-  cursor: pointer;
-  transition: color 0.15s, border-color 0.15s;
-}
-
-.btn-username:hover {
-  color: #e2e8f0;
-  border-color: #4a6fa5;
-}
-
-.user-menu {
-  position: absolute;
-  top: calc(100% + 8px);
-  right: 0;
-  background: #1e2130;
-  border: 1px solid #2a2f45;
-  border-radius: 8px;
-  padding: 4px;
-  min-width: 160px;
-  z-index: 200;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.menu-item {
-  background: none;
-  border: none;
-  border-radius: 6px;
-  padding: 8px 12px;
-  font-size: 0.82rem;
-  color: #94a3b8;
-  text-align: left;
-  cursor: pointer;
-  transition: background 0.12s, color 0.12s;
-  width: 100%;
-}
-
-.menu-item:hover {
-  background: rgba(255, 255, 255, 0.06);
-  color: #e2e8f0;
-}
-
-.menu-item--danger {
-  color: #f87171;
-}
-
-.menu-item--danger:hover {
-  background: rgba(239, 68, 68, 0.1);
-  color: #fca5a5;
-}
-
-/* ── Hamburger ───────────────────────────────────────────── */
-.hamburger {
-  background: none;
-  border: none;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 4px;
-  width: 32px;
-  height: 32px;
-  flex-shrink: 0;
-  color: #64748b;
-  transition: color 0.15s;
-}
-
-.hamburger:hover { color: #e2e8f0; }
-
-.hamburger svg {
-  width: 22px;
-  height: 22px;
-}
-
-/* ── Body (sidebar + content) ────────────────────────────── */
-.body {
-  display: flex;
-  flex: 1;
-  padding-top: 64px;
-}
-
-/* ── Sidebar ─────────────────────────────────────────────── */
-.sidebar {
-  width: 200px;
-  flex-shrink: 0;
-  position: fixed;
-  top: 64px;
-  left: 0;
-  bottom: 0;
-  background: #161a26;
-  border-right: 1px solid #2a2f45;
-  display: flex;
-  flex-direction: column;
-  z-index: 60;
-  transform: translateX(-100%);
-  transition: transform 0.25s ease;
-}
-
-.sidebar.open {
-  transform: translateX(0);
-}
-
-.sidebar-nav {
-  padding: 10px;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  overflow-y: auto;
-}
-
-.nav-link {
-  display: block;
-  padding: 8px 12px;
-  border-radius: 8px;
-  font-size: 0.875rem;
-  font-weight: 500;
-  color: #64748b;
-  text-decoration: none;
-  transition: color 0.15s, background 0.15s;
-}
-
-.nav-link:hover {
-  color: #94a3b8;
-  background: rgba(255, 255, 255, 0.04);
-}
-
-.nav-link.active {
-  color: #e2e8f0;
-  background: rgba(255, 255, 255, 0.07);
-}
-
-/* ── Main content ────────────────────────────────────────── */
-.main-content {
-  flex: 1;
-  margin-left: 0;
-  padding: 28px;
-  transition: margin-left 0.25s ease;
-}
-
-.main-content.sidebar-visible {
-  margin-left: 200px;
-}
-
-.page-frame {
-  background: #161a26;
-  border: 1px solid #2a2f45;
-  border-radius: 12px;
-  padding: 28px;
-  max-width: 1200px;
-}
-
-/* ── Overlay (mobile only) ───────────────────────────────── */
-.overlay {
-  position: fixed;
-  inset: 0;
-  top: 64px;
-  background: rgba(0, 0, 0, 0.55);
-  z-index: 50;
-}
-
-.fade-enter-active,
-.fade-leave-active { transition: opacity 0.2s; }
-.fade-enter-from,
-.fade-leave-to { opacity: 0; }
-
-@media (min-width: 769px) {
-  .overlay { display: none; }
-}
-
-@media (max-width: 768px) {
-  .main-content,
-  .main-content.sidebar-visible {
-    margin-left: 0;
-    padding: 16px;
-  }
-
-  .page-frame {
-    padding: 20px 16px;
-  }
-}
-</style>

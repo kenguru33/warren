@@ -143,53 +143,46 @@ function isOffline(ms: number | null) {
 </script>
 
 <template>
-  <div class="room-card" :class="{ editing }">
-    <!-- Floating room actions on the top border -->
-    <div class="card-actions">
-      <button class="icon-btn" title="Add sensor" @click="emit('add-sensor', room.id)">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-          <path d="M12 5v14M5 12h14"/>
-        </svg>
-      </button>
-      <button class="icon-btn edit-btn" :class="{ active: editing }" title="Edit" @click="editing ? closeEditing() : (editing = true)">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/>
-        </svg>
-      </button>
-      <button class="icon-btn delete-btn" title="Remove room" @click="confirmRoom = true">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/>
-        </svg>
-      </button>
-    </div>
-
-    <!-- Header -->
-    <div class="card-header">
+  <div class="group/room relative rounded-xl bg-surface p-6 ring-1 ring-default shadow-sm dark:ring-white/10 dark:shadow-none [container-type:inline-size]">
+    <!-- Header — Catalyst's card header pattern: bold semibold heading + ghost icon row -->
+    <div class="flex items-center justify-between gap-3 min-h-[32px]">
       <input
         v-if="editing"
         v-model="editName"
-        class="room-name-input"
+        class="flex-1 min-w-0 rounded-lg border border-default bg-input px-3 py-1.5 text-base/6 font-semibold tracking-tight text-text outline-none focus:border-default focus:ring-2 focus:ring-accent focus:ring-inset dark:border-white/10"
         maxlength="60"
         @keydown.enter="closeEditing"
         @keydown.escape="editing = false"
       />
-      <h2 v-else class="room-name">{{ room.name }}</h2>
-      <MasterLightToggle
-        v-if="room.lightMaster"
-        class="room-master"
-        :master="room.lightMaster"
-        :pending="masterPending"
-        :error="masterError"
-        :partial="masterPartial"
-        @toggle="toggleRoomMaster"
-      />
+      <h2 v-else class="truncate text-base/6 font-semibold text-text">{{ room.name }}</h2>
+
+      <div class="flex items-center gap-1 ml-auto">
+        <MasterLightToggle
+          v-if="room.lightMaster"
+          :master="room.lightMaster"
+          :pending="masterPending"
+          :error="masterError"
+          :partial="masterPartial"
+          @toggle="toggleRoomMaster"
+        />
+        <div :class="['flex items-center gap-0.5 transition-opacity', editing ? 'opacity-100' : 'opacity-0 group-hover/room:opacity-100 group-focus-within/room:opacity-100']">
+          <button class="btn-icon !size-8" title="Add sensor" @click="emit('add-sensor', room.id)">
+            <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
+          </button>
+          <button :class="['btn-icon !size-8', editing && '!bg-default !text-text dark:!bg-white/10 dark:!text-white']" title="Edit room" @click="editing ? closeEditing() : (editing = true)">
+            <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>
+          </button>
+          <button class="btn-icon !size-8 hover:!text-red-600 dark:hover:!text-red-400" title="Remove room" @click="confirmRoom = true">
+            <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></svg>
+          </button>
+        </div>
+      </div>
     </div>
 
     <!-- Sectioned content -->
-    <div v-if="hasAnyContent" class="room-sections">
-
+    <div v-if="hasAnyContent" class="mt-6 flex flex-col gap-5 [&>*+*]:pt-5 [&>*+*]:border-t [&>*+*]:border-default dark:[&>*+*]:border-white/5">
       <!-- Ambient: temperature, humidity, motion -->
-      <div v-if="hasAmbient" class="ambient-strip">
+      <div v-if="hasAmbient" class="grid grid-cols-[repeat(auto-fill,minmax(140px,1fr))] gap-3">
         <ClimateTile
           v-if="tempSensor"
           variant="temperature"
@@ -226,7 +219,7 @@ function isOffline(ms: number | null) {
       </div>
 
       <!-- Cameras -->
-      <div v-if="hasCamera" class="camera-area">
+      <div v-if="hasCamera" class="grid grid-cols-1 gap-3">
         <CameraTile
           v-for="cam in cameras"
           :key="cam.id"
@@ -239,9 +232,9 @@ function isOffline(ms: number | null) {
         />
       </div>
 
-      <!-- Lighting: groups, then individual lights -->
-      <div v-if="hasLighting" class="lighting-area">
-        <div v-if="lightGroups.length" class="light-groups">
+      <!-- Lighting -->
+      <div v-if="hasLighting" class="flex flex-col gap-3">
+        <div v-if="lightGroups.length" class="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-3">
           <LightGroupTile
             v-for="group in lightGroups"
             :key="`group-${group.id}`"
@@ -251,9 +244,10 @@ function isOffline(ms: number | null) {
             @edit-group="(id) => emit('edit-group', id)"
             @ungroup="(id) => emit('ungroup', id)"
             @open-detail="(id) => detailGroupId = id"
+            @toggled="emit('master-toggled')"
           />
         </div>
-        <div v-if="ungroupedLights.length" class="light-chips">
+        <div v-if="ungroupedLights.length" class="grid grid-cols-[repeat(auto-fill,minmax(160px,1fr))] gap-3">
           <HueLightTile
             v-for="light in ungroupedLights"
             :key="light.id"
@@ -261,65 +255,58 @@ function isOffline(ms: number | null) {
             :editing="editing"
             @edit-sensor="(id) => emit('edit-sensor', id)"
             @remove-sensor="(id) => emit('remove-sensor', id)"
+            @toggled="emit('master-toggled')"
           />
         </div>
       </div>
-
     </div>
 
-    <!-- Group affordance: show in edit mode when there are at least 2 lights -->
+    <!-- Group affordance -->
     <Transition name="slide">
-      <div v-if="editing && lights.length >= 2" class="group-panel">
-        <button class="btn-group" @click="emit('add-group', room.id)">
-          <span class="plus">+</span> Group lights
+      <div v-if="editing && lights.length >= 2" class="mt-5 pt-4 border-t border-default dark:border-white/5">
+        <button
+          class="inline-flex items-center gap-1.5 rounded-lg border border-dashed border-strong px-3 py-1.5 text-xs/5 font-medium text-muted hover:text-text hover:border-strong dark:border-white/15 dark:hover:text-white dark:hover:border-white/30 transition-colors"
+          @click="emit('add-group', room.id)"
+        >
+          <svg class="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
+          Group lights
         </button>
       </div>
     </Transition>
 
-    <!-- Edit panel: per-sensor target toggles (only when climate sensors present) -->
+    <!-- Edit panel: per-sensor target toggles -->
     <Transition name="slide">
-      <div v-if="editing && hasClimate" class="edit-panel">
-
-        <div v-if="tempSensor" class="target-row">
-          <div class="toggle-row">
-            <span class="toggle-label">🌡️ Target temperature</span>
-            <label class="toggle-switch">
-              <input v-model="refTempEnabled" type="checkbox" />
-              <span class="toggle-track"><span class="toggle-thumb" /></span>
-            </label>
+      <div v-if="editing && hasClimate" class="mt-5 pt-5 border-t border-default dark:border-white/5 flex flex-col gap-5">
+        <div v-if="tempSensor" class="flex flex-col gap-2.5">
+          <div class="flex items-center justify-between">
+            <span class="text-sm/6 font-medium text-muted">Target temperature</span>
+            <AppSwitch :model-value="refTempEnabled" @update:model-value="(v) => (refTempEnabled = v)" label="Enable target" />
           </div>
           <Transition name="slide">
-            <div v-if="refTempEnabled" class="slider-wrap">
-              <div class="slider-labels">
-                <span class="slider-value">{{ refTemp }}°C</span>
-              </div>
+            <div v-if="refTempEnabled" class="flex flex-col gap-1.5 overflow-hidden">
+              <div class="text-sm/6 font-semibold text-text">{{ refTemp }}°C</div>
               <input v-model.number="refTemp" type="range" min="10" max="30" step="0.5" class="slider" />
-              <div class="slider-ticks"><span>10°</span><span>20°</span><span>30°</span></div>
+              <div class="flex justify-between text-[0.65rem] text-subtle"><span>10°</span><span>20°</span><span>30°</span></div>
             </div>
           </Transition>
         </div>
 
-        <div v-if="humSensor" class="target-row">
-          <div class="toggle-row">
-            <span class="toggle-label">💧 Target humidity</span>
-            <label class="toggle-switch">
-              <input v-model="refHumEnabled" type="checkbox" />
-              <span class="toggle-track"><span class="toggle-thumb" /></span>
-            </label>
+        <div v-if="humSensor" class="flex flex-col gap-2.5">
+          <div class="flex items-center justify-between">
+            <span class="text-sm/6 font-medium text-muted">Target humidity</span>
+            <AppSwitch :model-value="refHumEnabled" @update:model-value="(v) => (refHumEnabled = v)" label="Enable target" />
           </div>
           <Transition name="slide">
-            <div v-if="refHumEnabled" class="slider-wrap">
-              <div class="slider-labels">
-                <span class="slider-value">{{ refHumidity }}%</span>
-              </div>
+            <div v-if="refHumEnabled" class="flex flex-col gap-1.5 overflow-hidden">
+              <div class="text-sm/6 font-semibold text-text">{{ refHumidity }}%</div>
               <input v-model.number="refHumidity" type="range" min="20" max="80" step="1" class="slider" />
-              <div class="slider-ticks"><span>20%</span><span>50%</span><span>80%</span></div>
+              <div class="flex justify-between text-[0.65rem] text-subtle"><span>20%</span><span>50%</span><span>80%</span></div>
             </div>
           </Transition>
         </div>
 
-        <div class="edit-actions">
-          <button class="btn-save" @click="saveRef">Save</button>
+        <div class="flex justify-end">
+          <button class="btn-primary btn-sm" @click="saveRef">Save</button>
         </div>
       </div>
     </Transition>
@@ -337,324 +324,18 @@ function isOffline(ms: number | null) {
     :group="detailGroup"
     :members="detailGroupMembers"
     @close="detailGroupId = null"
+    @toggled="emit('master-toggled')"
   />
 </template>
 
 <style scoped>
-.room-card {
-  position: relative;
-  background: #1e2130;
-  border: 1px solid #2a2f45;
-  border-radius: 18px;
-  padding: 30px 22px 24px;
-  display: flex;
-  flex-direction: column;
-  gap: 22px;
-  transition: border-color 0.2s;
-  container-type: inline-size;
-}
-
-.room-card:hover,
-.room-card.editing {
-  border-color: #4a6fa5;
-}
-
-/* Header */
-.card-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  min-height: 32px;
-}
-
-.room-name {
-  font-size: 1.1rem;
-  font-weight: 600;
-  color: #e2e8f0;
-  letter-spacing: 0.01em;
-}
-
-.room-name-input {
-  font-size: 1.1rem;
-  font-weight: 600;
-  color: #e2e8f0;
-  letter-spacing: 0.01em;
-  background: #151825;
-  border: 1px solid #4a6fa5;
-  border-radius: 6px;
-  padding: 3px 10px;
-  outline: none;
-  flex: 1;
-  min-width: 0;
-}
-
-.room-master {
-  margin-left: auto;
-}
-
-/* Floating action cluster — segmented pill straddling the top-right card border */
-.card-actions {
-  position: absolute;
-  top: -15px;
-  right: 18px;
-  display: inline-flex;
-  z-index: 2;
-  background: #1e2130;
-  border: 1px solid #2a2f45;
-  border-radius: 9px;
-  overflow: hidden;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.15s, border-color 0.15s;
-}
-
-.room-card:hover .card-actions,
-.room-card.editing .card-actions,
-.room-card:has(.card-actions :focus-visible) .card-actions {
-  opacity: 1;
-  pointer-events: auto;
-}
-
-.icon-btn {
-  background: transparent;
-  border: none;
-  color: #94a3b8;
-  width: 30px;
-  height: 30px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: color 0.15s, background 0.15s;
-}
-
-.icon-btn + .icon-btn {
-  border-left: 1px solid #2a2f45;
-}
-
-.icon-btn:hover    { color: #cbd5e1; background: #252a3d; }
-.edit-btn.active   { color: #a0c4ff; background: #252a3d; }
-.delete-btn:hover  { color: #f87171; background: #2a1f24; }
-
-/* Sectioned content */
-.room-sections {
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-}
-
-/* Subtle hairline between adjacent sections — keeps the card legible without loud headings */
-.room-sections > * + * {
-  padding-top: 18px;
-  border-top: 1px solid #232839;
-}
-
-/* Ambient strip — temperature, humidity, motion side-by-side */
-.ambient-strip {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-  gap: 12px;
-}
-
-/* Camera area — stacked, each tile full card width for prominence */
-.camera-area {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 12px;
-}
-
-/* Lighting area — groups stacked above chips */
-.lighting-area {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.light-groups {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 12px;
-}
-
-.light-chips {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(128px, 1fr));
-  gap: 12px;
-}
-
-/* Edit panel */
-.edit-panel {
-  border-top: 1px solid #2a2f45;
-  padding-top: 18px;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.slider-labels {
-  display: flex;
-  justify-content: space-between;
-  font-size: 0.8rem;
-  color: #94a3b8;
-}
-
-.slider-value { font-weight: 600; color: #a0c4ff; }
-
-.slider {
-  -webkit-appearance: none;
-  width: 100%;
-  height: 4px;
-  border-radius: 2px;
-  background: #2a2f45;
-  outline: none;
-  cursor: pointer;
-}
-
-.slider::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  background: #4a6fa5;
-  border: 2px solid #a0c4ff;
-  cursor: pointer;
-}
-
-.slider::-moz-range-thumb {
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  background: #4a6fa5;
-  border: 2px solid #a0c4ff;
-  cursor: pointer;
-}
-
-.slider-ticks {
-  display: flex;
-  justify-content: space-between;
-  font-size: 0.65rem;
-  color: #334155;
-}
-
-.toggle-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.toggle-label {
-  font-size: 0.8rem;
-  font-weight: 600;
-  color: #94a3b8;
-}
-
-.toggle-switch {
-  position: relative;
-  cursor: pointer;
-}
-
-.toggle-switch input {
-  position: absolute;
-  opacity: 0;
-  width: 0;
-  height: 0;
-}
-
-.toggle-track {
-  display: block;
-  width: 36px;
-  height: 20px;
-  background: #2a2f45;
-  border-radius: 10px;
-  transition: background 0.2s;
-  position: relative;
-}
-
-.toggle-switch input:checked + .toggle-track {
-  background: #4a6fa5;
-}
-
-.toggle-thumb {
-  position: absolute;
-  top: 3px;
-  left: 3px;
-  width: 14px;
-  height: 14px;
-  background: #64748b;
-  border-radius: 50%;
-  transition: transform 0.2s, background 0.2s;
-}
-
-.toggle-switch input:checked + .toggle-track .toggle-thumb {
-  transform: translateX(16px);
-  background: #a0c4ff;
-}
-
-.target-row {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.slider-wrap {
-  display: flex;
-  flex-direction: column;
-  gap: 7px;
-  overflow: hidden;
-}
-
-.edit-actions {
-  display: flex;
-  justify-content: flex-end;
-}
-
-.btn-save {
-  padding: 0 14px;
-  min-width: 64px;
-  height: 30px;
-  line-height: 30px;
-  border-radius: 8px;
-  font-size: 0.8rem;
-  font-weight: 600;
-  cursor: pointer;
-  background: #4a6fa5;
-  color: #fff;
-  border: none;
-}
-.btn-save:hover { opacity: 0.85; }
-
-.group-panel {
-  border-top: 1px solid #2a2f45;
-  padding-top: 14px;
-  display: flex;
-  justify-content: flex-start;
-}
-.btn-group {
-  background: none;
-  color: #94a3b8;
-  border: 1px dashed #2a2f45;
-  border-radius: 8px;
-  padding: 7px 14px;
-  font-size: 0.8rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: color 0.15s, border-color 0.15s;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-.btn-group:hover { color: #a0c4ff; border-color: #4a6fa5; }
-.btn-group .plus { font-weight: 700; font-size: 0.95rem; line-height: 1; }
-
+/* Slide transition for the edit panel — utilities can't express this cleanly. */
 .slide-enter-active,
 .slide-leave-active {
   transition: max-height 0.25s ease, opacity 0.2s ease;
   max-height: 500px;
   overflow: hidden;
 }
-
 .slide-enter-from,
 .slide-leave-to {
   max-height: 0;

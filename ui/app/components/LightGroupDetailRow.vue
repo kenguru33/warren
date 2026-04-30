@@ -3,6 +3,10 @@ import type { SensorView } from '../../shared/types'
 
 const props = defineProps<{ sensor: SensorView }>()
 
+const emit = defineEmits<{
+  (e: 'toggled'): void
+}>()
+
 const localOn = ref<boolean | null>(props.sensor.lightOn ?? false)
 const localBri = ref<number>(briFromHue(props.sensor.lightBrightness ?? 0))
 const dragging = ref(false)
@@ -33,6 +37,7 @@ async function toggleOn() {
   error.value = null
   try {
     await $fetch(deviceUrl(), { method: 'POST', body: { on: next } })
+    emit('toggled')
   } catch (err: unknown) {
     localOn.value = prev
     const e = err as { data?: { error?: string }; message?: string }
@@ -54,6 +59,7 @@ async function sendBrightness(value: number) {
     const body: { brightness: number; on?: boolean } = { brightness: value }
     if (value > 0 && !localOn.value) { body.on = true; localOn.value = true }
     await $fetch(deviceUrl(), { method: 'POST', body })
+    emit('toggled')
   } catch (err: unknown) {
     const e = err as { data?: { error?: string }; message?: string }
     error.value = e.data?.error === 'bridge_unreachable' ? 'Bridge unreachable' : (e.message ?? 'failed')
@@ -93,32 +99,55 @@ const displayName = computed(() => props.sensor.label?.trim() || props.sensor.hu
 </script>
 
 <template>
-  <div class="row" :class="{ 'is-on': localOn && reachable, unreachable: !reachable }">
+  <div
+    :class="[
+      'grid grid-cols-[40px_minmax(0,1fr)_minmax(120px,220px)] items-center gap-4 px-3 py-2.5 rounded-xl ring-1 transition-colors',
+      !reachable
+        ? 'bg-error/5 ring-error/25'
+        : localOn
+          ? 'bg-accent/10 ring-accent/30'
+          : 'bg-surface-2/60 ring-default/70 dark:ring-white/5',
+    ]"
+  >
     <button
-      class="row-toggle"
-      :class="{ on: localOn && reachable }"
+      :class="[
+        'flex size-9 items-center justify-center rounded-xl text-lg transition-all',
+        localOn && reachable
+          ? 'bg-accent text-white shadow-md shadow-accent/40 ring-1 ring-accent/50'
+          : 'bg-surface ring-1 ring-default',
+        (pending || !reachable) && 'opacity-50 cursor-not-allowed',
+      ]"
       :disabled="pending || !reachable"
       :title="localOn ? 'Turn off' : 'Turn on'"
       @click="toggleOn"
     >
-      <span class="bulb">💡</span>
+      <span :class="!(localOn && reachable) && 'grayscale opacity-50'">💡</span>
     </button>
 
-    <div class="row-info">
-      <span class="row-name" :title="displayName">{{ displayName }}</span>
-      <span class="row-state" :class="{ off: !localOn || !reachable, error: !!error }">
+    <div class="flex flex-col gap-0.5 min-w-0">
+      <span class="text-sm font-semibold text-text truncate" :title="displayName">{{ displayName }}</span>
+      <span
+        v-if="error"
+        class="text-xs text-error truncate"
+      >{{ error }}</span>
+      <span
+        v-else
+        :class="[
+          'text-[0.7rem] font-medium uppercase tracking-wider truncate',
+          !reachable ? 'text-error' : localOn ? 'text-warning' : 'text-subtle',
+        ]"
+      >
         <template v-if="!reachable">Unreachable</template>
-        <template v-else-if="error">{{ error }}</template>
         <template v-else>{{ localOn ? 'On' : 'Off' }}</template>
       </span>
     </div>
 
-    <div class="row-control">
+    <div class="flex items-center justify-end">
       <input
         v-if="hasBrightness"
         v-model.number="localBri"
         type="range" min="0" max="100" step="1"
-        class="row-slider"
+        class="slider slider-sm w-full"
         :disabled="!reachable"
         :title="`Brightness ${localBri}%`"
         @mousedown="dragging = true"
@@ -126,129 +155,7 @@ const displayName = computed(() => props.sensor.label?.trim() || props.sensor.hu
         @input="onBrightnessInput"
         @change="commitBrightness"
       />
-      <span v-else class="no-bri">on/off only</span>
+      <span v-else class="w-full text-right text-xs italic text-subtle">on/off only</span>
     </div>
   </div>
 </template>
-
-<style scoped>
-.row {
-  display: grid;
-  grid-template-columns: 40px minmax(0, 1fr) minmax(120px, 220px);
-  align-items: center;
-  gap: 14px;
-  padding: 10px 12px;
-  background: #151825;
-  border: 1px solid #232839;
-  border-radius: 10px;
-  transition: background 0.15s, border-color 0.15s;
-}
-
-.row.is-on {
-  border-color: #2a3454;
-  background: linear-gradient(180deg, #1a2038 0%, #151825 100%);
-}
-
-.row.unreachable {
-  background: rgba(248, 113, 113, 0.06);
-  border-color: rgba(248, 113, 113, 0.25);
-}
-
-.row-toggle {
-  width: 36px;
-  height: 36px;
-  padding: 0;
-  border-radius: 50%;
-  border: 1px solid #2a2f45;
-  background: #1a1d2c;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1.05rem;
-  line-height: 1;
-  transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
-}
-.row-toggle .bulb {
-  filter: grayscale(0.6) brightness(0.7);
-  transition: filter 0.15s;
-}
-.row-toggle.on {
-  background: #4a6fa5;
-  border-color: #a0c4ff;
-  box-shadow: 0 0 10px rgba(160, 196, 255, 0.35);
-}
-.row-toggle.on .bulb { filter: none; }
-.row-toggle:disabled { opacity: 0.5; cursor: not-allowed; }
-
-.row-info {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  min-width: 0;
-}
-
-.row-name {
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: #e2e8f0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.row-state {
-  font-size: 0.6rem;
-  color: #a0c4ff;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  font-weight: 600;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.row-state.off { color: #475569; }
-.row-state.error { color: #f87171; text-transform: none; letter-spacing: 0; font-size: 0.7rem; }
-.row.unreachable .row-state { color: #f87171; }
-
-.row-control {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-}
-
-.row-slider {
-  width: 100%;
-  -webkit-appearance: none;
-  appearance: none;
-  height: 3px;
-  border-radius: 2px;
-  background: #2a2f45;
-  outline: none;
-  cursor: pointer;
-}
-.row-slider:disabled { opacity: 0.5; cursor: not-allowed; }
-.row-slider::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 14px; height: 14px;
-  border-radius: 50%;
-  background: #a0c4ff;
-  cursor: pointer;
-}
-.row-slider::-moz-range-thumb {
-  width: 14px; height: 14px;
-  border-radius: 50%;
-  background: #a0c4ff;
-  cursor: pointer;
-  border: 0;
-}
-
-.no-bri {
-  font-size: 0.65rem;
-  color: #475569;
-  font-style: italic;
-  text-align: right;
-  width: 100%;
-}
-</style>
