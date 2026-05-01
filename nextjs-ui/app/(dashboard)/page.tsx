@@ -2,7 +2,11 @@
 
 import { useMemo, useState } from 'react'
 import type { LightGroupView, RoomWithSensors, SensorView } from '@/lib/shared/types'
+import { LIGHT_THEMES } from '@/lib/shared/light-themes'
 import { useRooms } from '@/lib/hooks/use-rooms'
+import { Button } from '@/app/components/button'
+import { Heading } from '@/app/components/heading'
+import { Text } from '@/app/components/text'
 import { RoomCard } from '@/app/components/warren/room-card'
 import { AddRoomModal } from '@/app/components/warren/add-room-modal'
 import { AddSensorModal, type AddSensorPayload } from '@/app/components/warren/add-sensor-modal'
@@ -11,6 +15,7 @@ import { LightGroupDetailModal } from '@/app/components/warren/light-group-detai
 import { SensorConfigModal } from '@/app/components/warren/sensor-config-modal'
 import { SensorHistoryModal } from '@/app/components/warren/sensor-history-modal'
 import { LiveStreamModal } from '@/app/components/warren/live-stream-modal'
+import { EditLightModal } from '@/app/components/warren/edit-light-modal'
 
 export default function DashboardPage() {
   const { rooms, lastUpdated, refresh, addRoom, removeRoom, renameRoom, removeSensor, addSensor, saveReference, clearReference } = useRooms()
@@ -26,6 +31,11 @@ export default function DashboardPage() {
   const [historySensor, setHistorySensor] = useState<{ sensor: SensorView; roomName: string } | null>(null)
   const [configSensor, setConfigSensor] = useState<{ deviceId: string; label: string | null } | null>(null)
   const [liveStream, setLiveStream] = useState<{ name: string; streamUrl: string | null } | null>(null)
+  const [editingLight, setEditingLight] = useState<SensorView | null>(null)
+  // Optimistic per-light color overrides — populated when the user picks a color
+  // in EditLightModal so the bulb in LightGroupDetailModal updates immediately
+  // instead of waiting for the next /rooms refresh (where color isn't tracked).
+  const [lightColorOverrides, setLightColorOverrides] = useState<Record<number, string>>({})
 
   const addSensorRoom = useMemo(
     () => addSensorRoomId !== null ? rooms.find(r => r.id === addSensorRoomId) ?? null : null,
@@ -89,12 +99,40 @@ export default function DashboardPage() {
     if (!found?.sensor.deviceId) return
     if (found.sensor.type === 'temperature') {
       setConfigSensor({ deviceId: found.sensor.deviceId, label: found.sensor.label })
+    } else if (found.sensor.type === 'light') {
+      setEditingLight(found.sensor)
     } else {
-      // Other sensor types: simple history view for now (Vue parity defers to SensorConfigModal
-      // for temperature-only — labels are edited via the /sensors page).
+      // Other sensor types fall back to a history view; rename for non-light/non-temp
+      // sensors lives on the /sensors page.
       setHistorySensor(found)
     }
   }
+
+  // Resolve the active group's bulbPalette so EditLightModal can constrain its
+  // color picker when the light is part of a group.
+  const editingLightGroup = useMemo(() => {
+    if (!editingLight?.groupId) return null
+    for (const r of rooms) {
+      const g = r.lightGroups.find(g => g.id === editingLight.groupId)
+      if (g) return g
+    }
+    return null
+  }, [editingLight, rooms])
+  const editingLightPalette = editingLightGroup
+    ? LIGHT_THEMES[editingLightGroup.theme]?.bulbPalette
+    : undefined
+  // Current color the bulb displays: prefer an explicit override (a previous
+  // pick this session), otherwise the round-robin palette color the group
+  // would assign by member index.
+  const editingLightCurrentColor = (() => {
+    if (!editingLight) return undefined
+    const override = lightColorOverrides[editingLight.id]
+    if (override) return override
+    if (!editingLightGroup || !editingLightPalette?.length) return undefined
+    const idx = editingLightGroup.memberSensorIds.indexOf(editingLight.id)
+    if (idx < 0) return undefined
+    return editingLightPalette[idx % editingLightPalette.length]
+  })()
 
   function handleViewHistory(sensor: SensorView) {
     const found = findSensor(sensor.id)
@@ -115,19 +153,19 @@ export default function DashboardPage() {
       <div className="space-y-6">
         <div className="flex items-baseline justify-between gap-4 flex-wrap">
           <div>
-            <h1 className="text-2xl/8 font-semibold tracking-tight text-text">Dashboard</h1>
-            <p className="text-sm/6 text-subtle mt-1">Last updated {lastUpdated}</p>
+            <Heading>Dashboard</Heading>
+            <Text className="mt-1">Last updated {lastUpdated}</Text>
           </div>
-          <button type="button" className="btn-primary" onClick={() => setShowAddRoom(true)}>
+          <Button onClick={() => setShowAddRoom(true)}>
             Add room
-          </button>
+          </Button>
         </div>
 
         {rooms.length === 0 ? (
-          <div className="card p-8 text-center">
-            <p className="text-sm/6 text-subtle">
+          <div className="rounded-xl bg-surface ring-1 ring-default shadow-sm dark:ring-white/10 dark:shadow-none p-8 text-center">
+            <Text>
               No rooms yet. Click &quot;Add room&quot; to create one and assign sensors to it.
-            </p>
+            </Text>
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-5 lg:grid-cols-2 xl:grid-cols-3">
@@ -202,6 +240,7 @@ export default function DashboardPage() {
         open={groupDetail !== null}
         group={groupDetail?.group ?? null}
         members={groupDetail?.members ?? []}
+        colorOverrides={lightColorOverrides}
         onClose={() => setGroupDetailId(null)}
         onToggled={refresh}
         onEditSensor={handleEditSensor}
@@ -233,6 +272,19 @@ export default function DashboardPage() {
           onClose={() => setLiveStream(null)}
         />
       )}
+
+      <EditLightModal
+        open={!!editingLight}
+        sensor={editingLight}
+        paletteColors={editingLightPalette}
+        groupName={editingLightGroup?.name}
+        currentColor={editingLightCurrentColor}
+        onClose={() => setEditingLight(null)}
+        onSaved={refresh}
+        onColorApplied={(sensorId, hex) => {
+          setLightColorOverrides(prev => ({ ...prev, [sensorId]: hex }))
+        }}
+      />
     </>
   )
 }

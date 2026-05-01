@@ -88,6 +88,22 @@ All three are guarded by `globalThis` flags so dev HMR doesn't leak. Process SIG
 - Pre-paint theme/scheme bootstrap is an inline `<script>` in `app/layout.tsx` reading `localStorage warren:theme` + `warren:scheme`.
 - Touch-vs-mouse hover: use `pointer-fine:opacity-0 pointer-fine:group-hover/tile:opacity-100`, not plain `group-hover`. Plain `group-hover` keeps controls invisible on touch devices.
 
+#### UI primitives — Catalyst first
+
+Reach for Catalyst components from `app/components/` before hand-rolling chrome. Canonical imports:
+
+- **Buttons**: `Button` (variants: default, `outline`, `plain`, `color="red"`, `color="dark/zinc"`, etc.). `Button plain` is the icon-only button shape.
+- **Dialogs**: `Dialog` + `DialogTitle` / `DialogBody` / `DialogActions` from `@/app/components/dialog`. For confirmation prompts use `Alert` + `AlertTitle` / `AlertDescription` / `AlertActions` (see `confirm-dialog.tsx`).
+- **Forms**: `Fieldset` / `FieldGroup` / `Field` / `Label` / `Description` / `ErrorMessage` from `@/app/components/fieldset`; `Input`, `Textarea`, `Select`, `Listbox`, `Switch` (and `SwitchField`).
+- **Layout chrome**: `Sidebar*` for the dashboard shell, `Navbar*` for mobile top bar, `Dropdown*` for menus, `Avatar`/`AvatarButton` for the user trigger.
+- **Typography**: `Heading` / `Subheading` / `Text` / `Strong` / `Code` / `Badge`.
+
+When nesting Heroicons inside Catalyst `Button` / `SidebarItem` / `DropdownItem` / `ListboxOption`, attach `data-slot="icon"` to the `<Icon>` so Catalyst's `*:data-[slot=icon]:size-{4,5}` selectors apply.
+
+The six per-scheme blocks in `globals.css` alias `--color-zinc-*` and `--color-blue-500` so Catalyst's hard-coded `bg-zinc-900` / `outline-blue-500` etc. follow the active scheme without forking primitive files. **Do not** override `--color-white` — Catalyst's literal whites stay literal.
+
+Two utilities are kept by design and don't have Catalyst equivalents: `.slider` / `.slider-sm` (range thumb pseudo-element styling can't live in className strings) and `.pretty-scroll` (thin scrollbar for overflow areas in modals/long lists). Both are documented in `globals.css`.
+
 ### Required env vars
 
 | Var | Purpose |

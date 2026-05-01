@@ -1,7 +1,11 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { PencilSquareIcon, PlusIcon, TrashIcon } from '@heroicons/react/20/solid'
 import type { RoomWithSensors, SensorView } from '@/lib/shared/types'
+import { Button } from '@/app/components/button'
+import { Heading } from '@/app/components/heading'
+import { Input } from '@/app/components/input'
 import { ClimateTile } from './climate-tile'
 import { MotionTile } from './motion-tile'
 import { CameraTile } from './camera-tile'
@@ -155,7 +159,7 @@ export function RoomCard({
     <div className="group/room relative rounded-xl bg-surface p-6 ring-1 ring-default shadow-sm dark:ring-white/10 dark:shadow-none [container-type:inline-size]">
       <div className="flex items-center justify-between gap-3 min-h-[32px]">
         {editing ? (
-          <input
+          <Input
             value={editName}
             onChange={e => setEditName(e.target.value)}
             onKeyDown={e => {
@@ -163,10 +167,10 @@ export function RoomCard({
               if (e.key === 'Escape') setEditing(false)
             }}
             maxLength={60}
-            className="flex-1 min-w-0 rounded-lg border border-default bg-input px-3 py-1.5 text-base/6 font-semibold tracking-tight text-text outline-none focus:border-default focus:ring-2 focus:ring-accent focus:ring-inset dark:border-white/10"
+            className="flex-1"
           />
         ) : (
-          <h2 className="truncate text-base/6 font-semibold text-text">{room.name}</h2>
+          <Heading level={2} className="truncate !text-base/6">{room.name}</Heading>
         )}
 
         <div className="flex items-center gap-1 ml-auto">
@@ -185,20 +189,15 @@ export function RoomCard({
               ? 'opacity-100'
               : 'pointer-fine:opacity-0 pointer-fine:group-hover/room:opacity-100 pointer-fine:group-focus-within/room:opacity-100',
           ].join(' ')}>
-            <button type="button" className="btn-icon !size-8" title="Add sensor" onClick={() => onAddSensor(room.id)}>
-              <svg className="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}><path d="M12 5v14M5 12h14"/></svg>
-            </button>
-            <button
-              type="button"
-              className={`btn-icon !size-8 ${editing ? '!bg-default !text-text dark:!bg-white/10 dark:!text-white' : ''}`}
-              title="Edit room"
-              onClick={editing ? closeEditing : openEditing}
-            >
-              <svg className="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>
-            </button>
-            <button type="button" className="btn-icon !size-8 hover:!text-red-600 dark:hover:!text-red-400" title="Remove room" onClick={() => setConfirmRoom(true)}>
-              <svg className="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></svg>
-            </button>
+            <Button plain title="Add sensor" aria-label="Add sensor" onClick={() => onAddSensor(room.id)}>
+              <PlusIcon data-slot="icon" />
+            </Button>
+            <Button plain title="Edit room" aria-label="Edit room" onClick={editing ? closeEditing : openEditing}>
+              <PencilSquareIcon data-slot="icon" />
+            </Button>
+            <Button plain title="Remove room" aria-label="Remove room" onClick={() => setConfirmRoom(true)}>
+              <TrashIcon data-slot="icon" />
+            </Button>
           </div>
         </div>
       </div>
@@ -301,14 +300,10 @@ export function RoomCard({
 
       {editing && lights.length >= 2 && (
         <div className="mt-5 pt-4 border-t border-default dark:border-white/5">
-          <button
-            type="button"
-            onClick={() => onAddGroup(room.id)}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-dashed border-strong px-3 py-1.5 text-xs/5 font-medium text-muted hover:text-text hover:border-strong dark:border-white/15 dark:hover:text-white dark:hover:border-white/30 transition-colors"
-          >
-            <svg className="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}><path d="M12 5v14M5 12h14"/></svg>
+          <Button outline onClick={() => onAddGroup(room.id)}>
+            <PlusIcon data-slot="icon" />
             Group lights
-          </button>
+          </Button>
         </div>
       )}
 
@@ -345,7 +340,7 @@ export function RoomCard({
             </div>
           )}
           <div className="flex justify-end">
-            <button type="button" className="btn-primary btn-sm" onClick={saveRef}>Save</button>
+            <Button onClick={saveRef}>Save</Button>
           </div>
         </div>
       )}

@@ -24,10 +24,14 @@ export function CameraTile({
   const [confirmRemove, setConfirmRemove] = useState(false)
 
   return (
-    <button
-      type="button"
+    <div
+      role="button"
+      tabIndex={0}
       onClick={() => onOpenLive(sensor.id)}
-      className="group/tile relative aspect-video w-full overflow-hidden rounded-2xl bg-surface-2 ring-1 ring-default/70 dark:ring-white/5 cursor-pointer transition hover:ring-default dark:hover:ring-white/10"
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpenLive(sensor.id) }
+      }}
+      className="group/tile relative aspect-video w-full cursor-pointer overflow-hidden rounded-2xl bg-surface-2 ring-1 ring-default/70 transition hover:ring-default focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent dark:ring-white/5 dark:hover:ring-white/10"
     >
       {sensor.snapshotUrl ? (
         // External MJPEG/JPEG endpoints — Next/Image's optimization isn't useful here.
@@ -91,7 +95,7 @@ export function CameraTile({
         onConfirm={() => { onRemoveSensor(sensor.id); setConfirmRemove(false) }}
         onCancel={() => setConfirmRemove(false)}
       />
-    </button>
+    </div>
   )
 }
 

@@ -3,8 +3,14 @@
 import { useEffect, useMemo, useState } from 'react'
 import { XMarkIcon } from '@heroicons/react/20/solid'
 import type { LightGroupView, SensorView } from '@/lib/shared/types'
-import type { LightThemeKey } from '@/lib/shared/light-themes'
-import { AppDialog } from './app-dialog'
+import { LIGHT_THEMES, type LightThemeKey } from '@/lib/shared/light-themes'
+import { Button } from '@/app/components/button'
+import {
+  Dialog,
+  DialogBody,
+  DialogTitle,
+} from '@/app/components/dialog'
+import { Field, Label } from '@/app/components/fieldset'
 import { LightThemePicker } from './light-theme-picker'
 import { LightGroupDetailRow } from './light-group-detail-row'
 
@@ -12,6 +18,7 @@ export function LightGroupDetailModal({
   open,
   group,
   members,
+  colorOverrides,
   onClose,
   onToggled,
   onEditSensor,
@@ -19,6 +26,9 @@ export function LightGroupDetailModal({
   open: boolean
   group: LightGroupView | null
   members: SensorView[]
+  /** Per-sensor color override, populated after a custom color is applied via
+   *  EditLightModal. Wins over the round-robin theme palette color. */
+  colorOverrides?: Record<number, string>
   onClose: () => void
   onToggled: () => void
   onEditSensor: (sensorId: number) => void
@@ -85,47 +95,57 @@ export function LightGroupDetailModal({
   }
 
   return (
-    <AppDialog open={open} onClose={onClose} maxWidthClass="max-w-lg">
-      <div className="px-6 pt-5 pb-4 border-b border-default">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <h3 className="text-base/6 font-semibold text-text truncate">{group.name}</h3>
-            <p className="mt-0.5 text-xs text-subtle uppercase tracking-wider font-medium">
-              {stateLabel} · {memberLabel}
-            </p>
-          </div>
-          <button type="button" className="btn-icon size-8" title="Close" aria-label="Close" onClick={onClose}>
-            <XMarkIcon className="size-4" />
-          </button>
+    <Dialog open={open} onClose={onClose} size="lg">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <DialogTitle className="truncate">{group.name}</DialogTitle>
+          <p className="mt-0.5 text-xs font-medium tracking-wider text-subtle uppercase">
+            {stateLabel} · {memberLabel}
+          </p>
         </div>
-        <div className="mt-4">
-          <label className="label">Color theme</label>
+        <Button plain aria-label="Close" onClick={onClose}>
+          <XMarkIcon data-slot="icon" />
+        </Button>
+      </div>
+
+      <div className="mt-4">
+        <Field>
+          <Label>Color theme</Label>
           <div className="mt-1.5">
             <LightThemePicker value={localTheme ?? group.theme} onChange={onThemeChange} />
           </div>
-          {themeError && (
-            <p className="mt-2 rounded-lg bg-error/10 ring-1 ring-error/30 px-3 py-2 text-xs text-error">{themeError}</p>
-          )}
-        </div>
-      </div>
-
-      <div className="px-6 py-5 overflow-y-auto pretty-scroll">
-        {sortedMembers.length === 0 ? (
-          <p className="text-center text-sm text-subtle py-6 m-0">No lights in this group.</p>
-        ) : (
-          <ul role="list" className="flex flex-col gap-2">
-            {sortedMembers.map(m => (
-              <li key={m.id}>
-                <LightGroupDetailRow
-                  sensor={m}
-                  onToggled={onToggled}
-                  onEditSensor={onEditSensor}
-                />
-              </li>
-            ))}
-          </ul>
+        </Field>
+        {themeError && (
+          <p className="mt-2 rounded-lg bg-error/10 ring-1 ring-error/30 px-3 py-2 text-xs text-error">{themeError}</p>
         )}
       </div>
-    </AppDialog>
+
+      <DialogBody>
+        {sortedMembers.length === 0 ? (
+          <p className="m-0 py-6 text-center text-sm text-subtle">No lights in this group.</p>
+        ) : (
+          <ul role="list" className="-m-2 flex max-h-[50vh] flex-col gap-2 overflow-y-auto p-2 pretty-scroll">
+            {sortedMembers.map((m, i) => {
+              const palette = LIGHT_THEMES[localTheme ?? group.theme]?.bulbPalette ?? []
+              const override = colorOverrides?.[m.id]
+              const accentColor = override
+                ?? (m.capabilities?.color && palette.length > 0
+                  ? palette[i % palette.length]
+                  : undefined)
+              return (
+                <li key={m.id}>
+                  <LightGroupDetailRow
+                    sensor={m}
+                    accentColor={accentColor}
+                    onToggled={onToggled}
+                    onEditSensor={onEditSensor}
+                  />
+                </li>
+              )
+            })}
+          </ul>
+        )}
+      </DialogBody>
+    </Dialog>
   )
 }

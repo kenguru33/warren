@@ -1,8 +1,14 @@
 'use client'
 
 import useSWR from 'swr'
+import { XMarkIcon } from '@heroicons/react/20/solid'
 import type { SensorView } from '@/lib/shared/types'
-import { AppDialog } from './app-dialog'
+import { Button } from '@/app/components/button'
+import {
+  Dialog,
+  DialogBody,
+  DialogTitle,
+} from '@/app/components/dialog'
 
 interface Reading { time: number; value: number }
 
@@ -87,20 +93,18 @@ export function SensorHistoryModal({
   const latest = readings.length ? readings[readings.length - 1]!.value : null
 
   return (
-    <AppDialog open={open} onClose={onClose} maxWidthClass="max-w-3xl">
-      <div className="px-6 pt-5 pb-4 border-b border-default flex items-start justify-between gap-3">
+    <Dialog open={open} onClose={onClose} size="3xl">
+      <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <h3 className="text-base/6 font-semibold text-text truncate">{title}</h3>
+          <DialogTitle className="truncate">{title}</DialogTitle>
           <p className="text-xs text-subtle mt-0.5">{roomName} · last 24 hours</p>
         </div>
-        <button type="button" className="btn-icon size-8" aria-label="Close" onClick={onClose}>
-          <svg className="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
-            <path d="M18 6 6 18M6 6l12 12"/>
-          </svg>
-        </button>
+        <Button plain aria-label="Close" onClick={onClose}>
+          <XMarkIcon data-slot="icon" />
+        </Button>
       </div>
 
-      <div className="px-6 py-5 space-y-5">
+      <DialogBody className="space-y-5">
         <div className="rounded-xl bg-surface-2/60 ring-1 ring-default p-4 min-h-[180px] flex items-center justify-center">
           {isLoading ? (
             <div className="text-sm text-subtle">Loading…</div>
@@ -178,7 +182,7 @@ export function SensorHistoryModal({
             {motionEvents.length} event{motionEvents.length === 1 ? '' : 's'} in the last 24 hours.
           </div>
         ) : null}
-      </div>
-    </AppDialog>
+      </DialogBody>
+    </Dialog>
   )
 }

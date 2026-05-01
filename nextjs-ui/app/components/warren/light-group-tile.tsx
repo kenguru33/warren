@@ -5,6 +5,8 @@ import { PencilSquareIcon, XMarkIcon } from '@heroicons/react/20/solid'
 import type { LightGroupView, LightGroupState, SensorView } from '@/lib/shared/types'
 import { resolveLightTheme, MIXED_RING_DEFAULT } from '@/lib/shared/light-themes'
 import { useTheme } from '@/lib/hooks/use-theme'
+import { Badge } from '@/app/components/badge'
+import { Button } from '@/app/components/button'
 import { ConfirmDialog } from './confirm-dialog'
 
 export function LightGroupTile({
@@ -225,11 +227,11 @@ export function LightGroupTile({
       {(group.unreachableCount > 0 || partial) && (
         <div className="flex flex-wrap justify-center gap-1.5">
           {group.unreachableCount > 0 && (
-            <span className="badge badge-error" title={`${group.unreachableCount} unreachable`}>
+            <Badge color="red" title={`${group.unreachableCount} unreachable`}>
               {group.unreachableCount} offline
-            </span>
+            </Badge>
           )}
-          {partial && <span className="badge badge-warning" title={`${partial.failed} failed`}>{partial.failed} failed</span>}
+          {partial && <Badge color="amber" title={`${partial.failed} failed`}>{partial.failed} failed</Badge>}
         </div>
       )}
       {error && (
@@ -241,12 +243,12 @@ export function LightGroupTile({
 
       {editing && (
         <div className="absolute top-1.5 right-1.5 flex items-center gap-0.5 rounded-xl bg-surface/75 p-0.5 backdrop-blur-md transition-opacity pointer-fine:opacity-0 pointer-fine:group-hover/tile:opacity-100 dark:bg-surface/65">
-          <button type="button" className="btn-icon size-7" title="Edit group" onClick={(e) => { e.stopPropagation(); onEditGroup(group.id) }}>
-            <PencilSquareIcon className="size-3.5" />
-          </button>
-          <button type="button" className="btn-icon size-7 hover:!text-error hover:!ring-error/40" title="Ungroup" onClick={(e) => { e.stopPropagation(); setConfirmUngroup(true) }}>
-            <XMarkIcon className="size-3.5" />
-          </button>
+          <Button plain title="Edit group" aria-label="Edit group" onClick={(e) => { e.stopPropagation(); onEditGroup(group.id) }}>
+            <PencilSquareIcon data-slot="icon" />
+          </Button>
+          <Button plain title="Ungroup" aria-label="Ungroup" onClick={(e) => { e.stopPropagation(); setConfirmUngroup(true) }}>
+            <XMarkIcon data-slot="icon" />
+          </Button>
         </div>
       )}
 
