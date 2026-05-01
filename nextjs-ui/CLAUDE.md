@@ -100,3 +100,9 @@ All three are guarded by `globalThis` flags so dev HMR doesn't leak. Process SIG
 | `HUE_FAKE` | When `1`, the Hue client serves stub bridge data (used by E2E tests) |
 
 `./docker/warren setup` writes these to `nextjs-ui/.env`. The dev server picks them up via Next.js's built-in `.env` loading; the production server (started by `./docker/warren start`) sources `.env` explicitly.
+
+### Docker deployment notes
+
+The multi-stage `Dockerfile` runs as a non-root `warren` user (uid 1001). When mounting a host path at `/data`, the host directory must be writable by uid 1001 — either pre-chown it (`chown -R 1001:1001 /path/to/data`) or use a Docker named volume (`docker volume create warren-data`), which is uid-agnostic. The default `./docker/warren start` flow runs the UI as a host process (not in Docker), so it doesn't hit this — but the Dockerfile is what E2E tests and any future containerized deployment use.
+
+Verified end-to-end with a smoke test: build the image, boot it with the env vars above, and it serves `/api/sensors/announce`, `/api/sensors/config/{id}`, `/api/auth/login`, and the proxy auth check correctly. `better-sqlite3`'s native binding survives the multi-stage copy.
