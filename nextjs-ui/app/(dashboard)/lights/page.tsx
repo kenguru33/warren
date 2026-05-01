@@ -2,10 +2,24 @@
 
 import { useMemo, useState } from 'react'
 import useSWR from 'swr'
+import {
+  PencilSquareIcon,
+  TrashIcon,
+} from '@heroicons/react/20/solid'
 import type { MasterState } from '@/lib/shared/types'
 import { Badge } from '@/app/components/badge'
-import { AppDialog } from '@/app/components/warren/app-dialog'
-import { AppSwitch } from '@/app/components/warren/app-switch'
+import { Button } from '@/app/components/button'
+import {
+  Dialog,
+  DialogActions,
+  DialogBody,
+  DialogTitle,
+} from '@/app/components/dialog'
+import { Field, Label } from '@/app/components/fieldset'
+import { Heading } from '@/app/components/heading'
+import { Input } from '@/app/components/input'
+import { Text } from '@/app/components/text'
+import { Switch, SwitchField } from '@/app/components/switch'
 import { ConfirmDialog } from '@/app/components/warren/confirm-dialog'
 import { MasterLightToggle } from '@/app/components/warren/master-light-toggle'
 
@@ -203,14 +217,14 @@ export default function LightsPage() {
       <div className="space-y-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight text-text">Lights</h1>
-            <p className="mt-1 text-sm text-muted">Toggle and dim every light, or filter to ones not yet placed in a room.</p>
+            <Heading>Lights</Heading>
+            <Text className="mt-1">Toggle and dim every light, or filter to ones not yet placed in a room.</Text>
           </div>
-          <input
+          <Input
             value={search}
             onChange={e => setSearch(e.target.value)}
             type="search"
-            className="input w-full sm:w-72"
+            className="w-full sm:w-72"
             placeholder="Search lights…"
           />
         </div>
@@ -227,10 +241,10 @@ export default function LightsPage() {
           />
         )}
 
-        <div className="flex items-center gap-2.5 text-sm text-muted">
-          <AppSwitch checked={onlyUnused} onChange={setOnlyUnused} label="Show only unused" />
-          <span>Show only unused</span>
-        </div>
+        <SwitchField className="!grid-cols-[auto_auto] !gap-x-3">
+          <Label>Show only unused</Label>
+          <Switch checked={onlyUnused} onChange={setOnlyUnused} color="dark/zinc" />
+        </SwitchField>
 
         {visibleLights.length === 0 ? (
           <div className="rounded-xl bg-surface ring-1 ring-default shadow-sm dark:ring-white/10 dark:shadow-none p-12 text-center text-sm text-muted">
@@ -286,10 +300,11 @@ export default function LightsPage() {
                       </>
                     )}
                   </div>
-                  <AppSwitch
+                  <Switch
                     checked={!!row.lightOn}
                     disabled={!row.deviceId || (row.deviceId ? !!pendingById[row.deviceId] : false) || row.lightReachable === false}
-                    label="On/Off"
+                    aria-label="On/Off"
+                    color="dark/zinc"
                     onChange={() => toggle(row)}
                   />
                   <div className="w-5 shrink-0">
@@ -301,13 +316,13 @@ export default function LightsPage() {
 
                 <div className="flex w-[72px] shrink-0 items-center justify-end gap-0.5 transition-opacity pointer-fine:opacity-0 pointer-fine:group-hover/row:opacity-100 pointer-fine:group-focus-within/row:opacity-100">
                   {row.id !== null && (
-                    <button type="button" className="btn-icon !size-8" title="Edit" onClick={() => openEdit(row)}>
-                      <svg className="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>
-                    </button>
+                    <Button plain title="Edit" aria-label="Edit" onClick={() => openEdit(row)}>
+                      <PencilSquareIcon data-slot="icon" />
+                    </Button>
                   )}
-                  <button type="button" className="btn-icon !size-8 hover:!text-red-600 dark:hover:!text-red-400" title="Remove" onClick={() => setPendingDelete(row)}>
-                    <svg className="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></svg>
-                  </button>
+                  <Button plain title="Remove" aria-label="Remove" onClick={() => setPendingDelete(row)}>
+                    <TrashIcon data-slot="icon" />
+                  </Button>
                 </div>
               </li>
             ))}
@@ -327,7 +342,7 @@ export default function LightsPage() {
                     <div className="text-sm font-medium text-muted">Light</div>
                     <div className="text-xs text-subtle font-mono truncate">{b.deviceId}</div>
                   </div>
-                  <button type="button" className="btn-secondary btn-sm" onClick={() => restoreBlocked(b)}>Restore</button>
+                  <Button outline onClick={() => restoreBlocked(b)}>Restore</Button>
                 </li>
               ))}
             </ul>
@@ -347,40 +362,41 @@ export default function LightsPage() {
         onCancel={() => setPendingDelete(null)}
       />
 
-      <AppDialog open={!!editingLight} onClose={() => setEditingLight(null)} maxWidthClass="max-w-md">
+      <Dialog open={!!editingLight} onClose={() => setEditingLight(null)} size="md">
         {editingLight && (
-          <div className="p-6 space-y-4">
+          <>
             <div className="flex items-center gap-3">
               <span className="text-2xl">💡</span>
               <div>
-                <h3 className="text-base font-semibold text-text">Light</h3>
+                <DialogTitle>Light</DialogTitle>
                 {editingLight.deviceId && (
-                  <div className="text-xs text-subtle font-mono mt-0.5">{editingLight.deviceId}</div>
+                  <div className="mt-0.5 font-mono text-xs text-subtle">{editingLight.deviceId}</div>
                 )}
               </div>
             </div>
-            <div>
-              <label className="label">Label</label>
-              <input
-                value={editingLabel}
-                onChange={e => setEditingLabel(e.target.value)}
-                onKeyDown={e => {
-                  if (e.key === 'Enter') saveEdit()
-                  if (e.key === 'Escape') setEditingLight(null)
-                }}
-                className="input mt-2"
-                placeholder="Custom label…"
-                maxLength={60}
-                autoFocus
-              />
-            </div>
-            <div className="flex justify-end gap-2 pt-2">
-              <button type="button" className="btn-secondary" onClick={() => setEditingLight(null)}>Cancel</button>
-              <button type="button" className="btn-primary" onClick={saveEdit}>Save</button>
-            </div>
-          </div>
+            <DialogBody>
+              <Field>
+                <Label>Label</Label>
+                <Input
+                  value={editingLabel}
+                  onChange={e => setEditingLabel(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') saveEdit()
+                    if (e.key === 'Escape') setEditingLight(null)
+                  }}
+                  placeholder="Custom label…"
+                  maxLength={60}
+                  autoFocus
+                />
+              </Field>
+            </DialogBody>
+            <DialogActions>
+              <Button plain type="button" onClick={() => setEditingLight(null)}>Cancel</Button>
+              <Button type="button" onClick={saveEdit}>Save</Button>
+            </DialogActions>
+          </>
         )}
-      </AppDialog>
+      </Dialog>
     </>
   )
 }

@@ -2,9 +2,24 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import useSWR from 'swr'
+import {
+  Cog6ToothIcon,
+  PencilSquareIcon,
+  TrashIcon,
+} from '@heroicons/react/20/solid'
 import { Badge } from '@/app/components/badge'
-import { AppDialog } from '@/app/components/warren/app-dialog'
-import { AppSwitch } from '@/app/components/warren/app-switch'
+import { Button } from '@/app/components/button'
+import {
+  Dialog,
+  DialogActions,
+  DialogBody,
+  DialogTitle,
+} from '@/app/components/dialog'
+import { Description, Field, Label } from '@/app/components/fieldset'
+import { Heading } from '@/app/components/heading'
+import { Input } from '@/app/components/input'
+import { Text } from '@/app/components/text'
+import { Switch, SwitchField } from '@/app/components/switch'
 import { ConfirmDialog } from '@/app/components/warren/confirm-dialog'
 import { SensorConfigModal } from '@/app/components/warren/sensor-config-modal'
 
@@ -143,21 +158,21 @@ export default function SensorsPage() {
       <div className="space-y-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight text-text">Sensors</h1>
-            <p className="mt-1 text-sm text-muted">Manage every sensor connected to Warren.</p>
+            <Heading>Sensors</Heading>
+            <Text className="mt-1">Manage every sensor connected to Warren.</Text>
           </div>
-          <div className="flex items-center gap-3">
-            <input
+          <div className="flex items-center gap-4">
+            <Input
               value={search}
               onChange={e => setSearch(e.target.value)}
               type="search"
-              className="input min-w-[220px]"
+              className="min-w-[220px]"
               placeholder="Search sensors…"
             />
-            <label className="inline-flex items-center gap-2.5 text-sm text-muted cursor-pointer select-none">
-              <AppSwitch checked={onlyUnused} onChange={setOnlyUnused} label="Show only unused" />
-              <span>Unused only</span>
-            </label>
+            <SwitchField className="!grid-cols-[auto_auto]">
+              <Label>Unused only</Label>
+              <Switch checked={onlyUnused} onChange={setOnlyUnused} color="dark/zinc" />
+            </SwitchField>
           </div>
         </div>
 
@@ -218,18 +233,18 @@ export default function SensorsPage() {
 
                 <div className="flex w-[108px] shrink-0 items-center justify-end gap-0.5 transition-opacity pointer-fine:opacity-0 pointer-fine:group-hover/row:opacity-100 pointer-fine:group-focus-within/row:opacity-100">
                   {sensor.type === 'temperature' && sensor.deviceId && (
-                    <button type="button" className="btn-icon !size-8" title="Configure" onClick={() => setConfiguringSensor(sensor)}>
-                      <svg className="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-                    </button>
+                    <Button plain title="Configure" aria-label="Configure" onClick={() => setConfiguringSensor(sensor)}>
+                      <Cog6ToothIcon data-slot="icon" />
+                    </Button>
                   )}
                   {sensor.id !== null && (
-                    <button type="button" className="btn-icon !size-8" title="Edit" onClick={() => openEdit(sensor)}>
-                      <svg className="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>
-                    </button>
+                    <Button plain title="Edit" aria-label="Edit" onClick={() => openEdit(sensor)}>
+                      <PencilSquareIcon data-slot="icon" />
+                    </Button>
                   )}
-                  <button type="button" className="btn-icon !size-8 hover:!text-red-600 dark:hover:!text-red-400" title="Remove" onClick={() => setPendingDelete(sensor)}>
-                    <svg className="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></svg>
-                  </button>
+                  <Button plain title="Remove" aria-label="Remove" onClick={() => setPendingDelete(sensor)}>
+                    <TrashIcon data-slot="icon" />
+                  </Button>
                 </div>
               </li>
             ))}
@@ -249,7 +264,7 @@ export default function SensorsPage() {
                     <div className="text-sm font-medium text-muted">{TYPE_LABELS[b.type] || b.type}</div>
                     <div className="text-xs text-subtle font-mono truncate">{b.deviceId}</div>
                   </div>
-                  <button type="button" className="btn-secondary btn-sm" onClick={() => restoreBlocked(b)}>Restore</button>
+                  <Button outline onClick={() => restoreBlocked(b)}>Restore</Button>
                 </li>
               ))}
             </ul>
@@ -278,40 +293,41 @@ export default function SensorsPage() {
         onCancel={() => setPendingDelete(null)}
       />
 
-      <AppDialog open={!!editingSensor} onClose={() => setEditingSensor(null)} maxWidthClass="max-w-md">
+      <Dialog open={!!editingSensor} onClose={() => setEditingSensor(null)} size="md">
         {editingSensor && (
-          <div className="p-6 space-y-4">
+          <>
             <div className="flex items-center gap-3">
               <span className="text-2xl">{TYPE_ICONS[editingSensor.type] ?? '?'}</span>
               <div>
-                <h3 className="text-base font-semibold text-text">{TYPE_LABELS[editingSensor.type] || editingSensor.type}</h3>
+                <DialogTitle>{TYPE_LABELS[editingSensor.type] || editingSensor.type}</DialogTitle>
                 {editingSensor.deviceId && (
-                  <div className="text-xs text-subtle font-mono mt-0.5">{editingSensor.deviceId}</div>
+                  <div className="mt-0.5 font-mono text-xs text-subtle">{editingSensor.deviceId}</div>
                 )}
               </div>
             </div>
-            <div>
-              <label className="label">Label</label>
-              <input
-                value={editingLabel}
-                onChange={e => setEditingLabel(e.target.value)}
-                onKeyDown={e => {
-                  if (e.key === 'Enter') saveEdit()
-                  if (e.key === 'Escape') setEditingSensor(null)
-                }}
-                className="input mt-2"
-                placeholder="Custom label…"
-                maxLength={60}
-                autoFocus
-              />
-            </div>
-            <div className="flex justify-end gap-2 pt-2">
-              <button type="button" className="btn-secondary" onClick={() => setEditingSensor(null)}>Cancel</button>
-              <button type="button" className="btn-primary" onClick={saveEdit}>Save</button>
-            </div>
-          </div>
+            <DialogBody>
+              <Field>
+                <Label>Label</Label>
+                <Input
+                  value={editingLabel}
+                  onChange={e => setEditingLabel(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') saveEdit()
+                    if (e.key === 'Escape') setEditingSensor(null)
+                  }}
+                  placeholder="Custom label…"
+                  maxLength={60}
+                  autoFocus
+                />
+              </Field>
+            </DialogBody>
+            <DialogActions>
+              <Button plain type="button" onClick={() => setEditingSensor(null)}>Cancel</Button>
+              <Button type="button" onClick={saveEdit}>Save</Button>
+            </DialogActions>
+          </>
         )}
-      </AppDialog>
+      </Dialog>
     </>
   )
 }
