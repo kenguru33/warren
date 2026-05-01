@@ -1,6 +1,6 @@
 'use client'
 
-import { FormEvent, useEffect, useState } from 'react'
+import { FormEvent, useEffect, useState, type ChangeEvent } from 'react'
 import type { SensorView } from '@/lib/shared/types'
 import { Button } from '@/app/components/button'
 import {
@@ -13,14 +13,68 @@ import { Field, Label } from '@/app/components/fieldset'
 import { Input } from '@/app/components/input'
 import { LightColorPicker } from './light-color-picker'
 
+function PalettePicker({
+  paletteColors,
+  value,
+  onChange,
+}: {
+  paletteColors: string[]
+  value: string | null
+  onChange: (hex: string) => void
+}) {
+  function onCustomInput(e: ChangeEvent<HTMLInputElement>) {
+    if (e.target.value) onChange(e.target.value)
+  }
+  return (
+    <div className="grid grid-cols-6 gap-2 sm:grid-cols-7">
+      {paletteColors.map(hex => (
+        <button
+          key={hex}
+          type="button"
+          onClick={() => onChange(hex)}
+          title={hex}
+          aria-label={hex}
+          style={{ background: hex }}
+          className={[
+            'size-9 rounded-full ring-1 transition hover:scale-110 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent',
+            value?.toLowerCase() === hex.toLowerCase()
+              ? 'ring-2 ring-accent ring-offset-2 ring-offset-modal'
+              : 'ring-default dark:ring-white/15',
+          ].join(' ')}
+        />
+      ))}
+      <label
+        className="relative size-9 cursor-pointer overflow-hidden rounded-full ring-1 ring-default dark:ring-white/15"
+        title="Custom color"
+        aria-label="Custom color"
+      >
+        <input
+          type="color"
+          value={value ?? '#ffffff'}
+          onChange={onCustomInput}
+          className="absolute inset-0 size-full cursor-pointer opacity-0"
+        />
+        <span className="absolute inset-0 bg-[conic-gradient(from_0deg,_#ef4444,_#f59e0b,_#eab308,_#22c55e,_#06b6d4,_#3b82f6,_#a855f7,_#ec4899,_#ef4444)]" />
+      </label>
+    </div>
+  )
+}
+
 export function EditLightModal({
   open,
   sensor,
+  paletteColors,
+  groupName,
   onClose,
   onSaved,
 }: {
   open: boolean
   sensor: SensorView | null
+  /** When the light belongs to a group, the active theme's bulbPalette. Restricts
+   *  the color picker to those swatches + a custom-color escape hatch. */
+  paletteColors?: string[]
+  /** Group name, used to label the constrained palette section. */
+  groupName?: string
   onClose: () => void
   onSaved: () => void
 }) {
@@ -119,10 +173,27 @@ export function EditLightModal({
           {supportsColor && (
             <div>
               <span className="block text-base/6 font-medium text-text select-none sm:text-sm/6">Color</span>
-              <p className="mt-1 text-xs text-subtle">Pick a color from the palette to paint this light right away.</p>
-              <div className="mt-3">
-                <LightColorPicker value={color} onChange={applyColor} />
-              </div>
+              {paletteColors && paletteColors.length > 0 ? (
+                <>
+                  <p className="mt-1 text-xs text-subtle">
+                    Colors from the {groupName ? <>&ldquo;{groupName}&rdquo; </> : null}group theme. Pick custom for anything else.
+                  </p>
+                  <div className="mt-3">
+                    <PalettePicker
+                      paletteColors={paletteColors}
+                      value={color}
+                      onChange={applyColor}
+                    />
+                  </div>
+                </>
+              ) : (
+                <>
+                  <p className="mt-1 text-xs text-subtle">Pick a color from the palette to paint this light right away.</p>
+                  <div className="mt-3">
+                    <LightColorPicker value={color} onChange={applyColor} />
+                  </div>
+                </>
+              )}
             </div>
           )}
 

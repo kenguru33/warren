@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react'
 import type { LightGroupView, RoomWithSensors, SensorView } from '@/lib/shared/types'
+import { LIGHT_THEMES } from '@/lib/shared/light-themes'
 import { useRooms } from '@/lib/hooks/use-rooms'
 import { Button } from '@/app/components/button'
 import { Heading } from '@/app/components/heading'
@@ -102,6 +103,20 @@ export default function DashboardPage() {
       setHistorySensor(found)
     }
   }
+
+  // Resolve the active group's bulbPalette so EditLightModal can constrain its
+  // color picker when the light is part of a group.
+  const editingLightGroup = useMemo(() => {
+    if (!editingLight?.groupId) return null
+    for (const r of rooms) {
+      const g = r.lightGroups.find(g => g.id === editingLight.groupId)
+      if (g) return g
+    }
+    return null
+  }, [editingLight, rooms])
+  const editingLightPalette = editingLightGroup
+    ? LIGHT_THEMES[editingLightGroup.theme]?.bulbPalette
+    : undefined
 
   function handleViewHistory(sensor: SensorView) {
     const found = findSensor(sensor.id)
@@ -244,6 +259,8 @@ export default function DashboardPage() {
       <EditLightModal
         open={!!editingLight}
         sensor={editingLight}
+        paletteColors={editingLightPalette}
+        groupName={editingLightGroup?.name}
         onClose={() => setEditingLight(null)}
         onSaved={refresh}
       />
