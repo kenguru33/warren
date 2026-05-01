@@ -124,7 +124,7 @@ export default function DashboardPage() {
         </div>
 
         {rooms.length === 0 ? (
-          <div className="card p-8 text-center">
+          <div className="rounded-xl bg-surface ring-1 ring-default shadow-sm dark:ring-white/10 dark:shadow-none p-8 text-center">
             <p className="text-sm/6 text-subtle">
               No rooms yet. Click &quot;Add room&quot; to create one and assign sensors to it.
             </p>

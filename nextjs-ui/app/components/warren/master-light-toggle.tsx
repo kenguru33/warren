@@ -1,6 +1,7 @@
 'use client'
 
 import type { MasterState } from '@/lib/shared/types'
+import { Badge } from '@/app/components/badge'
 
 export function MasterLightToggle({
   master,
@@ -78,14 +79,14 @@ export function MasterLightToggle({
         </div>
         <div className="ml-auto flex flex-wrap gap-1.5">
           {master.unreachableCount > 0 && (
-            <span className="badge badge-error" title={`${master.unreachableCount} unreachable`}>
+            <Badge color="red" title={`${master.unreachableCount} unreachable`}>
               {master.unreachableCount} offline
-            </span>
+            </Badge>
           )}
           {partial && (
-            <span className="badge badge-warning" title={`${partial.failed} failed`}>{partial.failed} failed</span>
+            <Badge color="amber" title={`${partial.failed} failed`}>{partial.failed} failed</Badge>
           )}
-          {error && <span className="badge badge-error" title={error}>!</span>}
+          {error && <Badge color="red" title={error}>!</Badge>}
         </div>
       </div>
     )
@@ -106,12 +107,12 @@ export function MasterLightToggle({
       <span className="text-sm/5 font-medium text-muted">{stateLabel}</span>
       <span className="text-xs/5 text-subtle tabular-nums">· {master.memberCount}</span>
       {master.unreachableCount > 0 && (
-        <span className="badge badge-error" title={`${master.unreachableCount} unreachable`}>
+        <Badge color="red" title={`${master.unreachableCount} unreachable`}>
           {master.unreachableCount}
-        </span>
+        </Badge>
       )}
-      {partial && <span className="badge badge-warning" title={`${partial.failed} failed`}>!</span>}
-      {error && <span className="badge badge-error" title={error}>!</span>}
+      {partial && <Badge color="amber" title={`${partial.failed} failed`}>!</Badge>}
+      {error && <Badge color="red" title={error}>!</Badge>}
     </div>
   )
 }

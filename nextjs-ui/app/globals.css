@@ -438,21 +438,6 @@ html { @apply antialiased; }
 
 @layer components {
 
-  /* ── Cards / panels ────────────────────────────────────────────── */
-  .card {
-    @apply rounded-xl bg-surface ring-1 ring-default shadow-sm;
-  }
-  .dark .card {
-    @apply ring-white/10 shadow-none;
-  }
-
-  .panel {
-    @apply rounded-lg bg-surface ring-1 ring-default shadow-sm;
-  }
-  .dark .panel {
-    @apply ring-white/10 shadow-none;
-  }
-
   /* ── Buttons ───────────────────────────────────────────────────── */
   .btn-primary {
     @apply relative inline-flex items-center justify-center gap-x-2;
@@ -555,21 +540,6 @@ html { @apply antialiased; }
   .help-text {
     @apply mt-2 text-base/6 sm:text-sm/6 text-subtle;
   }
-
-  /* ── Badges ────────────────────────────────────────────────────── */
-  .badge {
-    @apply inline-flex shrink-0 items-center gap-x-1 px-2 py-0.5 rounded-md text-xs font-medium whitespace-nowrap ring-1 ring-inset;
-  }
-  .badge-success { @apply text-green-700 bg-green-50 ring-green-600/20; }
-  .badge-warning { @apply text-amber-800 bg-amber-50 ring-amber-600/20; }
-  .badge-error   { @apply text-red-700 bg-red-50 ring-red-600/20; }
-  .badge-accent  { @apply text-blue-700 bg-blue-50 ring-blue-700/10; }
-  .badge-neutral { @apply text-stone-600 bg-stone-50 ring-stone-500/10; }
-  .dark .badge-success { @apply text-green-400 bg-green-500/10 ring-green-500/20; }
-  .dark .badge-warning { @apply text-amber-400 bg-amber-500/10 ring-amber-500/20; }
-  .dark .badge-error   { @apply text-red-400 bg-red-500/10 ring-red-500/20; }
-  .dark .badge-accent  { @apply text-blue-400 bg-blue-500/10 ring-blue-500/20; }
-  .dark .badge-neutral { @apply text-stone-400 bg-white/5 ring-white/10; }
 
   /* ── Range-slider thumbs ───────────────────────────────────────── */
   .slider {

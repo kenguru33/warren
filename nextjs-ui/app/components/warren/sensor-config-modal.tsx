@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { Badge } from '@/app/components/badge'
 import { AppDialog } from './app-dialog'
 
 interface ConfigPayload {
@@ -98,9 +99,9 @@ export function SensorConfigModal({
             <div className="text-xs text-subtle font-mono mt-0.5 truncate">{deviceId}</div>
           </div>
           {pending ? (
-            <span className="badge badge-warning">Pending sync</span>
+            <Badge color="amber">Pending sync</Badge>
           ) : lastFetchedAt ? (
-            <span className="badge badge-success">Synced</span>
+            <Badge color="green">Synced</Badge>
           ) : null}
         </div>
       </div>

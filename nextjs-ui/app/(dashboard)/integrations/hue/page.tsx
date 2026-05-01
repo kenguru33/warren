@@ -2,8 +2,17 @@
 
 import { useState } from 'react'
 import useSWR from 'swr'
+import { Badge } from '@/app/components/badge'
 import { ConfirmDialog } from '@/app/components/warren/confirm-dialog'
 import { HuePairingModal } from '@/app/components/warren/hue-pairing-modal'
+
+const TONE_COLOR = {
+  ok: 'green',
+  warn: 'amber',
+  err: 'red',
+  info: 'blue',
+  neutral: 'zinc',
+} as const
 
 interface HueStatus {
   connected: boolean
@@ -82,7 +91,7 @@ export default function HueIntegrationPage() {
         <p className="mt-1 text-sm/6 text-muted">Connect a Hue Bridge to bring its lights and sensors into Warren.</p>
       </div>
 
-      <section className="card overflow-hidden">
+      <section className="rounded-xl bg-surface ring-1 ring-default shadow-sm dark:ring-white/10 dark:shadow-none overflow-hidden">
         {!status?.bridge ? (
           <div className="px-8 py-12 text-center">
             <div className="mx-auto flex size-14 items-center justify-center rounded-2xl bg-accent-soft ring-1 ring-accent/20">
@@ -108,16 +117,9 @@ export default function HueIntegrationPage() {
                   {status.bridge.ip} · {status.bridge.model || 'unknown model'} · ID {status.bridge.id}
                 </div>
               </div>
-              <span className={[
-                'badge',
-                statusBadge.tone === 'ok' ? 'badge-success' : '',
-                statusBadge.tone === 'warn' ? 'badge-warning' : '',
-                statusBadge.tone === 'err' ? 'badge-error' : '',
-                statusBadge.tone === 'info' ? 'badge-accent' : '',
-                statusBadge.tone === 'neutral' ? 'badge-neutral' : '',
-              ].filter(Boolean).join(' ')}>
+              <Badge color={TONE_COLOR[statusBadge.tone]}>
                 {statusBadge.text}
-              </span>
+              </Badge>
             </div>
 
             <dl className="grid grid-cols-1 sm:grid-cols-3 divide-y sm:divide-y-0 sm:divide-x divide-default">

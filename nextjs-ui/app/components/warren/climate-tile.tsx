@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { PencilSquareIcon, XMarkIcon } from '@heroicons/react/20/solid'
 import type { RoomReference, SensorView } from '@/lib/shared/types'
+import { Badge } from '@/app/components/badge'
 import { ConfirmDialog } from './confirm-dialog'
 
 export function ClimateTile({
@@ -55,7 +56,7 @@ export function ClimateTile({
     >
       <div className="flex items-center justify-between w-full">
         <span className="text-lg">{icon}</span>
-        {isOffline && <span className="badge badge-error">Offline</span>}
+        {isOffline && <Badge color="red">Offline</Badge>}
       </div>
       <div className={`text-2xl font-bold tabular-nums leading-none mt-1 ${isOffline ? 'text-subtle' : 'text-text'}`}>
         {formattedValue}

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { PencilSquareIcon, XMarkIcon } from '@heroicons/react/20/solid'
 import type { SensorView } from '@/lib/shared/types'
+import { Badge } from '@/app/components/badge'
 import { ConfirmDialog } from './confirm-dialog'
 
 function briFromHue(b: number): number {
@@ -177,7 +178,7 @@ export function HueLightTile({
         />
       )}
 
-      {!reachable && <span className="badge badge-error">Unreachable</span>}
+      {!reachable && <Badge color="red">Unreachable</Badge>}
       {error && (
         <span
           className="absolute top-1.5 left-1.5 inline-flex size-4 items-center justify-center rounded-full bg-error text-[0.6rem] font-bold text-white"

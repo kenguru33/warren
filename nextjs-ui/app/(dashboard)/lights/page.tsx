@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react'
 import useSWR from 'swr'
 import type { MasterState } from '@/lib/shared/types'
+import { Badge } from '@/app/components/badge'
 import { AppDialog } from '@/app/components/warren/app-dialog'
 import { AppSwitch } from '@/app/components/warren/app-switch'
 import { ConfirmDialog } from '@/app/components/warren/confirm-dialog'
@@ -232,11 +233,11 @@ export default function LightsPage() {
         </div>
 
         {visibleLights.length === 0 ? (
-          <div className="card p-12 text-center text-sm text-muted">
+          <div className="rounded-xl bg-surface ring-1 ring-default shadow-sm dark:ring-white/10 dark:shadow-none p-12 text-center text-sm text-muted">
             {onlyUnused ? 'No unused lights.' : 'No lights registered. Connect a Hue Bridge from Integrations.'}
           </div>
         ) : (
-          <ul role="list" className="card divide-y divide-default dark:divide-white/10 overflow-hidden">
+          <ul role="list" className="rounded-xl bg-surface ring-1 ring-default shadow-sm dark:ring-white/10 dark:shadow-none divide-y divide-default dark:divide-white/10 overflow-hidden">
             {visibleLights.map((row, i) => (
               <li
                 key={row.id ?? `${row.deviceId}:${row.type}:${i}`}
@@ -259,9 +260,9 @@ export default function LightsPage() {
                     <p className="text-sm/6 font-semibold text-text truncate">
                       {row.label?.trim() || row.hueName?.trim() || 'Light'}
                     </p>
-                    {row.origin === 'hue' && <span className="badge badge-warning">Hue</span>}
-                    {row.lightReachable === false && <span className="badge badge-error">Unreachable</span>}
-                    {row.groupName && <span className="badge badge-accent">{row.groupName}</span>}
+                    {row.origin === 'hue' && <Badge color="amber">Hue</Badge>}
+                    {row.lightReachable === false && <Badge color="red">Unreachable</Badge>}
+                    {row.groupName && <Badge color="blue">{row.groupName}</Badge>}
                   </div>
                   <div className="mt-0.5 flex items-center gap-1.5 text-xs/5 text-subtle truncate">
                     <span className={row.roomName ? '' : 'italic'}>{row.roomName ?? 'Unassigned'}</span>
@@ -293,7 +294,7 @@ export default function LightsPage() {
                   />
                   <div className="w-5 shrink-0">
                     {row.deviceId && errorById[row.deviceId] && (
-                      <span className="badge badge-error" title={errorById[row.deviceId]}>!</span>
+                      <Badge color="red" title={errorById[row.deviceId]}>!</Badge>
                     )}
                   </div>
                 </div>

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { LightGroupView, SensorView } from '@/lib/shared/types'
 import { DEFAULT_LIGHT_THEME, type LightThemeKey } from '@/lib/shared/light-themes'
+import { Badge } from '@/app/components/badge'
 import { AppDialog } from './app-dialog'
 import { ConfirmDialog } from './confirm-dialog'
 import { LightThemePicker } from './light-theme-picker'
@@ -245,9 +246,9 @@ export function LightGroupModal({
                       {l.label?.trim() || l.hueName?.trim() || `Light #${l.id}`}
                     </span>
                     {lockedTo ? (
-                      <span className="badge badge-error">in {lockedTo}</span>
+                      <Badge color="red">in {lockedTo}</Badge>
                     ) : !l.capabilities?.brightness ? (
-                      <span className="badge badge-neutral">on/off</span>
+                      <Badge color="zinc">on/off</Badge>
                     ) : null}
                   </button>
                 )

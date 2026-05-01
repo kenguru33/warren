@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import useSWR from 'swr'
+import { Badge } from '@/app/components/badge'
 import { AppDialog } from '@/app/components/warren/app-dialog'
 import { AppSwitch } from '@/app/components/warren/app-switch'
 import { ConfirmDialog } from '@/app/components/warren/confirm-dialog'
@@ -161,11 +162,11 @@ export default function SensorsPage() {
         </div>
 
         {visibleSensors.length === 0 ? (
-          <div className="card p-12 text-center text-sm text-muted">
+          <div className="rounded-xl bg-surface ring-1 ring-default shadow-sm dark:ring-white/10 dark:shadow-none p-12 text-center text-sm text-muted">
             {onlyUnused ? 'No unused sensors.' : 'No sensors registered yet.'}
           </div>
         ) : (
-          <ul role="list" className="card divide-y divide-default dark:divide-white/10 overflow-hidden">
+          <ul role="list" className="rounded-xl bg-surface ring-1 ring-default shadow-sm dark:ring-white/10 dark:shadow-none divide-y divide-default dark:divide-white/10 overflow-hidden">
             {visibleSensors.map((sensor, i) => (
               <li
                 key={sensor.id ?? `${sensor.deviceId}:${sensor.type}:${i}`}
@@ -181,9 +182,9 @@ export default function SensorsPage() {
                       {sensor.label || TYPE_LABELS[sensor.type] || sensor.type}
                     </p>
                     {sensor.type !== 'camera' && isOffline(sensor.lastRecordedAt) && (
-                      <span className="badge badge-error">Offline</span>
+                      <Badge color="red">Offline</Badge>
                     )}
-                    {!sensor.roomName && <span className="badge badge-neutral">Unassigned</span>}
+                    {!sensor.roomName && <Badge color="zinc">Unassigned</Badge>}
                   </div>
                   <div className="mt-0.5 flex items-center gap-1.5 text-xs/5 text-subtle truncate">
                     {sensor.label && <span>{TYPE_LABELS[sensor.type] || sensor.type}</span>}

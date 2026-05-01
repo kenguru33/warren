@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { PencilSquareIcon, XMarkIcon } from '@heroicons/react/20/solid'
 import type { SensorView } from '@/lib/shared/types'
+import { Badge } from '@/app/components/badge'
 import { ConfirmDialog } from './confirm-dialog'
 
 export function MotionTile({
@@ -43,9 +44,9 @@ export function MotionTile({
       <div className="flex items-center justify-between w-full">
         <span className="text-lg">🏃</span>
         {isOffline ? (
-          <span className="badge badge-error">Offline</span>
+          <Badge color="red">Offline</Badge>
         ) : recentMotion ? (
-          <span className="badge badge-warning animate-warren-pulse">Live</span>
+          <Badge color="amber" className="animate-warren-pulse">Live</Badge>
         ) : null}
       </div>
       <div className={`text-2xl font-bold leading-none mt-1 ${isOffline ? 'text-subtle' : recentMotion ? 'text-warning' : 'text-text'}`}>

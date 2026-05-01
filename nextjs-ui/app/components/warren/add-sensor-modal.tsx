@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useMemo, useState } from 'react'
 import useSWR from 'swr'
 import { XMarkIcon } from '@heroicons/react/20/solid'
 import type { DiscoveredSensor, SensorType } from '@/lib/shared/types'
+import { Badge } from '@/app/components/badge'
 import { AppDialog } from './app-dialog'
 
 export interface AddSensorPayload {
@@ -240,7 +241,7 @@ export function AddSensorModal({
                       <h3 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-subtle">
                         <span>{group.icon}</span>
                         <span>{group.label}</span>
-                        <span className="ml-auto badge badge-neutral">{group.items.length}</span>
+                        <Badge color="zinc" className="ml-auto">{group.items.length}</Badge>
                       </h3>
                       <div className="flex flex-col gap-2">
                         {group.items.map(d => {
@@ -269,7 +270,7 @@ export function AddSensorModal({
                                   <span className="text-sm text-text font-semibold truncate">
                                     {d.label || d.deviceId || (TYPE_LABELS[d.sensorType] ?? d.sensorType)}
                                   </span>
-                                  {d.origin === 'hue' && <span className="badge badge-warning">Hue</span>}
+                                  {d.origin === 'hue' && <Badge color="amber">Hue</Badge>}
                                 </span>
                                 <span className="block mt-0.5 text-xs text-subtle truncate capitalize">{sensorMeta(d)}</span>
                               </span>

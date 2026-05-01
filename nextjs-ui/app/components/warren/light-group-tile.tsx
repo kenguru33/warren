@@ -5,6 +5,7 @@ import { PencilSquareIcon, XMarkIcon } from '@heroicons/react/20/solid'
 import type { LightGroupView, LightGroupState, SensorView } from '@/lib/shared/types'
 import { resolveLightTheme, MIXED_RING_DEFAULT } from '@/lib/shared/light-themes'
 import { useTheme } from '@/lib/hooks/use-theme'
+import { Badge } from '@/app/components/badge'
 import { ConfirmDialog } from './confirm-dialog'
 
 export function LightGroupTile({
@@ -225,11 +226,11 @@ export function LightGroupTile({
       {(group.unreachableCount > 0 || partial) && (
         <div className="flex flex-wrap justify-center gap-1.5">
           {group.unreachableCount > 0 && (
-            <span className="badge badge-error" title={`${group.unreachableCount} unreachable`}>
+            <Badge color="red" title={`${group.unreachableCount} unreachable`}>
               {group.unreachableCount} offline
-            </span>
+            </Badge>
           )}
-          {partial && <span className="badge badge-warning" title={`${partial.failed} failed`}>{partial.failed} failed</span>}
+          {partial && <Badge color="amber" title={`${partial.failed} failed`}>{partial.failed} failed</Badge>}
         </div>
       )}
       {error && (
