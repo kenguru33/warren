@@ -214,7 +214,7 @@ export function LightGroupTile({
         <input
           type="range" min={0} max={100} step={1}
           value={displayBri}
-          disabled={group.memberCount === 0}
+          disabled={group.memberCount === 0 || !isOn}
           title={`Brightness ${displayBri}%`}
           className="slider slider-sm w-full"
           onClick={(e) => e.stopPropagation()}
