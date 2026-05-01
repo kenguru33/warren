@@ -14,6 +14,7 @@ import { LightGroupDetailModal } from '@/app/components/warren/light-group-detai
 import { SensorConfigModal } from '@/app/components/warren/sensor-config-modal'
 import { SensorHistoryModal } from '@/app/components/warren/sensor-history-modal'
 import { LiveStreamModal } from '@/app/components/warren/live-stream-modal'
+import { EditLightModal } from '@/app/components/warren/edit-light-modal'
 
 export default function DashboardPage() {
   const { rooms, lastUpdated, refresh, addRoom, removeRoom, renameRoom, removeSensor, addSensor, saveReference, clearReference } = useRooms()
@@ -29,6 +30,7 @@ export default function DashboardPage() {
   const [historySensor, setHistorySensor] = useState<{ sensor: SensorView; roomName: string } | null>(null)
   const [configSensor, setConfigSensor] = useState<{ deviceId: string; label: string | null } | null>(null)
   const [liveStream, setLiveStream] = useState<{ name: string; streamUrl: string | null } | null>(null)
+  const [editingLight, setEditingLight] = useState<SensorView | null>(null)
 
   const addSensorRoom = useMemo(
     () => addSensorRoomId !== null ? rooms.find(r => r.id === addSensorRoomId) ?? null : null,
@@ -92,9 +94,11 @@ export default function DashboardPage() {
     if (!found?.sensor.deviceId) return
     if (found.sensor.type === 'temperature') {
       setConfigSensor({ deviceId: found.sensor.deviceId, label: found.sensor.label })
+    } else if (found.sensor.type === 'light') {
+      setEditingLight(found.sensor)
     } else {
-      // Other sensor types: simple history view for now (Vue parity defers to SensorConfigModal
-      // for temperature-only — labels are edited via the /sensors page).
+      // Other sensor types fall back to a history view; rename for non-light/non-temp
+      // sensors lives on the /sensors page.
       setHistorySensor(found)
     }
   }
@@ -236,6 +240,13 @@ export default function DashboardPage() {
           onClose={() => setLiveStream(null)}
         />
       )}
+
+      <EditLightModal
+        open={!!editingLight}
+        sensor={editingLight}
+        onClose={() => setEditingLight(null)}
+        onSaved={refresh}
+      />
     </>
   )
 }
