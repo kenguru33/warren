@@ -11,10 +11,13 @@ function briFromHue(b: number): number {
 
 export function LightGroupDetailRow({
   sensor,
+  accentColor,
   onToggled,
   onEditSensor,
 }: {
   sensor: SensorView
+  /** Hex color from the group's bulbPalette assigned to this member, if color-capable. */
+  accentColor?: string
   onToggled: () => void
   onEditSensor: (sensorId: number) => void
 }) {
@@ -136,10 +139,20 @@ export function LightGroupDetailRow({
         disabled={pending || !reachable}
         title={localOn ? 'Turn off' : 'Turn on'}
         onClick={toggleOn}
+        style={
+          localOn && reachable && accentColor
+            ? {
+                backgroundColor: accentColor,
+                boxShadow: `0 4px 12px -2px ${accentColor}80, inset 0 0 0 1px ${accentColor}`,
+              }
+            : undefined
+        }
         className={[
           'flex size-9 items-center justify-center rounded-xl text-lg transition-all',
           localOn && reachable
-            ? 'bg-accent text-white shadow-md shadow-accent/40 ring-1 ring-accent/50'
+            ? accentColor
+              ? 'text-white'
+              : 'bg-accent text-white shadow-md shadow-accent/40 ring-1 ring-accent/50'
             : 'bg-surface ring-1 ring-default',
           pending || !reachable ? 'opacity-50 cursor-not-allowed' : '',
         ].join(' ')}

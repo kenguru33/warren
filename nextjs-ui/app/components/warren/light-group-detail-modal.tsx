@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { XMarkIcon } from '@heroicons/react/20/solid'
 import type { LightGroupView, SensorView } from '@/lib/shared/types'
-import type { LightThemeKey } from '@/lib/shared/light-themes'
+import { LIGHT_THEMES, type LightThemeKey } from '@/lib/shared/light-themes'
 import { Button } from '@/app/components/button'
 import {
   Dialog,
@@ -121,15 +121,22 @@ export function LightGroupDetailModal({
           <p className="m-0 py-6 text-center text-sm text-subtle">No lights in this group.</p>
         ) : (
           <ul role="list" className="-m-2 flex max-h-[50vh] flex-col gap-2 overflow-y-auto p-2 pretty-scroll">
-            {sortedMembers.map(m => (
-              <li key={m.id}>
-                <LightGroupDetailRow
-                  sensor={m}
-                  onToggled={onToggled}
-                  onEditSensor={onEditSensor}
-                />
-              </li>
-            ))}
+            {sortedMembers.map((m, i) => {
+              const palette = LIGHT_THEMES[localTheme ?? group.theme]?.bulbPalette ?? []
+              const accentColor = m.capabilities?.color && palette.length > 0
+                ? palette[i % palette.length]
+                : undefined
+              return (
+                <li key={m.id}>
+                  <LightGroupDetailRow
+                    sensor={m}
+                    accentColor={accentColor}
+                    onToggled={onToggled}
+                    onEditSensor={onEditSensor}
+                  />
+                </li>
+              )
+            })}
           </ul>
         )}
       </DialogBody>
