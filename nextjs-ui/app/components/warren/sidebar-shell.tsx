@@ -17,6 +17,7 @@ import { useSession } from '@/lib/hooks/use-session'
 import { ColorSchemePicker } from './color-scheme-picker'
 import { ThemeToggle } from './theme-toggle'
 import { InstallMenuItem } from './install-menu-item'
+import { ChangePasswordModal } from './change-password-modal'
 
 const navLinks = [
   { to: '/', label: 'Dashboard', icon: HomeIcon },
@@ -31,6 +32,7 @@ export function SidebarShell({ children }: { children: React.ReactNode }) {
   const { user, loggedIn, clear } = useSession()
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
+  const [showChangePassword, setShowChangePassword] = useState(false)
   const userSectionDesktopRef = useRef<HTMLDivElement | null>(null)
   const userSectionMobileRef = useRef<HTMLDivElement | null>(null)
 
@@ -127,6 +129,13 @@ export function SidebarShell({ children }: { children: React.ReactNode }) {
                   </div>
                   <div className="my-1 border-t border-default" />
                   <InstallMenuItem />
+                  <button
+                    type="button"
+                    onClick={() => { setMenuOpen(false); setShowChangePassword(true) }}
+                    className="block w-full rounded-md px-3 py-2 text-left text-sm/5 text-text hover:bg-default"
+                  >
+                    Change password
+                  </button>
                   <button
                     onClick={logout}
                     className="block w-full rounded-md px-3 py-2 text-left text-sm/5 text-red-700 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-500/10"
@@ -247,6 +256,8 @@ export function SidebarShell({ children }: { children: React.ReactNode }) {
           {children}
         </div>
       </main>
+
+      <ChangePasswordModal open={showChangePassword} onClose={() => setShowChangePassword(false)} />
     </div>
   )
 }

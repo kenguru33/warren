@@ -1,13 +1,316 @@
+'use client'
+
+import { useEffect, useMemo, useState } from 'react'
+import useSWR from 'swr'
+import { AppDialog } from '@/app/components/warren/app-dialog'
+import { AppSwitch } from '@/app/components/warren/app-switch'
+import { ConfirmDialog } from '@/app/components/warren/confirm-dialog'
+import { SensorConfigModal } from '@/app/components/warren/sensor-config-modal'
+
+interface SensorRow {
+  id: number | null
+  deviceId: string | null
+  type: string
+  label: string | null
+  roomId: number | null
+  roomName: string | null
+  lastRecordedAt: number | null
+  heaterActive: boolean | null
+  fanActive: boolean | null
+  latestValue?: number | null
+  lightOn?: boolean | null
+}
+
+const TYPE_ICONS: Record<string, string> = {
+  temperature: '🌡️', humidity: '💧', camera: '📷', motion: '🏃', light: '💡', lightlevel: '☀️',
+}
+const TYPE_LABELS: Record<string, string> = {
+  temperature: 'Temperature', humidity: 'Humidity', camera: 'Camera', motion: 'Motion',
+  light: 'Light', lightlevel: 'Light Level',
+}
+
+const fetcher = (url: string) => fetch(url, { credentials: 'include' }).then(r => r.json())
+
+function matchesSearch(haystacks: (string | null | undefined)[], needle: string): boolean {
+  if (!needle) return true
+  const q = needle.toLowerCase()
+  return haystacks.some(h => h?.toLowerCase().includes(q))
+}
+
+function formatValue(s: { type: string; latestValue: number | null; lightOn?: boolean | null }): string {
+  if (s.type === 'light') return s.lightOn ? 'On' : 'Off'
+  if (s.latestValue === null) return '—'
+  if (s.type === 'temperature') return `${s.latestValue}°C`
+  if (s.type === 'humidity') return `${s.latestValue}%`
+  if (s.type === 'motion') return s.latestValue === 1 ? 'Detected' : 'Clear'
+  if (s.type === 'lightlevel') return `${Math.round(s.latestValue)} lx`
+  return '—'
+}
+
 export default function SensorsPage() {
+  const { data: sensors = [], mutate: refresh } = useSWR<SensorRow[]>('/api/sensors', fetcher, { refreshInterval: 30_000 })
+  const { data: blocked = [], mutate: refreshBlocked } = useSWR<{ deviceId: string; type: string }[]>(
+    '/api/sensors/blocked', fetcher, { refreshInterval: 30_000 },
+  )
+
+  const [now, setNow] = useState(Date.now())
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 5000)
+    return () => clearInterval(t)
+  }, [])
+
+  const [onlyUnused, setOnlyUnused] = useState(false)
+  const [search, setSearch] = useState('')
+  const [pendingDelete, setPendingDelete] = useState<SensorRow | null>(null)
+  const [configuringSensor, setConfiguringSensor] = useState<SensorRow | null>(null)
+  const [editingSensor, setEditingSensor] = useState<SensorRow | null>(null)
+  const [editingLabel, setEditingLabel] = useState('')
+
+  const nonLightSensors = useMemo(() => sensors.filter(s => s.type !== 'light'), [sensors])
+  const visibleSensors = useMemo(() => {
+    let list = nonLightSensors
+    if (onlyUnused) list = list.filter(s => !s.roomName)
+    return list.filter(s => matchesSearch([s.label, s.deviceId, s.roomName, TYPE_LABELS[s.type], s.type], search))
+  }, [nonLightSensors, onlyUnused, search])
+
+  const visibleBlocked = useMemo(() => (
+    blocked.filter(b => b.type !== 'light').filter(b => matchesSearch([b.deviceId, TYPE_LABELS[b.type], b.type], search))
+  ), [blocked, search])
+
+  function isOffline(ms: number | null): boolean {
+    if (!ms) return true
+    return now - ms > 30_000
+  }
+
+  function formatAge(ms: number | null) {
+    if (!ms) return 'Never'
+    const diff = Math.round((now - ms) / 1000)
+    if (diff < 60) return `${diff}s ago`
+    if (diff < 3600) return `${Math.round(diff / 60)}m ago`
+    if (diff < 86400) return `${Math.round(diff / 3600)}h ago`
+    return `${Math.round(diff / 86400)}d ago`
+  }
+
+  async function confirmDelete() {
+    const sensor = pendingDelete
+    if (!sensor) return
+    if (sensor.id !== null) {
+      await fetch(`/api/sensors/${sensor.id}`, { method: 'DELETE', credentials: 'include' })
+    } else if (sensor.deviceId) {
+      await fetch('/api/sensors/block', {
+        method: 'DELETE',
+        headers: { 'content-type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ deviceId: sensor.deviceId, type: sensor.type }),
+      })
+    }
+    setPendingDelete(null)
+    await Promise.all([refresh(), refreshBlocked()])
+  }
+
+  async function restoreBlocked(b: { deviceId: string; type: string }) {
+    await fetch('/api/sensors/unblock', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(b),
+    })
+    await Promise.all([refresh(), refreshBlocked()])
+  }
+
+  function openEdit(sensor: SensorRow) {
+    if (sensor.id === null) return
+    setEditingSensor(sensor)
+    setEditingLabel(sensor.label ?? '')
+  }
+
+  async function saveEdit() {
+    const sensor = editingSensor
+    if (!sensor?.id) return
+    await fetch(`/api/sensors/${sensor.id}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ label: editingLabel.trim() || null }),
+    })
+    setEditingSensor(null)
+    await refresh()
+  }
+
   return (
-    <div className="space-y-4">
-      <h1 className="text-2xl/8 font-semibold tracking-tight text-text">Sensors</h1>
-      <div className="card p-8 text-center">
-        <p className="text-sm/6 text-subtle">
-          The full sensor management UI is being ported. The API behind it
-          (<code>/api/sensors</code>, <code>/api/sensors/discovered</code>) is already live.
-        </p>
+    <>
+      <div className="space-y-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight text-text">Sensors</h1>
+            <p className="mt-1 text-sm text-muted">Manage every sensor connected to Warren.</p>
+          </div>
+          <div className="flex items-center gap-3">
+            <input
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              type="search"
+              className="input min-w-[220px]"
+              placeholder="Search sensors…"
+            />
+            <label className="inline-flex items-center gap-2.5 text-sm text-muted cursor-pointer select-none">
+              <AppSwitch checked={onlyUnused} onChange={setOnlyUnused} label="Show only unused" />
+              <span>Unused only</span>
+            </label>
+          </div>
+        </div>
+
+        {visibleSensors.length === 0 ? (
+          <div className="card p-12 text-center text-sm text-muted">
+            {onlyUnused ? 'No unused sensors.' : 'No sensors registered yet.'}
+          </div>
+        ) : (
+          <ul role="list" className="card divide-y divide-default dark:divide-white/10 overflow-hidden">
+            {visibleSensors.map((sensor, i) => (
+              <li
+                key={sensor.id ?? `${sensor.deviceId}:${sensor.type}:${i}`}
+                className="group/row flex items-center gap-x-4 px-5 py-4 transition-colors hover:bg-default/50 dark:hover:bg-white/[0.02]"
+              >
+                <div className="flex size-10 flex-none items-center justify-center rounded-lg bg-surface-2 text-lg dark:bg-white/5">
+                  {TYPE_ICONS[sensor.type] ?? '?'}
+                </div>
+
+                <div className="min-w-0 flex-auto">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className="text-sm/6 font-semibold text-text truncate">
+                      {sensor.label || TYPE_LABELS[sensor.type] || sensor.type}
+                    </p>
+                    {sensor.type !== 'camera' && isOffline(sensor.lastRecordedAt) && (
+                      <span className="badge badge-error">Offline</span>
+                    )}
+                    {!sensor.roomName && <span className="badge badge-neutral">Unassigned</span>}
+                  </div>
+                  <div className="mt-0.5 flex items-center gap-1.5 text-xs/5 text-subtle truncate">
+                    {sensor.label && <span>{TYPE_LABELS[sensor.type] || sensor.type}</span>}
+                    {sensor.label && sensor.roomName && <span aria-hidden>·</span>}
+                    {sensor.roomName && <span>{sensor.roomName}</span>}
+                    {sensor.deviceId && <span aria-hidden>·</span>}
+                    {sensor.deviceId && <span className="font-mono">{sensor.deviceId}</span>}
+                  </div>
+                </div>
+
+                <div className="hidden shrink-0 sm:flex flex-col items-end w-24 text-right">
+                  <span className={`text-sm/6 font-semibold tabular-nums ${sensor.type !== 'camera' && isOffline(sensor.lastRecordedAt) ? 'text-subtle' : 'text-text'}`}>
+                    {formatValue({ type: sensor.type, latestValue: sensor.latestValue ?? null, lightOn: sensor.lightOn })}
+                  </span>
+                  <span className="text-xs/5 text-subtle tabular-nums">{formatAge(sensor.lastRecordedAt)}</span>
+                  {sensor.type === 'temperature' && (
+                    <div className="mt-1 flex gap-1">
+                      <span className={`inline-flex items-center transition-colors ${sensor.heaterActive ? 'text-orange-500' : 'text-subtle/60'}`} title="Heater">
+                        <svg className="size-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round">
+                          <path d="M3 6 Q6 3 9 6 Q12 9 15 6 Q18 3 21 6"/>
+                          <path d="M3 12 Q6 9 9 12 Q12 15 15 12 Q18 9 21 12"/>
+                          <path d="M3 18 Q6 15 9 18 Q12 21 15 18 Q18 15 21 18"/>
+                        </svg>
+                      </span>
+                      <span className={`inline-flex items-center transition-colors ${sensor.fanActive ? 'text-sky-400' : 'text-subtle/60'}`} title="Fan">
+                        <svg className="size-3" viewBox="0 0 24 24" fill="currentColor"><path d="M12 11a1 1 0 1 0 0 2 1 1 0 0 0 0-2zm6.93-1A7 7 0 0 0 13 4.07V2h-2v2.07A7 7 0 0 0 5.07 10H3v2h2.07A7 7 0 0 0 11 19.93V22h2v-2.07A7 7 0 0 0 18.93 13H21v-2h-2.07zM12 18a6 6 0 1 1 0-12 6 6 0 0 1 0 12z"/></svg>
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex w-[108px] shrink-0 items-center justify-end gap-0.5 transition-opacity pointer-fine:opacity-0 pointer-fine:group-hover/row:opacity-100 pointer-fine:group-focus-within/row:opacity-100">
+                  {sensor.type === 'temperature' && sensor.deviceId && (
+                    <button type="button" className="btn-icon !size-8" title="Configure" onClick={() => setConfiguringSensor(sensor)}>
+                      <svg className="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                    </button>
+                  )}
+                  {sensor.id !== null && (
+                    <button type="button" className="btn-icon !size-8" title="Edit" onClick={() => openEdit(sensor)}>
+                      <svg className="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>
+                    </button>
+                  )}
+                  <button type="button" className="btn-icon !size-8 hover:!text-red-600 dark:hover:!text-red-400" title="Remove" onClick={() => setPendingDelete(sensor)}>
+                    <svg className="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></svg>
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {visibleBlocked.length > 0 && (
+          <section>
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-subtle mb-2">
+              Hidden sensors ({visibleBlocked.length})
+            </h2>
+            <ul role="list" className="rounded-2xl ring-1 ring-default/70 dark:ring-white/5 divide-y divide-default">
+              {visibleBlocked.map(b => (
+                <li key={`${b.deviceId}:${b.type}`} className="flex items-center gap-4 px-5 py-3 first:rounded-t-2xl last:rounded-b-2xl bg-surface-2/60">
+                  <span className="text-base">{TYPE_ICONS[b.type] ?? '?'}</span>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium text-muted">{TYPE_LABELS[b.type] || b.type}</div>
+                    <div className="text-xs text-subtle font-mono truncate">{b.deviceId}</div>
+                  </div>
+                  <button type="button" className="btn-secondary btn-sm" onClick={() => restoreBlocked(b)}>Restore</button>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
       </div>
-    </div>
+
+      {configuringSensor?.deviceId && (
+        <SensorConfigModal
+          open
+          deviceId={configuringSensor.deviceId}
+          label={configuringSensor.label}
+          onClose={() => setConfiguringSensor(null)}
+        />
+      )}
+
+      <ConfirmDialog
+        open={!!pendingDelete}
+        message={
+          pendingDelete?.id === null
+            ? `Hide sensor "${pendingDelete?.label || TYPE_LABELS[pendingDelete?.type ?? ''] || pendingDelete?.type}"? You can restore it from the Hidden sensors section below.`
+            : `Delete sensor "${pendingDelete?.label || TYPE_LABELS[pendingDelete?.type ?? ''] || pendingDelete?.type}"?`
+        }
+        confirmLabel={pendingDelete?.id === null ? 'Hide' : 'Delete'}
+        onConfirm={confirmDelete}
+        onCancel={() => setPendingDelete(null)}
+      />
+
+      <AppDialog open={!!editingSensor} onClose={() => setEditingSensor(null)} maxWidthClass="max-w-md">
+        {editingSensor && (
+          <div className="p-6 space-y-4">
+            <div className="flex items-center gap-3">
+              <span className="text-2xl">{TYPE_ICONS[editingSensor.type] ?? '?'}</span>
+              <div>
+                <h3 className="text-base font-semibold text-text">{TYPE_LABELS[editingSensor.type] || editingSensor.type}</h3>
+                {editingSensor.deviceId && (
+                  <div className="text-xs text-subtle font-mono mt-0.5">{editingSensor.deviceId}</div>
+                )}
+              </div>
+            </div>
+            <div>
+              <label className="label">Label</label>
+              <input
+                value={editingLabel}
+                onChange={e => setEditingLabel(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') saveEdit()
+                  if (e.key === 'Escape') setEditingSensor(null)
+                }}
+                className="input mt-2"
+                placeholder="Custom label…"
+                maxLength={60}
+                autoFocus
+              />
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <button type="button" className="btn-secondary" onClick={() => setEditingSensor(null)}>Cancel</button>
+              <button type="button" className="btn-primary" onClick={saveEdit}>Save</button>
+            </div>
+          </div>
+        )}
+      </AppDialog>
+    </>
   )
 }

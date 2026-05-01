@@ -1,0 +1,131 @@
+'use client'
+
+import { useEffect, useMemo, useState } from 'react'
+import { XMarkIcon } from '@heroicons/react/20/solid'
+import type { LightGroupView, SensorView } from '@/lib/shared/types'
+import type { LightThemeKey } from '@/lib/shared/light-themes'
+import { AppDialog } from './app-dialog'
+import { LightThemePicker } from './light-theme-picker'
+import { LightGroupDetailRow } from './light-group-detail-row'
+
+export function LightGroupDetailModal({
+  open,
+  group,
+  members,
+  onClose,
+  onToggled,
+  onEditSensor,
+}: {
+  open: boolean
+  group: LightGroupView | null
+  members: SensorView[]
+  onClose: () => void
+  onToggled: () => void
+  onEditSensor: (sensorId: number) => void
+}) {
+  const [localTheme, setLocalTheme] = useState<LightThemeKey | null>(group?.theme ?? null)
+  const [themeError, setThemeError] = useState<string | null>(null)
+
+  useEffect(() => {
+    setLocalTheme(group?.theme ?? null)
+    setThemeError(null)
+  }, [group?.id, group?.theme])
+
+  const sortedMembers = useMemo(() => (
+    [...members].sort((a, b) => {
+      const an = (a.label?.trim() || a.hueName?.trim() || '').toLowerCase()
+      const bn = (b.label?.trim() || b.hueName?.trim() || '').toLowerCase()
+      return an.localeCompare(bn)
+    })
+  ), [members])
+
+  if (!group) return null
+
+  const stateLabel = (() => {
+    const onCount = members.filter(m => m.lightOn === true && m.lightReachable !== false).length
+    const total = members.filter(m => m.lightReachable !== false).length
+    if (group.state === 'mixed') return `${onCount} of ${total} on`
+    if (group.state === 'all-on') return total === 1 ? 'On' : 'All on'
+    return total === 0 ? 'Offline' : 'All off'
+  })()
+  const memberLabel = `${group.memberCount} ${group.memberCount === 1 ? 'light' : 'lights'}`
+
+  async function onThemeChange(key: LightThemeKey) {
+    if (key === localTheme) return
+    const prev = localTheme
+    setLocalTheme(key)
+    setThemeError(null)
+    try {
+      const res = await fetch(`/api/light-groups/${group!.id}`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ theme: key }),
+      })
+      if (!res.ok) {
+        let payload: { data?: { error?: string }; message?: string } = {}
+        try { payload = await res.json() } catch {}
+        throw payload
+      }
+    } catch (err: unknown) {
+      const e = err as { data?: { error?: string }; message?: string }
+      setThemeError(e.data?.error === 'bridge_unreachable' ? 'Bridge unreachable' : (e.message ?? 'Failed to save theme'))
+      setLocalTheme(prev)
+      return
+    }
+    if (group!.state !== 'all-off') {
+      // Fire-and-forget paint with the new theme.
+      fetch(`/api/light-groups/${group!.id}/state`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ on: true, theme: key }),
+      }).catch(() => {})
+    }
+  }
+
+  return (
+    <AppDialog open={open} onClose={onClose} maxWidthClass="max-w-lg">
+      <div className="px-6 pt-5 pb-4 border-b border-default">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h3 className="text-base/6 font-semibold text-text truncate">{group.name}</h3>
+            <p className="mt-0.5 text-xs text-subtle uppercase tracking-wider font-medium">
+              {stateLabel} · {memberLabel}
+            </p>
+          </div>
+          <button type="button" className="btn-icon size-8" title="Close" aria-label="Close" onClick={onClose}>
+            <XMarkIcon className="size-4" />
+          </button>
+        </div>
+        <div className="mt-4">
+          <label className="label">Color theme</label>
+          <div className="mt-1.5">
+            <LightThemePicker value={localTheme ?? group.theme} onChange={onThemeChange} />
+          </div>
+          {themeError && (
+            <p className="mt-2 rounded-lg bg-error/10 ring-1 ring-error/30 px-3 py-2 text-xs text-error">{themeError}</p>
+          )}
+        </div>
+      </div>
+
+      <div className="px-6 py-5 overflow-y-auto pretty-scroll">
+        {sortedMembers.length === 0 ? (
+          <p className="text-center text-sm text-subtle py-6 m-0">No lights in this group.</p>
+        ) : (
+          <ul role="list" className="flex flex-col gap-2">
+            {sortedMembers.map(m => (
+              <li key={m.id}>
+                <LightGroupDetailRow
+                  sensor={m}
+                  onToggled={onToggled}
+                  onEditSensor={onEditSensor}
+                />
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </AppDialog>
+  )
+}
