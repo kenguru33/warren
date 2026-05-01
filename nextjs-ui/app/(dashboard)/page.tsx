@@ -32,6 +32,10 @@ export default function DashboardPage() {
   const [configSensor, setConfigSensor] = useState<{ deviceId: string; label: string | null } | null>(null)
   const [liveStream, setLiveStream] = useState<{ name: string; streamUrl: string | null } | null>(null)
   const [editingLight, setEditingLight] = useState<SensorView | null>(null)
+  // Optimistic per-light color overrides — populated when the user picks a color
+  // in EditLightModal so the bulb in LightGroupDetailModal updates immediately
+  // instead of waiting for the next /rooms refresh (where color isn't tracked).
+  const [lightColorOverrides, setLightColorOverrides] = useState<Record<number, string>>({})
 
   const addSensorRoom = useMemo(
     () => addSensorRoomId !== null ? rooms.find(r => r.id === addSensorRoomId) ?? null : null,
@@ -224,6 +228,7 @@ export default function DashboardPage() {
         open={groupDetail !== null}
         group={groupDetail?.group ?? null}
         members={groupDetail?.members ?? []}
+        colorOverrides={lightColorOverrides}
         onClose={() => setGroupDetailId(null)}
         onToggled={refresh}
         onEditSensor={handleEditSensor}
@@ -263,6 +268,9 @@ export default function DashboardPage() {
         groupName={editingLightGroup?.name}
         onClose={() => setEditingLight(null)}
         onSaved={refresh}
+        onColorApplied={(sensorId, hex) => {
+          setLightColorOverrides(prev => ({ ...prev, [sensorId]: hex }))
+        }}
       />
     </>
   )

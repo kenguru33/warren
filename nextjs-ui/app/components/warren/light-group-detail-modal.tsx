@@ -18,6 +18,7 @@ export function LightGroupDetailModal({
   open,
   group,
   members,
+  colorOverrides,
   onClose,
   onToggled,
   onEditSensor,
@@ -25,6 +26,9 @@ export function LightGroupDetailModal({
   open: boolean
   group: LightGroupView | null
   members: SensorView[]
+  /** Per-sensor color override, populated after a custom color is applied via
+   *  EditLightModal. Wins over the round-robin theme palette color. */
+  colorOverrides?: Record<number, string>
   onClose: () => void
   onToggled: () => void
   onEditSensor: (sensorId: number) => void
@@ -123,9 +127,11 @@ export function LightGroupDetailModal({
           <ul role="list" className="-m-2 flex max-h-[50vh] flex-col gap-2 overflow-y-auto p-2 pretty-scroll">
             {sortedMembers.map((m, i) => {
               const palette = LIGHT_THEMES[localTheme ?? group.theme]?.bulbPalette ?? []
-              const accentColor = m.capabilities?.color && palette.length > 0
-                ? palette[i % palette.length]
-                : undefined
+              const override = colorOverrides?.[m.id]
+              const accentColor = override
+                ?? (m.capabilities?.color && palette.length > 0
+                  ? palette[i % palette.length]
+                  : undefined)
               return (
                 <li key={m.id}>
                   <LightGroupDetailRow

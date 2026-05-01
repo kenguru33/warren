@@ -67,6 +67,7 @@ export function EditLightModal({
   groupName,
   onClose,
   onSaved,
+  onColorApplied,
 }: {
   open: boolean
   sensor: SensorView | null
@@ -77,6 +78,10 @@ export function EditLightModal({
   groupName?: string
   onClose: () => void
   onSaved: () => void
+  /** Fires after a color is successfully sent to the bridge so the caller can
+   *  reflect the new color in adjacent UI (group detail list, etc.) without
+   *  waiting for a full refetch. */
+  onColorApplied?: (sensorId: number, hex: string) => void
 }) {
   const [label, setLabel] = useState('')
   const [color, setColor] = useState<string | null>(null)
@@ -114,6 +119,7 @@ export function EditLightModal({
         const e = payload as { data?: { error?: string }; message?: string }
         throw new Error(e.data?.error === 'bridge_unreachable' ? 'Bridge unreachable' : (e.message ?? 'Failed to set color'))
       }
+      onColorApplied?.(sensor.id, hex)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to set color')
     }
