@@ -425,123 +425,21 @@ html { @apply antialiased; }
 *, *::before, *::after { box-sizing: border-box; }
 
 /* ---------------------------------------------------------------------------
- * Component layer — Catalyst patterns, transcribed from the live demo HTML.
+ * Component layer — residuals after the Catalyst migration.
  *
- * We inline classes (no @apply chaining of component classes — Tailwind v4
- * disallows that). Sizes follow Catalyst's responsive `text-base/6` mobile
- * → `sm:text-sm/6` desktop and Catalyst's exact px/py with the `-1px`
- * border subtraction trick.
+ * Buttons, inputs, labels, badges, cards and panels are now Catalyst primitives
+ * imported from app/components. The only utilities kept below are things
+ * Catalyst doesn't ship and that would otherwise explode className strings:
+ * range-slider thumbs and the pretty scrollbar shared by overflow areas.
  *
- * NOTE: focus rings reference the `accent` token so they swap with the
- * active scheme.
+ * NOTE: thumbs use the `accent` token so they swap with the active scheme.
  * ------------------------------------------------------------------------- */
 
 @layer components {
 
-  /* ── Buttons ───────────────────────────────────────────────────── */
-  .btn-primary {
-    @apply relative inline-flex items-center justify-center gap-x-2;
-    @apply rounded-lg border border-transparent;
-    @apply px-3.5 py-2.5 sm:px-3 sm:py-1.5;
-    @apply text-base/6 sm:text-sm/6 font-semibold;
-    @apply bg-stone-900 text-white shadow-sm;
-    @apply hover:bg-stone-800;
-    @apply focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent;
-    @apply disabled:opacity-50 disabled:cursor-not-allowed;
-    @apply transition-colors;
-  }
-  .dark .btn-primary {
-    @apply bg-stone-600 hover:bg-stone-500 border-white/5;
-  }
-
-  .btn-secondary {
-    @apply relative inline-flex items-center justify-center gap-x-2;
-    @apply rounded-lg border border-default;
-    @apply px-3.5 py-2.5 sm:px-3 sm:py-1.5;
-    @apply text-base/6 sm:text-sm/6 font-semibold;
-    @apply bg-surface text-text shadow-sm;
-    @apply hover:bg-surface-2 hover:border-strong;
-    @apply focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent;
-    @apply disabled:opacity-50 disabled:cursor-not-allowed;
-    @apply transition-colors;
-  }
-  .dark .btn-secondary {
-    @apply bg-stone-800 text-white border-white/15 shadow-none;
-    @apply hover:bg-white/5;
-  }
-
-  .btn-ghost {
-    @apply relative inline-flex items-center justify-center gap-x-2;
-    @apply rounded-lg border border-transparent;
-    @apply px-3.5 py-2.5 sm:px-3 sm:py-1.5;
-    @apply text-base/6 sm:text-sm/6 font-semibold;
-    @apply text-text bg-transparent;
-    @apply hover:bg-default;
-    @apply focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent;
-    @apply disabled:opacity-50 disabled:cursor-not-allowed;
-    @apply transition-colors;
-  }
-  .dark .btn-ghost {
-    @apply text-white hover:bg-white/10;
-  }
-
-  .btn-danger {
-    @apply relative inline-flex items-center justify-center gap-x-2;
-    @apply rounded-lg border border-transparent;
-    @apply px-3.5 py-2.5 sm:px-3 sm:py-1.5;
-    @apply text-base/6 sm:text-sm/6 font-semibold;
-    @apply bg-red-600 text-white shadow-sm;
-    @apply hover:bg-red-500;
-    @apply focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent;
-    @apply disabled:opacity-50 disabled:cursor-not-allowed;
-    @apply transition-colors;
-  }
-  .dark .btn-danger {
-    @apply border-white/5;
-  }
-
-  .btn-sm { @apply px-3 py-1.5 sm:px-2.5 sm:py-1 text-xs; }
-  .btn-xs { @apply px-2.5 py-1 text-xs rounded-md; }
-
-  .btn-icon {
-    @apply inline-flex items-center justify-center rounded-lg;
-    @apply size-9 sm:size-8;
-    @apply text-subtle bg-transparent;
-    @apply hover:text-text hover:bg-default;
-    @apply focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent;
-    @apply transition-colors;
-  }
-  .dark .btn-icon {
-    @apply hover:text-white hover:bg-white/10;
-  }
-
-  /* ── Form inputs ───────────────────────────────────────────────── */
-  .input {
-    @apply block w-full rounded-lg;
-    @apply border border-default;
-    @apply bg-input;
-    @apply px-3.5 py-2.5 sm:px-3 sm:py-1.5;
-    @apply text-base/6 sm:text-sm/6 text-text placeholder:text-subtle;
-    @apply shadow-sm;
-    @apply hover:border-strong;
-    @apply focus:outline-none focus:border-default focus:ring-2 focus:ring-accent focus:ring-inset;
-    @apply disabled:opacity-50 disabled:cursor-not-allowed;
-    @apply transition-colors;
-  }
-  .dark .input {
-    @apply text-white border-white/10 shadow-none;
-    @apply hover:border-white/20;
-  }
-
-  .label {
-    @apply block text-base/6 sm:text-sm/6 font-medium text-text select-none;
-  }
-
-  .help-text {
-    @apply mt-2 text-base/6 sm:text-sm/6 text-subtle;
-  }
-
-  /* ── Range-slider thumbs ───────────────────────────────────────── */
+  /* `.slider` / `.slider-sm` — Catalyst has no slider; webkit/moz thumb
+   *  pseudo-element styling can't live in className strings, so it lives here.
+   *  Used at ~16 + 7 sites for room reference temps and per-light brightness. */
   .slider {
     @apply w-full h-1.5 rounded-full appearance-none outline-none cursor-pointer;
     background: var(--color-border);
@@ -571,7 +469,8 @@ html { @apply antialiased; }
   .slider-sm::-webkit-slider-thumb { width: 12px; height: 12px; }
   .slider-sm::-moz-range-thumb { width: 12px; height: 12px; }
 
-  /* ── Pretty scrollbar ──────────────────────────────────────────── */
+  /* `.pretty-scroll` — thin scrollbar used by overflow areas in modals and
+   *  long lists. Catalyst doesn't expose this, so keeping it as a utility. */
   .pretty-scroll {
     scrollbar-width: thin;
     scrollbar-color: var(--color-border) transparent;
@@ -587,7 +486,8 @@ html { @apply antialiased; }
   }
 }
 
-/* Animation helpers used across components. */
+/* `.animate-warren-pulse` — slow pulse used by the LIVE badge on cameras and
+ * the motion "Live" badge. Tailwind's `animate-pulse` is too fast. */
 @keyframes warren-pulse {
   0%, 100% { opacity: 1; }
   50%      { opacity: 0.5; }
