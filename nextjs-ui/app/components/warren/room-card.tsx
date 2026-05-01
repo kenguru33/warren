@@ -188,11 +188,19 @@ export function RoomCard({
         '[container-type:inline-size]',
       ].join(' ')}
     >
-      {/* Floating control pill — sits centered on the card's top border, always
-       *  visible on touch and mouse so the controls are discoverable without
-       *  hovering. Centering keeps it balanced across mobile (narrow cards) and
-       *  desktop (1- to 3-col grid). */}
-      <div className="absolute -top-4 left-1/2 z-10 flex -translate-x-1/2 items-center rounded-xl bg-surface px-1 py-1 shadow-[0_1px_2px_rgba(0,0,0,0.06),0_4px_12px_-6px_rgba(0,0,0,0.12)] ring-1 ring-default dark:bg-surface-2 dark:ring-white/10">
+      {/* Floating control pill — straddles the card's top-right border (vertically
+       *  centered on the ring line). On touch (coarse pointer) it's always visible
+       *  so the controls are discoverable; on mouse (fine pointer) it fades in on
+       *  card hover or keyboard focus to keep the chrome quiet. */}
+      <div
+        className={[
+          'absolute right-4 top-0 z-10 flex -translate-y-1/2 items-center rounded-xl bg-surface px-1 py-1',
+          'shadow-[0_1px_2px_rgba(0,0,0,0.06),0_4px_12px_-6px_rgba(0,0,0,0.12)] ring-1 ring-default',
+          'dark:bg-surface-2 dark:ring-white/10',
+          'transition-opacity duration-150',
+          'pointer-fine:opacity-0 pointer-fine:group-hover/room:opacity-100 pointer-fine:group-focus-within/room:opacity-100 pointer-fine:focus-within:opacity-100',
+        ].join(' ')}
+      >
         <CardIconButton title="Add sensor" onClick={() => onAddSensor(room.id)}>
           <PlusIcon className="size-3.5" />
         </CardIconButton>
