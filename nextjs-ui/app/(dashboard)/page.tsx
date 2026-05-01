@@ -121,6 +121,18 @@ export default function DashboardPage() {
   const editingLightPalette = editingLightGroup
     ? LIGHT_THEMES[editingLightGroup.theme]?.bulbPalette
     : undefined
+  // Current color the bulb displays: prefer an explicit override (a previous
+  // pick this session), otherwise the round-robin palette color the group
+  // would assign by member index.
+  const editingLightCurrentColor = (() => {
+    if (!editingLight) return undefined
+    const override = lightColorOverrides[editingLight.id]
+    if (override) return override
+    if (!editingLightGroup || !editingLightPalette?.length) return undefined
+    const idx = editingLightGroup.memberSensorIds.indexOf(editingLight.id)
+    if (idx < 0) return undefined
+    return editingLightPalette[idx % editingLightPalette.length]
+  })()
 
   function handleViewHistory(sensor: SensorView) {
     const found = findSensor(sensor.id)
@@ -266,6 +278,7 @@ export default function DashboardPage() {
         sensor={editingLight}
         paletteColors={editingLightPalette}
         groupName={editingLightGroup?.name}
+        currentColor={editingLightCurrentColor}
         onClose={() => setEditingLight(null)}
         onSaved={refresh}
         onColorApplied={(sensorId, hex) => {

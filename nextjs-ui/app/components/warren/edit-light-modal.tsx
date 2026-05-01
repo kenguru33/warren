@@ -1,6 +1,7 @@
 'use client'
 
-import { FormEvent, useEffect, useState, type ChangeEvent } from 'react'
+import { FormEvent, useEffect, useState } from 'react'
+import { CheckIcon } from '@heroicons/react/20/solid'
 import type { SensorView } from '@/lib/shared/types'
 import { Button } from '@/app/components/button'
 import {
@@ -22,40 +23,35 @@ function PalettePicker({
   value: string | null
   onChange: (hex: string) => void
 }) {
-  function onCustomInput(e: ChangeEvent<HTMLInputElement>) {
-    if (e.target.value) onChange(e.target.value)
-  }
   return (
     <div className="grid grid-cols-6 gap-2 sm:grid-cols-7">
-      {paletteColors.map(hex => (
-        <button
-          key={hex}
-          type="button"
-          onClick={() => onChange(hex)}
-          title={hex}
-          aria-label={hex}
-          style={{ background: hex }}
-          className={[
-            'size-9 rounded-full ring-1 transition hover:scale-110 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent',
-            value?.toLowerCase() === hex.toLowerCase()
-              ? 'ring-2 ring-accent ring-offset-2 ring-offset-modal'
-              : 'ring-default dark:ring-white/15',
-          ].join(' ')}
-        />
-      ))}
-      <label
-        className="relative size-9 cursor-pointer overflow-hidden rounded-full ring-1 ring-default dark:ring-white/15"
-        title="Custom color"
-        aria-label="Custom color"
-      >
-        <input
-          type="color"
-          value={value ?? '#ffffff'}
-          onChange={onCustomInput}
-          className="absolute inset-0 size-full cursor-pointer opacity-0"
-        />
-        <span className="absolute inset-0 bg-[conic-gradient(from_0deg,_#ef4444,_#f59e0b,_#eab308,_#22c55e,_#06b6d4,_#3b82f6,_#a855f7,_#ec4899,_#ef4444)]" />
-      </label>
+      {paletteColors.map(hex => {
+        const selected = value?.toLowerCase() === hex.toLowerCase()
+        return (
+          <button
+            key={hex}
+            type="button"
+            onClick={() => onChange(hex)}
+            title={hex}
+            aria-label={hex}
+            aria-pressed={selected}
+            style={{ background: hex }}
+            className={[
+              'relative size-9 rounded-full ring-1 transition hover:scale-110 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent',
+              selected
+                ? 'ring-2 ring-accent ring-offset-2 ring-offset-modal'
+                : 'ring-default dark:ring-white/15',
+            ].join(' ')}
+          >
+            {selected && (
+              <CheckIcon
+                aria-hidden
+                className="absolute inset-0 m-auto size-5 text-white drop-shadow-[0_1px_1px_rgba(0,0,0,0.6)]"
+              />
+            )}
+          </button>
+        )
+      })}
     </div>
   )
 }
@@ -65,6 +61,7 @@ export function EditLightModal({
   sensor,
   paletteColors,
   groupName,
+  currentColor,
   onClose,
   onSaved,
   onColorApplied,
@@ -72,10 +69,13 @@ export function EditLightModal({
   open: boolean
   sensor: SensorView | null
   /** When the light belongs to a group, the active theme's bulbPalette. Restricts
-   *  the color picker to those swatches + a custom-color escape hatch. */
+   *  the color picker to those swatches only — no custom-color escape hatch. */
   paletteColors?: string[]
   /** Group name, used to label the constrained palette section. */
   groupName?: string
+  /** Hex of the color this light currently displays — selects the matching
+   *  swatch when the picker opens. */
+  currentColor?: string
   onClose: () => void
   onSaved: () => void
   /** Fires after a color is successfully sent to the bridge so the caller can
@@ -91,11 +91,11 @@ export function EditLightModal({
   useEffect(() => {
     if (open && sensor) {
       setLabel(sensor.label ?? '')
-      setColor(null)
+      setColor(currentColor ?? null)
       setError(null)
       setSaving(false)
     }
-  }, [open, sensor?.id])
+  }, [open, sensor?.id, currentColor])
 
   if (!sensor) return null
 
@@ -182,7 +182,7 @@ export function EditLightModal({
               {paletteColors && paletteColors.length > 0 ? (
                 <>
                   <p className="mt-1 text-xs text-subtle">
-                    Colors from the {groupName ? <>&ldquo;{groupName}&rdquo; </> : null}group theme. Pick custom for anything else.
+                    Colors from the {groupName ? <>&ldquo;{groupName}&rdquo; </> : null}group theme.
                   </p>
                   <div className="mt-3">
                     <PalettePicker
