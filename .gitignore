@@ -1,17 +1,3 @@
-# Nuxt (legacy ui/, kept for reference)
-ui/.output
-ui/.data
-ui/.nuxt
-ui/.nitro
-ui/.cache
-ui/dist
-ui/node_modules
-ui/logs
-ui/*.log
-ui/.env
-ui/.env.*
-!ui/.env.example
-
 # Next.js (canonical nextjs-ui/)
 nextjs-ui/.next
 nextjs-ui/.data

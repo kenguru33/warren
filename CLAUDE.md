@@ -15,7 +15,6 @@ ESP32 firmware  →  MQTT (Mosquitto :1883)  →  Node-RED  →  InfluxDB :8086
   - `sensor/` — reads DHT22 (temp/humidity), publishes via MQTT, controls heater/fan relays
   - `camera/` — serves MJPEG stream and JPEG snapshot over HTTP, announces itself to the UI on boot
 - **`nextjs-ui/`** — **Next.js 16 app** (App Router + Tailwind v4 + Catalyst). Serves the dashboard and the REST API backed by SQLite + InfluxDB. This is the canonical UI.
-- **`ui/`** — legacy Nuxt 4 app being phased out. Kept for reference until the Next.js port is feature-complete; do not add new features here. The `warren` CLI no longer points at this directory.
 - **`docker/`** — Mosquitto, Node-RED, InfluxDB 3, InfluxDB Explorer; managed by the `warren` CLI
 
 ## Running the stack
