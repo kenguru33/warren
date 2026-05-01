@@ -164,6 +164,20 @@ export function RoomCard({
         '[container-type:inline-size]',
       ].join(' ')}
     >
+      {/* Floating control pill — sits on the card's top-right border, always visible
+       *  on touch and mouse so the controls are discoverable without hovering. */}
+      <div className="absolute -top-3 right-4 z-10 flex items-center gap-0.5 rounded-full bg-surface px-1 py-0.5 shadow-[0_1px_2px_rgba(0,0,0,0.06),0_4px_12px_-6px_rgba(0,0,0,0.12)] ring-1 ring-default dark:bg-surface-2 dark:ring-white/10">
+        <Button plain title="Add sensor" aria-label="Add sensor" onClick={() => onAddSensor(room.id)}>
+          <PlusIcon data-slot="icon" />
+        </Button>
+        <Button plain title="Edit room" aria-label="Edit room" onClick={editing ? closeEditing : openEditing}>
+          <PencilSquareIcon data-slot="icon" />
+        </Button>
+        <Button plain title="Remove room" aria-label="Remove room" onClick={() => setConfirmRoom(true)}>
+          <TrashIcon data-slot="icon" />
+        </Button>
+      </div>
+
       <div
         className={[
           'flex min-h-[32px] items-center justify-between gap-3',
@@ -185,33 +199,15 @@ export function RoomCard({
           <Heading level={2} className="truncate !text-lg/6 font-semibold tracking-tight">{room.name}</Heading>
         )}
 
-        <div className="flex items-center gap-1 ml-auto">
-          {room.lightMaster && (
-            <MasterLightToggle
-              master={room.lightMaster}
-              pending={masterPending}
-              error={masterError}
-              partial={masterPartial}
-              onToggle={toggleRoomMaster}
-            />
-          )}
-          <div className={[
-            'flex items-center gap-0.5 transition-opacity',
-            editing
-              ? 'opacity-100'
-              : 'pointer-fine:opacity-0 pointer-fine:group-hover/room:opacity-100 pointer-fine:group-focus-within/room:opacity-100',
-          ].join(' ')}>
-            <Button plain title="Add sensor" aria-label="Add sensor" onClick={() => onAddSensor(room.id)}>
-              <PlusIcon data-slot="icon" />
-            </Button>
-            <Button plain title="Edit room" aria-label="Edit room" onClick={editing ? closeEditing : openEditing}>
-              <PencilSquareIcon data-slot="icon" />
-            </Button>
-            <Button plain title="Remove room" aria-label="Remove room" onClick={() => setConfirmRoom(true)}>
-              <TrashIcon data-slot="icon" />
-            </Button>
-          </div>
-        </div>
+        {room.lightMaster && (
+          <MasterLightToggle
+            master={room.lightMaster}
+            pending={masterPending}
+            error={masterError}
+            partial={masterPartial}
+            onToggle={toggleRoomMaster}
+          />
+        )}
       </div>
 
       {hasAnyContent && (
