@@ -204,7 +204,7 @@ export function LightGroupModal({
         </Field>
 
         <div>
-          <Label>Lights</Label>
+          <span className="block text-base/6 font-medium text-text select-none sm:text-sm/6">Lights</span>
           {lights.length === 0 ? (
             <div className="mt-1.5 text-center text-sm text-subtle py-6 rounded-lg bg-surface-2 ring-1 ring-default">
               This room has no lights to group.

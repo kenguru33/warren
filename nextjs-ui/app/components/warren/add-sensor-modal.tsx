@@ -333,7 +333,7 @@ export function AddSensorModal({
           ) : (
             <div className="pt-5 space-y-4">
               <div>
-                <Label>Type</Label>
+                <span className="block text-base/6 font-medium text-text select-none sm:text-sm/6">Type</span>
                 <div className="mt-2 grid grid-cols-2 gap-2">
                   {MANUAL_TYPES.map(opt => (
                     <button
