@@ -49,6 +49,9 @@
   --color-success: #16a34a;
   --color-warning: #d97706;
   --color-error:   #dc2626;
+
+  /* Catalyst aliases: focus ring follows the active accent. */
+  --color-blue-500: var(--color-accent);
 }
 .dark,
 .dark[data-scheme="zinc-indigo"] {
@@ -72,6 +75,8 @@
   --color-success: #34d399;
   --color-warning: #fbbf24;
   --color-error:   #f87171;
+
+  --color-blue-500: var(--color-accent);
 }
 
 /* ── slate + sky ──────────────────────────────────────────────────── */
@@ -96,6 +101,16 @@
   --color-success: #16a34a;
   --color-warning: #d97706;
   --color-error:   #dc2626;
+
+  /* Catalyst aliases: re-point hard-coded zinc shades to the slate ramp. */
+  --color-zinc-50:  #f8fafc;
+  --color-zinc-100: #f1f5f9;
+  --color-zinc-400: #94a3b8;
+  --color-zinc-500: #64748b;
+  --color-zinc-800: #1e293b;
+  --color-zinc-900: #0f172a;
+  --color-zinc-950: #020617;
+  --color-blue-500: var(--color-accent);
 }
 .dark[data-scheme="slate-sky"] {
   --color-bg:        #0f172a;       /* slate-900 */
@@ -118,6 +133,15 @@
   --color-success: #34d399;
   --color-warning: #fbbf24;
   --color-error:   #f87171;
+
+  --color-zinc-50:  #f8fafc;
+  --color-zinc-100: #f1f5f9;
+  --color-zinc-400: #94a3b8;
+  --color-zinc-500: #64748b;
+  --color-zinc-800: #1e293b;
+  --color-zinc-900: #0f172a;
+  --color-zinc-950: #020617;
+  --color-blue-500: var(--color-accent);
 }
 
 /* ── stone + amber ────────────────────────────────────────────────── */
@@ -142,6 +166,16 @@
   --color-success: #16a34a;
   --color-warning: #d97706;
   --color-error:   #dc2626;
+
+  /* Catalyst aliases: re-point hard-coded zinc shades to the stone ramp. */
+  --color-zinc-50:  #fafaf9;
+  --color-zinc-100: #f5f5f4;
+  --color-zinc-400: #a8a29e;
+  --color-zinc-500: #78716c;
+  --color-zinc-800: #292524;
+  --color-zinc-900: #1c1917;
+  --color-zinc-950: #0c0a09;
+  --color-blue-500: var(--color-accent);
 }
 .dark[data-scheme="stone-amber"] {
   --color-bg:        #1c1917;       /* stone-900 */
@@ -164,6 +198,15 @@
   --color-success: #34d399;
   --color-warning: #fbbf24;
   --color-error:   #f87171;
+
+  --color-zinc-50:  #fafaf9;
+  --color-zinc-100: #f5f5f4;
+  --color-zinc-400: #a8a29e;
+  --color-zinc-500: #78716c;
+  --color-zinc-800: #292524;
+  --color-zinc-900: #1c1917;
+  --color-zinc-950: #0c0a09;
+  --color-blue-500: var(--color-accent);
 }
 
 /* ── neutral + emerald ────────────────────────────────────────────── */
@@ -188,6 +231,16 @@
   --color-success: #16a34a;
   --color-warning: #d97706;
   --color-error:   #dc2626;
+
+  /* Catalyst aliases: re-point hard-coded zinc shades to the neutral ramp. */
+  --color-zinc-50:  #fafafa;
+  --color-zinc-100: #f5f5f5;
+  --color-zinc-400: #a3a3a3;
+  --color-zinc-500: #737373;
+  --color-zinc-800: #262626;
+  --color-zinc-900: #171717;
+  --color-zinc-950: #0a0a0a;
+  --color-blue-500: var(--color-accent);
 }
 .dark[data-scheme="neutral-emerald"] {
   --color-bg:        #171717;       /* neutral-900 */
@@ -210,6 +263,15 @@
   --color-success: #34d399;
   --color-warning: #fbbf24;
   --color-error:   #f87171;
+
+  --color-zinc-50:  #fafafa;
+  --color-zinc-100: #f5f5f5;
+  --color-zinc-400: #a3a3a3;
+  --color-zinc-500: #737373;
+  --color-zinc-800: #262626;
+  --color-zinc-900: #171717;
+  --color-zinc-950: #0a0a0a;
+  --color-blue-500: var(--color-accent);
 }
 
 /* ── gray + rose ──────────────────────────────────────────────────── */
@@ -234,6 +296,16 @@
   --color-success: #16a34a;
   --color-warning: #d97706;
   --color-error:   #dc2626;
+
+  /* Catalyst aliases: re-point hard-coded zinc shades to the gray ramp. */
+  --color-zinc-50:  #f9fafb;
+  --color-zinc-100: #f3f4f6;
+  --color-zinc-400: #9ca3af;
+  --color-zinc-500: #6b7280;
+  --color-zinc-800: #1f2937;
+  --color-zinc-900: #111827;
+  --color-zinc-950: #030712;
+  --color-blue-500: var(--color-accent);
 }
 .dark[data-scheme="gray-rose"] {
   --color-bg:        #111827;       /* gray-900 */
@@ -256,6 +328,15 @@
   --color-success: #34d399;
   --color-warning: #fbbf24;
   --color-error:   #f87171;
+
+  --color-zinc-50:  #f9fafb;
+  --color-zinc-100: #f3f4f6;
+  --color-zinc-400: #9ca3af;
+  --color-zinc-500: #6b7280;
+  --color-zinc-800: #1f2937;
+  --color-zinc-900: #111827;
+  --color-zinc-950: #030712;
+  --color-blue-500: var(--color-accent);
 }
 
 /* ── zinc + violet ────────────────────────────────────────────────── */
@@ -280,6 +361,8 @@
   --color-success: #16a34a;
   --color-warning: #d97706;
   --color-error:   #dc2626;
+
+  --color-blue-500: var(--color-accent);
 }
 .dark[data-scheme="zinc-violet"] {
   --color-bg:        #18181b;
@@ -302,6 +385,8 @@
   --color-success: #34d399;
   --color-warning: #fbbf24;
   --color-error:   #f87171;
+
+  --color-blue-500: var(--color-accent);
 }
 
 @theme {
