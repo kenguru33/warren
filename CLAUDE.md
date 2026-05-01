@@ -16,6 +16,7 @@ ESP32 firmware  →  MQTT (Mosquitto :1883)  →  Node-RED  →  InfluxDB :8086
   - `camera/` — serves MJPEG stream and JPEG snapshot over HTTP, announces itself to the UI on boot
 - **`ui/`** — Nuxt 4 app; serves the dashboard and a REST API backed by SQLite + InfluxDB
 - **`docker/`** — Mosquitto, Node-RED, InfluxDB 3, InfluxDB Explorer; managed by the `warren` CLI
+- **`nextjs-ui/`** — exploratory Next.js port. NOT part of the running stack and NOT auto-synced with `ui/`. Treat it as a sandbox; do not propagate `ui/` changes into it unless explicitly asked.
 
 ## Running the stack
 
@@ -99,3 +100,35 @@ Unassigned sensors appear from three sources merged in `GET /api/sensors/discove
 3. Persisted `sensors` rows with `room_id IS NULL` (previously assigned, then removed from a room)
 
 Blocked sensors (`blocked_sensors` table) are excluded from all three.
+
+### Hue Bridge integration
+
+A Philips Hue bridge is a first-class data source alongside the ESP32 fleet. Lives entirely inside `ui/`:
+
+- **Tables** (created in `initDb()`):
+  - `hue_bridge` — single-row config (`id = 1`): bridge IP, app key, last-sync state.
+  - `hue_devices` — every light/sensor the bridge exposes; `kind` is `light` or `sensor`, `device_id` is `hue:{bridgeId}:{resourceId}`, `capabilities` is JSON (e.g. color/dimming).
+  - `hue_light_state` — last-known on/brightness/color cache, refreshed by the poller.
+- **Background poller**: `server/plugins/hue.ts` boots `hueRuntime` from `server/utils/hue-runtime.ts` at server start. Polls every 10s by default, upserts into `hue_devices` + `hue_light_state`, and writes time-series readings into the `sensor_readings` InfluxDB measurement so Hue motion/lightlevel sensors share the same history pipeline as ESP32 sensors.
+- **Endpoints**: `server/api/integrations/hue/` exposes setup (`POST /api/integrations/hue` to pair), sync, and per-light state (`POST /api/integrations/hue/lights/{deviceId}/state` accepts `{ on, brightness, color: '#rrggbb', theme: <key> }`).
+- **device_id convention**: every Hue device has a `hue_devices` row, but only those assigned to a room also have a `sensors` row. Code that operates on "all Hue lights" (e.g. the master switch in `server/api/lights/master-state.*`) joins `hue_devices LEFT JOIN sensors`, not the other way around.
+
+### Light groups
+
+Rooms can group multiple lights (Hue or otherwise) into a single controllable unit:
+
+- **Tables**: `light_groups` (per-room name + theme key), `light_group_members` (sensor_id refs).
+- **Fan-out**: `server/utils/light-groups.ts` exports `fanOutLightCommand(db, members, command)` which issues the same command to every member in parallel and returns `{ successCount, failureCount, total }`. Used by both the per-group `state` endpoint and the global `/api/lights/master-state.post.ts`.
+- **Themes**: `ui/shared/utils/light-themes.ts` defines the `LIGHT_THEMES` map (`slate`, `amber`, `emerald`, `rose`, `indigo`, `teal`, `plum`, `terracotta`, `catppuccin`, `tokyoNight`, `dracula`, `nord`, `gruvbox`). The `LightThemeKey` type is the source of truth — passing an unknown key (e.g. the historical mistake `'warm-amber'`) crashes `LightThemePicker.vue` with a confusing downstream error. The same file also exports `hexToXy()` for converting CSS hex to Hue's xy color space.
+
+### Shared types and the `ui/shared/` directory
+
+`ui/shared/types.ts` and `ui/shared/utils/*` are imported by both client (`app/`) and server (`server/`) code. Nuxt 4's `shared/` is the canonical place for cross-tier code; do not put shared types in `app/types/` or duplicate them on the server side.
+
+### UI styling conventions
+
+- **Tailwind v4** via `@tailwindcss/vite` — CSS-first config in `ui/app/assets/css/main.css` using `@theme`. There is no `tailwind.config.js`.
+- **Catalyst-pattern UI** — Tailwind UI's Catalyst design system, ported to Vue using Headless UI Vue + Heroicons. Look for `Catalyst …` comments in layouts/pages.
+- **Semantic color tokens** — components use `bg-surface`, `bg-surface-2`, `bg-default`, `bg-modal`, `text-text`, `text-subtle`, `text-muted`, `ring-default`, `bg-accent-soft`, `text-accent-strong`. Six color schemes (`zinc-indigo`, `slate-sky`, `stone-amber`, `neutral-emerald`, `gray-rose`, `zinc-violet`) swap the underlying values via the `data-scheme` attribute on `<html>`. Persisted to `localStorage` under `warren:scheme`; the inline `themeBootstrapScript` in `ui/nuxt.config.ts` applies it before first paint.
+- **Dark by default** — `localStorage warren:theme` controls light/dark; bootstrap script defaults to dark.
+- **Touch-vs-mouse hover** — controls that auto-hide use the `pointer-fine:` Tailwind v4 variant (`pointer-fine:opacity-0 pointer-fine:group-hover/tile:opacity-100`) so touch devices keep the controls visible while mouse devices get the hover-reveal behavior. Do not use plain `group-hover` for hide/show on touch-affecting UI.
