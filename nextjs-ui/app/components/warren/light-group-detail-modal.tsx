@@ -116,11 +116,11 @@ export function LightGroupDetailModal({
         )}
       </div>
 
-      <DialogBody className="-mx-1 max-h-[60vh] overflow-y-auto px-1 pretty-scroll">
+      <DialogBody>
         {sortedMembers.length === 0 ? (
           <p className="m-0 py-6 text-center text-sm text-subtle">No lights in this group.</p>
         ) : (
-          <ul role="list" className="flex flex-col gap-2">
+          <ul role="list" className="-mx-2 flex max-h-[50vh] flex-col gap-2 overflow-y-auto px-2 pretty-scroll">
             {sortedMembers.map(m => (
               <li key={m.id}>
                 <LightGroupDetailRow
