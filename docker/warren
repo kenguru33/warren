@@ -4,7 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 DOCKER_DIR="$SCRIPT_DIR"
-UI_DIR="$REPO_ROOT/ui"
+UI_DIR="$REPO_ROOT/nextjs-ui"
 FIRMWARE_DIR="$REPO_ROOT/firmware"
 
 PID_FILE="$REPO_ROOT/.warren.pid"
@@ -66,7 +66,7 @@ usage() {
         "" \
         "Commands:" \
         "  setup           First-time init: generate credentials, install deps, build UI" \
-        "  start [--dev]   Start infrastructure + UI (--dev for Nuxt dev server)" \
+        "  start [--dev]   Start infrastructure + UI (--dev for Next.js dev server)" \
         "  stop            Gracefully stop infrastructure and UI" \
         "  restart [svc]   Restart stack, or a single named Docker service" \
         "  clear           Stop everything, delete all data, secrets, and tokens" \
@@ -190,9 +190,9 @@ MQTT_URL=mqtt://${MQTT_SERVER}:1883
 MQTT_USER=admin
 MQTT_PASS=${MQTT_PASS}
 
-NUXT_AUTH_USERNAME=admin
-NUXT_AUTH_PASSWORD=${UI_PASS}
-NUXT_SESSION_PASSWORD=${SESSION_PASS}
+WARREN_AUTH_USERNAME=admin
+WARREN_AUTH_PASSWORD=${UI_PASS}
+WARREN_SESSION_PASSWORD=${SESSION_PASS}
 EOF
 
     if [[ ! -f "$NODERED_FLOWS" ]]; then
@@ -259,7 +259,7 @@ cmd_start() {
             "Starts the Docker infrastructure (Mosquitto, Node-RED, InfluxDB) and the UI." \
             "" \
             "Options:" \
-            "  --dev   Run the Nuxt dev server instead of the built production server"
+            "  --dev   Run the Next.js dev server instead of the built production server"
         exit 0
     fi
 
@@ -305,7 +305,7 @@ cmd_start() {
         (cd "$UI_DIR" && npm run dev)
     else
         echo -e "${BOLD}Starting UI…${NC}"
-        (set -a; source "$UI_ENV"; set +a; exec node "$UI_DIR/.output/server/index.mjs") &
+        (cd "$UI_DIR" && set -a && source "$UI_ENV" && set +a && exec npx next start) &
         echo $! > "$PID_FILE"
         info "UI started (PID $(cat "$PID_FILE"))"
         echo ""
@@ -425,8 +425,8 @@ cmd_clear() {
     echo "  docker/mosquitto/config/passwordfile"
     echo "  docker/mosquitto/config/mosquitto.conf  (reset to anonymous template)"
     echo "  docker/nodered/flows.json               (reset to git-tracked default)"
-    echo "  ui/.env"
-    echo "  ui/.data/                               (SQLite database)"
+    echo "  nextjs-ui/.env"
+    echo "  nextjs-ui/.data/                        (SQLite database)"
     echo "  firmware/sensor/include/secrets.h"
     echo "  firmware/camera/include/secrets.h"
     [[ -f "$PID_FILE" ]] && echo "  .warren.pid"
