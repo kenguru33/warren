@@ -1,0 +1,306 @@
+'use client'
+
+import { useEffect, useMemo, useState } from 'react'
+import type { LightGroupView, SensorView } from '@/lib/shared/types'
+import { DEFAULT_LIGHT_THEME, type LightThemeKey } from '@/lib/shared/light-themes'
+import { AppDialog } from './app-dialog'
+import { ConfirmDialog } from './confirm-dialog'
+import { LightThemePicker } from './light-theme-picker'
+
+export function LightGroupModal({
+  open,
+  roomId,
+  roomName,
+  lights,
+  group,
+  groupsInRoom,
+  onClose,
+  onSaved,
+  onDeleted,
+}: {
+  open: boolean
+  roomId: number
+  roomName: string
+  lights: SensorView[]
+  group: LightGroupView | null
+  groupsInRoom: LightGroupView[]
+  onClose: () => void
+  onSaved: () => void
+  onDeleted: () => void
+}) {
+  const isEdit = !!group
+  const [name, setName] = useState(group?.name ?? '')
+  const [themeKey, setThemeKey] = useState<LightThemeKey>(group?.theme ?? DEFAULT_LIGHT_THEME)
+  const [selectedIds, setSelectedIds] = useState<number[]>([...(group?.memberSensorIds ?? [])])
+  const [error, setError] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+
+  // Reset state when (re)opening or switching group.
+  useEffect(() => {
+    if (open) {
+      setName(group?.name ?? '')
+      setThemeKey(group?.theme ?? DEFAULT_LIGHT_THEME)
+      setSelectedIds([...(group?.memberSensorIds ?? [])])
+      setError(null)
+      setSaving(false)
+      setConfirmDelete(false)
+    }
+  }, [open, group?.id])
+
+  // Live preview: paint with new palette when changing theme on an existing group that's on.
+  useEffect(() => {
+    if (!group) return
+    if (group.state === 'all-off') return
+    if (themeKey === group.theme) return
+    fetch(`/api/light-groups/${group.id}/state`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ on: true, theme: themeKey }),
+    }).catch(() => {})
+  }, [themeKey])
+
+  const otherGroupBySensor = useMemo(() => {
+    const map = new Map<number, string>()
+    for (const g of groupsInRoom) {
+      if (group && g.id === group.id) continue
+      for (const sid of g.memberSensorIds) map.set(sid, g.name)
+    }
+    return map
+  }, [groupsInRoom, group])
+
+  const selectedIdsSet = new Set(selectedIds)
+  const trimmedName = name.trim()
+  const willUngroup = isEdit && selectedIds.length < 2
+  const canSave = trimmedName.length > 0 && (isEdit || selectedIds.length >= 2)
+
+  const validationMessage = trimmedName.length === 0
+    ? 'Group needs a name'
+    : !isEdit && selectedIds.length < 2
+      ? 'Pick at least two lights'
+      : null
+
+  const saveLabel = !isEdit ? 'Create' : willUngroup ? 'Ungroup' : 'Save'
+
+  const hasMixedCapability = useMemo(() => {
+    let hasBri = false, hasNoBri = false
+    for (const id of selectedIds) {
+      const l = lights.find(x => x.id === id)
+      if (!l) continue
+      if (l.capabilities?.brightness) hasBri = true
+      else hasNoBri = true
+    }
+    return hasBri && hasNoBri
+  }, [selectedIds, lights])
+
+  function toggleLight(id: number) {
+    if (otherGroupBySensor.has(id)) return
+    setSelectedIds(prev => {
+      const i = prev.indexOf(id)
+      if (i >= 0) return prev.filter((_, j) => j !== i)
+      return [...prev, id]
+    })
+  }
+
+  async function save() {
+    if (!canSave) return
+    if (willUngroup) {
+      await ungroup()
+      return
+    }
+    setSaving(true)
+    setError(null)
+    try {
+      const sensorIds = selectedIds.slice()
+      const url = group
+        ? `/api/light-groups/${group.id}`
+        : `/api/rooms/${roomId}/light-groups`
+      const method = group ? 'PATCH' : 'POST'
+      const res = await fetch(url, {
+        method,
+        headers: { 'content-type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ name: trimmedName, sensorIds, theme: themeKey }),
+      })
+      if (!res.ok) {
+        let payload: { data?: { error?: string; message?: string }; statusMessage?: string; message?: string } = {}
+        try { payload = await res.json() } catch {}
+        throw payload
+      }
+      onSaved()
+    } catch (err: unknown) {
+      const e = err as { data?: { error?: string; message?: string }; statusMessage?: string; message?: string }
+      setError(e.data?.message ?? e.statusMessage ?? e.message ?? 'failed')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function ungroup() {
+    if (!group) return
+    setSaving(true)
+    setError(null)
+    try {
+      const res = await fetch(`/api/light-groups/${group.id}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      })
+      if (!res.ok) {
+        let payload: { message?: string } = {}
+        try { payload = await res.json() } catch {}
+        throw payload
+      }
+      onDeleted()
+    } catch (err: unknown) {
+      const e = err as { message?: string }
+      setError(e.message ?? 'failed')
+    } finally {
+      setSaving(false)
+      setConfirmDelete(false)
+    }
+  }
+
+  return (
+    <AppDialog open={open} onClose={onClose} maxWidthClass="max-w-md">
+      <div className="px-6 pt-5 pb-4 border-b border-default">
+        <div className="flex items-center gap-3">
+          <div className="flex size-10 items-center justify-center rounded-2xl bg-accent-soft ring-1 ring-accent/20 text-xl">💡</div>
+          <div className="min-w-0">
+            <h3 className="text-base/6 font-semibold text-text truncate">{group ? 'Edit light group' : 'Group lights'}</h3>
+            <p className="text-xs text-subtle mt-0.5 truncate">{roomName}</p>
+          </div>
+        </div>
+      </div>
+
+      <div className="px-6 py-5 space-y-4 overflow-y-auto pretty-scroll">
+        <div>
+          <label className="label">Group name</label>
+          <input
+            value={name}
+            onChange={e => setName(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === 'Enter') save()
+              if (e.key === 'Escape') onClose()
+            }}
+            className="input mt-1.5"
+            placeholder="e.g. Reading nook"
+            maxLength={60}
+            autoFocus
+          />
+        </div>
+
+        <div>
+          <label className="label">Color theme</label>
+          <div className="mt-1.5">
+            <LightThemePicker value={themeKey} onChange={setThemeKey} />
+          </div>
+        </div>
+
+        <div>
+          <label className="label">Lights</label>
+          {lights.length === 0 ? (
+            <div className="mt-1.5 text-center text-sm text-subtle py-6 rounded-lg bg-surface-2 ring-1 ring-default">
+              This room has no lights to group.
+            </div>
+          ) : (
+            <div className="mt-1.5 max-h-56 overflow-y-auto pretty-scroll rounded-lg bg-input ring-1 ring-inset ring-default p-1.5 dark:ring-white/10">
+              {lights.map(l => {
+                const checked = selectedIdsSet.has(l.id)
+                const lockedTo = otherGroupBySensor.get(l.id)
+                const disabled = !!lockedTo
+                return (
+                  <button
+                    key={l.id}
+                    type="button"
+                    role="checkbox"
+                    aria-checked={checked}
+                    disabled={disabled}
+                    onClick={() => toggleLight(l.id)}
+                    className={[
+                      'flex w-full items-center gap-3 px-3 py-2 rounded-md text-left transition-colors',
+                      'focus:outline-none focus-visible:ring-2 focus-visible:ring-accent',
+                      disabled
+                        ? 'cursor-not-allowed opacity-55'
+                        : 'cursor-pointer hover:bg-surface-2 dark:hover:bg-white/[0.04]',
+                      checked && !disabled ? 'bg-accent/10' : '',
+                    ].join(' ')}
+                  >
+                    <span
+                      aria-hidden
+                      className={[
+                        'flex size-4 shrink-0 items-center justify-center rounded-md ring-1 transition-colors',
+                        checked
+                          ? 'bg-accent ring-accent text-white'
+                          : 'bg-surface ring-default dark:ring-white/15',
+                      ].join(' ')}
+                    >
+                      {checked && (
+                        <svg className="size-3" viewBox="0 0 20 20" fill="currentColor">
+                          <path fillRule="evenodd" d="M16.704 5.29a1 1 0 0 1 .006 1.414l-7.5 7.6a1 1 0 0 1-1.42.006L3.29 9.79a1 1 0 1 1 1.42-1.41l3.79 3.79 6.79-6.88a1 1 0 0 1 1.414-.006Z" clipRule="evenodd"/>
+                        </svg>
+                      )}
+                    </span>
+                    <span className="flex-1 text-sm text-text truncate">
+                      {l.label?.trim() || l.hueName?.trim() || `Light #${l.id}`}
+                    </span>
+                    {lockedTo ? (
+                      <span className="badge badge-error">in {lockedTo}</span>
+                    ) : !l.capabilities?.brightness ? (
+                      <span className="badge badge-neutral">on/off</span>
+                    ) : null}
+                  </button>
+                )
+              })}
+            </div>
+          )}
+        </div>
+
+        {hasMixedCapability && (
+          <div className="rounded-lg bg-warning/10 ring-1 ring-warning/20 px-3 py-2 text-xs text-warning">
+            Some lights don&apos;t support brightness. The master slider will only affect dimmable lights.
+          </div>
+        )}
+        {willUngroup && (
+          <div className="rounded-lg bg-warning/10 ring-1 ring-warning/20 px-3 py-2 text-xs text-warning">
+            A group needs at least two lights — saving with fewer will ungroup them.
+          </div>
+        )}
+        {validationMessage && (name || selectedIds.length > 0) && (
+          <div className="rounded-lg bg-error/10 ring-1 ring-error/30 px-3 py-2 text-xs text-error">
+            {validationMessage}
+          </div>
+        )}
+        {error && (
+          <div className="rounded-lg bg-error/10 ring-1 ring-error/30 px-3 py-2 text-xs text-error">{error}</div>
+        )}
+      </div>
+
+      <div className="flex items-center gap-2 px-6 py-4 border-t border-default bg-surface-2/50">
+        {group && (
+          <button type="button" className="btn-danger" disabled={saving} onClick={() => setConfirmDelete(true)}>
+            Ungroup
+          </button>
+        )}
+        <span className="flex-1" />
+        <button type="button" className="btn-secondary" disabled={saving} onClick={onClose}>Cancel</button>
+        <button
+          type="button"
+          className={willUngroup ? 'btn-danger' : 'btn-primary'}
+          disabled={!canSave || saving}
+          onClick={save}
+        >
+          {saveLabel}
+        </button>
+      </div>
+
+      <ConfirmDialog
+        open={confirmDelete}
+        message={`Ungroup "${group?.name ?? ''}"? The lights stay in the room and become individually controllable again.`}
+        confirmLabel="Ungroup"
+        onConfirm={ungroup}
+        onCancel={() => setConfirmDelete(false)}
+      />
+    </AppDialog>
+  )
+}
