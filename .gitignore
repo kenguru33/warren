@@ -1,4 +1,4 @@
-# Nuxt
+# Nuxt (legacy ui/, kept for reference)
 ui/.output
 ui/.data
 ui/.nuxt
@@ -11,6 +11,19 @@ ui/*.log
 ui/.env
 ui/.env.*
 !ui/.env.example
+
+# Next.js (canonical nextjs-ui/)
+nextjs-ui/.next
+nextjs-ui/.data
+nextjs-ui/.data-e2e
+nextjs-ui/node_modules
+nextjs-ui/logs
+nextjs-ui/*.log
+nextjs-ui/.env
+nextjs-ui/.env.*
+!nextjs-ui/.env.example
+nextjs-ui/playwright-report
+nextjs-ui/test-results
 
 # PlatformIO
 firmware/**/.pio

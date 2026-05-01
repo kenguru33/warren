@@ -9,7 +9,7 @@ Docker infrastructure for Warren. All lifecycle management goes through the `war
 ./docker/warren setup --force  # Regenerate secrets without prompting
 
 ./docker/warren start          # Start infrastructure + UI (production)
-./docker/warren start --dev    # Start infrastructure + Nuxt dev server
+./docker/warren start --dev    # Start infrastructure + Next.js dev server
 
 ./docker/warren stop           # Stop UI and all containers (data preserved)
 ./docker/warren restart        # Full stop + start
@@ -18,7 +18,7 @@ Docker infrastructure for Warren. All lifecycle management goes through the `war
 ./docker/warren clear          # DESTRUCTIVE: wipe all data, secrets, volumes (requires "YES")
 ```
 
-`setup` generates: `admin.token`, `mosquitto/config/passwordfile`, `mosquitto/config/mosquitto.conf`, `nodered/flows.json` (with InfluxDB token injected), `ui/.env`, and both `firmware/*/include/secrets.h` files.
+`setup` generates: `admin.token`, `mosquitto/config/passwordfile`, `mosquitto/config/mosquitto.conf`, `nodered/flows.json` (with InfluxDB token injected), `nextjs-ui/.env`, and both `firmware/*/include/secrets.h` files.
 
 ## Services
 
@@ -35,7 +35,7 @@ Docker infrastructure for Warren. All lifecycle management goes through the `war
 ESP32 sensors  →  Mosquitto :1883 (auth)
 Node-RED       →  Mosquitto :1884 (anonymous, internal)
 Node-RED       →  InfluxDB  :8086  (line protocol, bucket: warren)
-Nuxt UI        →  InfluxDB  :8086  (SQL queries)
+Next.js UI     →  InfluxDB  :8086  (SQL queries)
 ```
 
 Node-RED subscribes to `warren/sensors/+/+` and writes `sensor_readings` measurements. The anonymous listener (1884) avoids storing MQTT credentials in Node-RED config.
@@ -54,4 +54,4 @@ Node-RED subscribes to `warren/sensors/+/+` and writes `sensor_readings` measure
 cd docker && ./tests/run_tests.sh
 ```
 
-Tests cover setup, start/stop, restart, and clear. Assertions live in `tests/lib/assert.sh`.
+Tests cover setup, start/stop, restart, and clear. The `tests/test_e2e.sh` runner invokes the Playwright suite in `nextjs-ui/tests/e2e/` against the running stack. Assertions live in `tests/lib/assert.sh`.
