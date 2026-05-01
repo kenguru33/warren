@@ -1,10 +1,8 @@
 'use client'
 
 import { FormEvent, useState } from 'react'
-import { useRouter } from 'next/navigation'
 
 export default function LoginPage() {
-  const router = useRouter()
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
@@ -18,18 +16,22 @@ export default function LoginPage() {
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        credentials: 'include',
+        credentials: 'same-origin',
         body: JSON.stringify({ username, password }),
       })
       if (!res.ok) {
         setError(res.status === 401 ? 'Invalid credentials' : 'Login failed')
+        setBusy(false)
         return
       }
-      router.push('/')
-      router.refresh()
+      // Hard reload so the new session cookie is picked up by both the proxy
+      // and every SWR cache on the destination page. router.push() does a soft
+      // navigation that can race with the cookie being committed by the
+      // browser, leaving the user staring at a "logged in" form that the proxy
+      // immediately bounces back to /login.
+      window.location.assign('/')
     } catch {
       setError('Login failed')
-    } finally {
       setBusy(false)
     }
   }
