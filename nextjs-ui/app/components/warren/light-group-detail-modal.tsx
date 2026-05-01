@@ -116,7 +116,7 @@ export function LightGroupDetailModal({
         )}
       </div>
 
-      <DialogBody className="max-h-[60vh] overflow-y-auto pretty-scroll">
+      <DialogBody className="-mx-1 max-h-[60vh] overflow-y-auto px-1 pretty-scroll">
         {sortedMembers.length === 0 ? (
           <p className="m-0 py-6 text-center text-sm text-subtle">No lights in this group.</p>
         ) : (
