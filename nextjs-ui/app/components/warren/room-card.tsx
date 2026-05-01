@@ -32,7 +32,7 @@ function CardIconButton({
       title={title}
       aria-label={title}
       onClick={onClick}
-      className="inline-flex size-7 items-center justify-center rounded-full text-subtle transition-colors hover:bg-default hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent dark:hover:bg-white/10 dark:hover:text-white"
+      className="inline-flex size-7 items-center justify-center rounded-lg text-subtle transition-colors hover:bg-default hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent dark:hover:bg-white/10 dark:hover:text-white"
     >
       {children}
     </button>
@@ -188,9 +188,11 @@ export function RoomCard({
         '[container-type:inline-size]',
       ].join(' ')}
     >
-      {/* Floating control pill — sits on the card's top-right border, always visible
-       *  on touch and mouse so the controls are discoverable without hovering. */}
-      <div className="absolute -top-4 right-4 z-10 flex items-center rounded-full bg-surface px-0.5 shadow-[0_1px_2px_rgba(0,0,0,0.06),0_4px_12px_-6px_rgba(0,0,0,0.12)] ring-1 ring-default dark:bg-surface-2 dark:ring-white/10">
+      {/* Floating control pill — sits centered on the card's top border, always
+       *  visible on touch and mouse so the controls are discoverable without
+       *  hovering. Centering keeps it balanced across mobile (narrow cards) and
+       *  desktop (1- to 3-col grid). */}
+      <div className="absolute -top-4 left-1/2 z-10 flex -translate-x-1/2 items-center rounded-xl bg-surface px-1 py-1 shadow-[0_1px_2px_rgba(0,0,0,0.06),0_4px_12px_-6px_rgba(0,0,0,0.12)] ring-1 ring-default dark:bg-surface-2 dark:ring-white/10">
         <CardIconButton title="Add sensor" onClick={() => onAddSensor(room.id)}>
           <PlusIcon className="size-3.5" />
         </CardIconButton>
@@ -204,7 +206,7 @@ export function RoomCard({
 
       <div
         className={[
-          'flex min-h-[32px] items-center justify-between gap-3 pt-2',
+          'flex min-h-[32px] items-center justify-between gap-3',
           hasAnyContent ? 'border-b border-default/60 pb-4 mb-5 dark:border-white/5' : '',
         ].join(' ')}
       >
