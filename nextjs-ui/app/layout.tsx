@@ -66,7 +66,13 @@ export default function RootLayout({
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeBootstrapScript }} />
       </head>
-      <body className="min-h-full flex flex-col">{children}</body>
+      {/*
+        suppressHydrationWarning on <body> too: browser extensions (ColorZilla,
+        Grammarly, password managers) inject attributes like `cz-shortcut-listen`
+        into <body> before React hydrates, which would otherwise spam the console
+        with a mismatch warning on every page load.
+      */}
+      <body className="min-h-full flex flex-col" suppressHydrationWarning>{children}</body>
     </html>
   );
 }
