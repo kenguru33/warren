@@ -120,7 +120,7 @@ export function LightGroupDetailModal({
         {sortedMembers.length === 0 ? (
           <p className="m-0 py-6 text-center text-sm text-subtle">No lights in this group.</p>
         ) : (
-          <ul role="list" className="-mx-2 flex max-h-[50vh] flex-col gap-2 overflow-y-auto px-2 pretty-scroll">
+          <ul role="list" className="-m-2 flex max-h-[50vh] flex-col gap-2 overflow-y-auto p-2 pretty-scroll">
             {sortedMembers.map(m => (
               <li key={m.id}>
                 <LightGroupDetailRow
