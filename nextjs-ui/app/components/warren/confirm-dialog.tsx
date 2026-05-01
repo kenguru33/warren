@@ -1,13 +1,14 @@
 'use client'
 
-import { ExclamationTriangleIcon } from '@heroicons/react/24/outline'
-import { AppDialog } from './app-dialog'
+import { Alert, AlertActions, AlertDescription, AlertTitle } from '@/app/components/alert'
+import { Button } from '@/app/components/button'
 
 export function ConfirmDialog({
   open,
   message,
   title = 'Are you sure?',
   confirmLabel = 'Delete',
+  tone = 'destructive',
   onConfirm,
   onCancel,
 }: {
@@ -15,24 +16,20 @@ export function ConfirmDialog({
   message: string
   title?: string
   confirmLabel?: string
+  tone?: 'default' | 'destructive'
   onConfirm: () => void
   onCancel: () => void
 }) {
   return (
-    <AppDialog open={open} onClose={onCancel} maxWidthClass="max-w-md">
-      <div className="px-6 py-6 sm:flex sm:items-start gap-4">
-        <div className="mx-auto flex size-10 shrink-0 items-center justify-center rounded-full bg-error/10 ring-1 ring-error/20 sm:mx-0">
-          <ExclamationTriangleIcon className="size-5 text-error" aria-hidden />
-        </div>
-        <div className="mt-3 text-center sm:mt-0 sm:text-left">
-          <h3 className="text-base font-semibold text-text">{title}</h3>
-          <p className="mt-2 text-sm text-muted leading-relaxed">{message}</p>
-        </div>
-      </div>
-      <div className="px-6 pb-5 pt-2 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-        <button className="btn-secondary" onClick={onCancel}>Cancel</button>
-        <button className="btn-danger" onClick={onConfirm}>{confirmLabel}</button>
-      </div>
-    </AppDialog>
+    <Alert open={open} onClose={onCancel}>
+      <AlertTitle>{title}</AlertTitle>
+      <AlertDescription>{message}</AlertDescription>
+      <AlertActions>
+        <Button plain onClick={onCancel}>Cancel</Button>
+        <Button color={tone === 'destructive' ? 'red' : 'dark/zinc'} onClick={onConfirm}>
+          {confirmLabel}
+        </Button>
+      </AlertActions>
+    </Alert>
   )
 }
