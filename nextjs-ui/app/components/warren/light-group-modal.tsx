@@ -4,7 +4,15 @@ import { useEffect, useMemo, useState } from 'react'
 import type { LightGroupView, SensorView } from '@/lib/shared/types'
 import { DEFAULT_LIGHT_THEME, type LightThemeKey } from '@/lib/shared/light-themes'
 import { Badge } from '@/app/components/badge'
-import { AppDialog } from './app-dialog'
+import { Button } from '@/app/components/button'
+import {
+  Dialog,
+  DialogActions,
+  DialogBody,
+  DialogTitle,
+} from '@/app/components/dialog'
+import { Field, Label } from '@/app/components/fieldset'
+import { Input } from '@/app/components/input'
 import { ConfirmDialog } from './confirm-dialog'
 import { LightThemePicker } from './light-theme-picker'
 
@@ -163,43 +171,40 @@ export function LightGroupModal({
   }
 
   return (
-    <AppDialog open={open} onClose={onClose} maxWidthClass="max-w-md">
-      <div className="px-6 pt-5 pb-4 border-b border-default">
-        <div className="flex items-center gap-3">
-          <div className="flex size-10 items-center justify-center rounded-2xl bg-accent-soft ring-1 ring-accent/20 text-xl">💡</div>
-          <div className="min-w-0">
-            <h3 className="text-base/6 font-semibold text-text truncate">{group ? 'Edit light group' : 'Group lights'}</h3>
-            <p className="text-xs text-subtle mt-0.5 truncate">{roomName}</p>
-          </div>
+    <Dialog open={open} onClose={onClose} size="md">
+      <div className="flex items-center gap-3">
+        <div className="flex size-10 items-center justify-center rounded-2xl bg-accent-soft text-xl ring-1 ring-accent/20">💡</div>
+        <div className="min-w-0">
+          <DialogTitle className="truncate">{group ? 'Edit light group' : 'Group lights'}</DialogTitle>
+          <p className="mt-0.5 truncate text-xs text-subtle">{roomName}</p>
         </div>
       </div>
 
-      <div className="px-6 py-5 space-y-4 overflow-y-auto pretty-scroll">
-        <div>
-          <label className="label">Group name</label>
-          <input
+      <DialogBody className="space-y-4 overflow-y-auto pretty-scroll">
+        <Field>
+          <Label>Group name</Label>
+          <Input
             value={name}
             onChange={e => setName(e.target.value)}
             onKeyDown={e => {
               if (e.key === 'Enter') save()
               if (e.key === 'Escape') onClose()
             }}
-            className="input mt-1.5"
             placeholder="e.g. Reading nook"
             maxLength={60}
             autoFocus
           />
-        </div>
+        </Field>
 
-        <div>
-          <label className="label">Color theme</label>
+        <Field>
+          <Label>Color theme</Label>
           <div className="mt-1.5">
             <LightThemePicker value={themeKey} onChange={setThemeKey} />
           </div>
-        </div>
+        </Field>
 
         <div>
-          <label className="label">Lights</label>
+          <Label>Lights</Label>
           {lights.length === 0 ? (
             <div className="mt-1.5 text-center text-sm text-subtle py-6 rounded-lg bg-surface-2 ring-1 ring-default">
               This room has no lights to group.
@@ -275,25 +280,24 @@ export function LightGroupModal({
         {error && (
           <div className="rounded-lg bg-error/10 ring-1 ring-error/30 px-3 py-2 text-xs text-error">{error}</div>
         )}
-      </div>
+      </DialogBody>
 
-      <div className="flex items-center gap-2 px-6 py-4 border-t border-default bg-surface-2/50">
+      <DialogActions>
         {group && (
-          <button type="button" className="btn-danger" disabled={saving} onClick={() => setConfirmDelete(true)}>
+          <Button color="red" type="button" disabled={saving} className="sm:mr-auto" onClick={() => setConfirmDelete(true)}>
             Ungroup
-          </button>
+          </Button>
         )}
-        <span className="flex-1" />
-        <button type="button" className="btn-secondary" disabled={saving} onClick={onClose}>Cancel</button>
-        <button
+        <Button plain type="button" disabled={saving} onClick={onClose}>Cancel</Button>
+        <Button
           type="button"
-          className={willUngroup ? 'btn-danger' : 'btn-primary'}
+          color={willUngroup ? 'red' : undefined}
           disabled={!canSave || saving}
           onClick={save}
         >
           {saveLabel}
-        </button>
-      </div>
+        </Button>
+      </DialogActions>
 
       <ConfirmDialog
         open={confirmDelete}
@@ -302,6 +306,6 @@ export function LightGroupModal({
         onConfirm={ungroup}
         onCancel={() => setConfirmDelete(false)}
       />
-    </AppDialog>
+    </Dialog>
   )
 }

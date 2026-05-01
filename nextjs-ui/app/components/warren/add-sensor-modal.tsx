@@ -5,7 +5,15 @@ import useSWR from 'swr'
 import { XMarkIcon } from '@heroicons/react/20/solid'
 import type { DiscoveredSensor, SensorType } from '@/lib/shared/types'
 import { Badge } from '@/app/components/badge'
-import { AppDialog } from './app-dialog'
+import { Button } from '@/app/components/button'
+import {
+  Dialog,
+  DialogActions,
+  DialogBody,
+  DialogTitle,
+} from '@/app/components/dialog'
+import { Field, Label } from '@/app/components/fieldset'
+import { Input } from '@/app/components/input'
 
 export interface AddSensorPayload {
   type: SensorType
@@ -174,27 +182,25 @@ export function AddSensorModal({
         : `Add ${selectedCount} devices`
 
   return (
-    <AppDialog open={open} onClose={onClose} maxWidthClass="max-w-2xl">
-      <div className="flex flex-col flex-1 min-h-0">
-        <header className="flex items-start justify-between gap-4 px-6 pt-5 pb-4 border-b border-default">
-          <div>
-            <h3 className="text-base/6 font-semibold text-text">Add device</h3>
-            <p className="mt-1 text-sm/6 text-muted">to <span className="font-semibold text-text">{roomName}</span></p>
-          </div>
-          <button type="button" className="btn-icon size-8" aria-label="Close" onClick={onClose}>
-            <XMarkIcon className="size-4" />
-          </button>
-        </header>
+    <Dialog open={open} onClose={onClose} size="2xl">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <DialogTitle>Add device</DialogTitle>
+          <p className="mt-1 text-sm/6 text-muted">to <span className="font-semibold text-text">{roomName}</span></p>
+        </div>
+        <Button plain aria-label="Close" onClick={onClose}>
+          <XMarkIcon data-slot="icon" />
+        </Button>
+      </div>
 
-        <form className="flex flex-col flex-1 min-h-0" onSubmit={submit}>
+      <form className="mt-4 flex flex-col" onSubmit={submit}>
           {!manual ? (
             <>
-              <div className="px-6 pt-5">
-                <input
+              <div>
+                <Input
                   value={search}
                   onChange={e => setSearch(e.target.value)}
                   type="text"
-                  className="input"
                   placeholder="Search by name, device ID, type…"
                   autoComplete="off"
                   spellCheck={false}
@@ -203,7 +209,7 @@ export function AddSensorModal({
               </div>
 
               {!isLoading && groupedDiscovered.length > 1 && (
-                <div className="flex flex-wrap gap-2 items-center px-6 pt-4">
+                <div className="flex flex-wrap gap-2 items-center pt-4">
                   <button
                     type="button"
                     onClick={() => setActiveFilter('all')}
@@ -232,7 +238,7 @@ export function AddSensorModal({
                 </div>
               )}
 
-              <div className="flex-1 overflow-y-auto pretty-scroll px-6 py-5 flex flex-col gap-6 min-h-[200px]">
+              <div className="flex-1 max-h-[60vh] overflow-y-auto pretty-scroll py-5 flex flex-col gap-6 min-h-[200px]">
                 {isLoading ? (
                   <div className="text-center py-12 px-6 text-sm text-subtle">Loading…</div>
                 ) : visibleGroups.length > 0 ? (
@@ -309,26 +315,25 @@ export function AddSensorModal({
               </div>
 
               {selectedCount === 1 ? (
-                <div className="px-6 pt-3 pb-1">
-                  <label className="label">Custom label <span className="text-subtle font-normal">(optional)</span></label>
-                  <input
+                <Field className="pt-3 pb-1">
+                  <Label>Custom label <span className="text-subtle font-normal">(optional)</span></Label>
+                  <Input
                     value={label}
                     onChange={e => setLabel(e.target.value)}
-                    className="input mt-2"
                     placeholder={selectedSensors[0]!.label || selectedSensors[0]!.deviceId || 'Friendly name'}
                     maxLength={60}
                   />
-                </div>
+                </Field>
               ) : selectedCount > 1 ? (
-                <div className="px-6 pt-3 pb-1 text-xs text-subtle">
+                <div className="pt-3 pb-1 text-xs text-subtle">
                   {selectedCount} devices selected — they keep their existing labels (you can rename them later).
                 </div>
               ) : null}
             </>
           ) : (
-            <div className="px-6 pt-5 space-y-4">
+            <div className="pt-5 space-y-4">
               <div>
-                <label className="label">Type</label>
+                <Label>Type</Label>
                 <div className="mt-2 grid grid-cols-2 gap-2">
                   {MANUAL_TYPES.map(opt => (
                     <button
@@ -349,47 +354,43 @@ export function AddSensorModal({
                 </div>
               </div>
 
-              <div>
-                <label className="label">Label <span className="text-subtle font-normal">(optional)</span></label>
-                <input
+              <Field>
+                <Label>Label <span className="text-subtle font-normal">(optional)</span></Label>
+                <Input
                   value={label}
                   onChange={e => setLabel(e.target.value)}
-                  className="input mt-2"
                   placeholder="e.g. Front door, Living room…"
                   maxLength={60}
                 />
-              </div>
+              </Field>
 
               {manualType === 'camera' && (
                 <>
-                  <div>
-                    <label className="label">Stream URL <span className="text-subtle font-normal">(MJPEG / HLS)</span></label>
-                    <input value={streamUrl} onChange={e => setStreamUrl(e.target.value)} className="input mt-2" placeholder="http://…" />
-                  </div>
-                  <div>
-                    <label className="label">Snapshot URL <span className="text-subtle font-normal">(optional)</span></label>
-                    <input value={snapshotUrl} onChange={e => setSnapshotUrl(e.target.value)} className="input mt-2" placeholder="http://…" />
-                  </div>
+                  <Field>
+                    <Label>Stream URL <span className="text-subtle font-normal">(MJPEG / HLS)</span></Label>
+                    <Input value={streamUrl} onChange={e => setStreamUrl(e.target.value)} placeholder="http://…" />
+                  </Field>
+                  <Field>
+                    <Label>Snapshot URL <span className="text-subtle font-normal">(optional)</span></Label>
+                    <Input value={snapshotUrl} onChange={e => setSnapshotUrl(e.target.value)} placeholder="http://…" />
+                  </Field>
                 </>
               )}
             </div>
           )}
 
-          <footer className="flex items-center justify-between gap-4 px-6 py-4 mt-5 border-t border-default bg-surface-2/50">
+          <DialogActions>
             <button
               type="button"
               onClick={() => { setManual(m => !m); setSelectedKeys(new Set()) }}
-              className="text-sm/6 font-medium text-accent-strong hover:underline"
+              className="sm:mr-auto text-sm/6 font-medium text-accent-strong hover:underline"
             >
               {manual ? '← Back to discovered devices' : 'Add a camera or motion sensor manually'}
             </button>
-            <div className="flex gap-2">
-              <button type="button" className="btn-secondary" onClick={onClose}>Cancel</button>
-              <button type="submit" className="btn-primary" disabled={!canSubmit}>{submitLabel}</button>
-            </div>
-          </footer>
+            <Button plain type="button" onClick={onClose}>Cancel</Button>
+            <Button type="submit" disabled={!canSubmit}>{submitLabel}</Button>
+          </DialogActions>
         </form>
-      </div>
-    </AppDialog>
+    </Dialog>
   )
 }
