@@ -101,7 +101,7 @@ export function SidebarShell({ children }: { children: React.ReactNode }) {
   )
 
   return (
-    <div className="relative isolate flex min-h-svh w-full bg-surface max-lg:flex-col lg:bg-surface-2">
+    <div className="relative isolate flex min-h-svh w-full bg-surface-2 max-lg:flex-col">
       {/* Desktop sidebar */}
       <div className="fixed inset-y-0 left-0 w-64 max-lg:hidden">
         <Sidebar>
