@@ -15,6 +15,30 @@ import { MasterLightToggle } from './master-light-toggle'
 import { ConfirmDialog } from './confirm-dialog'
 import { AppSwitch } from './app-switch'
 
+// Compact icon button used inside the room-card's floating control pill. Smaller
+// than Catalyst's Button plain so the pill stays unobtrusive on the border.
+function CardIconButton({
+  title,
+  onClick,
+  children,
+}: {
+  title: string
+  onClick: () => void
+  children: React.ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      title={title}
+      aria-label={title}
+      onClick={onClick}
+      className="inline-flex size-7 items-center justify-center rounded-full text-subtle transition-colors hover:bg-default hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent dark:hover:bg-white/10 dark:hover:text-white"
+    >
+      {children}
+    </button>
+  )
+}
+
 function motionLabelFor(ts: number | null) {
   if (!ts) return null
   const diff = Math.round((Date.now() - ts) / 1000)
@@ -166,21 +190,21 @@ export function RoomCard({
     >
       {/* Floating control pill — sits on the card's top-right border, always visible
        *  on touch and mouse so the controls are discoverable without hovering. */}
-      <div className="absolute -top-3 right-4 z-10 flex items-center gap-0.5 rounded-full bg-surface px-1 py-0.5 shadow-[0_1px_2px_rgba(0,0,0,0.06),0_4px_12px_-6px_rgba(0,0,0,0.12)] ring-1 ring-default dark:bg-surface-2 dark:ring-white/10">
-        <Button plain title="Add sensor" aria-label="Add sensor" onClick={() => onAddSensor(room.id)}>
-          <PlusIcon data-slot="icon" />
-        </Button>
-        <Button plain title="Edit room" aria-label="Edit room" onClick={editing ? closeEditing : openEditing}>
-          <PencilSquareIcon data-slot="icon" />
-        </Button>
-        <Button plain title="Remove room" aria-label="Remove room" onClick={() => setConfirmRoom(true)}>
-          <TrashIcon data-slot="icon" />
-        </Button>
+      <div className="absolute -top-4 right-4 z-10 flex items-center rounded-full bg-surface px-0.5 shadow-[0_1px_2px_rgba(0,0,0,0.06),0_4px_12px_-6px_rgba(0,0,0,0.12)] ring-1 ring-default dark:bg-surface-2 dark:ring-white/10">
+        <CardIconButton title="Add sensor" onClick={() => onAddSensor(room.id)}>
+          <PlusIcon className="size-3.5" />
+        </CardIconButton>
+        <CardIconButton title="Edit room" onClick={editing ? closeEditing : openEditing}>
+          <PencilSquareIcon className="size-3.5" />
+        </CardIconButton>
+        <CardIconButton title="Remove room" onClick={() => setConfirmRoom(true)}>
+          <TrashIcon className="size-3.5" />
+        </CardIconButton>
       </div>
 
       <div
         className={[
-          'flex min-h-[32px] items-center justify-between gap-3',
+          'flex min-h-[32px] items-center justify-between gap-3 pt-2',
           hasAnyContent ? 'border-b border-default/60 pb-4 mb-5 dark:border-white/5' : '',
         ].join(' ')}
       >
