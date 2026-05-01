@@ -57,7 +57,12 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="h-full antialiased">
+    // suppressHydrationWarning: the inline themeBootstrapScript adds the
+    // `dark` class and `data-scheme` attribute to <html> before React
+    // hydrates, which is the canonical pattern for avoiding a flash of
+    // wrong-theme content. React would otherwise log a hydration mismatch
+    // because the SSR'd <html> doesn't carry those attributes.
+    <html lang="en" className="h-full antialiased" suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeBootstrapScript }} />
       </head>
