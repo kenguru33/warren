@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type ChangeEvent } from 'react'
 import { PencilSquareIcon } from '@heroicons/react/20/solid'
 import type { SensorView } from '@/lib/shared/types'
+import { Button } from '@/app/components/button'
 
 function briFromHue(b: number): number {
   return Math.round((b / 254) * 100)
@@ -181,14 +182,9 @@ export function LightGroupDetailRow({
         )}
       </div>
 
-      <button
-        type="button"
-        className="btn-icon size-8 shrink-0"
-        title="Edit light"
-        onClick={(e) => { e.stopPropagation(); onEditSensor(sensor.id) }}
-      >
-        <PencilSquareIcon className="size-4" />
-      </button>
+      <Button plain title="Edit light" aria-label="Edit light" onClick={(e) => { e.stopPropagation(); onEditSensor(sensor.id) }}>
+        <PencilSquareIcon data-slot="icon" />
+      </Button>
     </div>
   )
 }

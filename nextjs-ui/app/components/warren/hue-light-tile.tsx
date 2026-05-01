@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { PencilSquareIcon, XMarkIcon } from '@heroicons/react/20/solid'
 import type { SensorView } from '@/lib/shared/types'
 import { Badge } from '@/app/components/badge'
+import { Button } from '@/app/components/button'
 import { ConfirmDialog } from './confirm-dialog'
 
 function briFromHue(b: number): number {
@@ -188,12 +189,12 @@ export function HueLightTile({
 
       {editing && (
         <div className="absolute top-1.5 right-1.5 flex items-center gap-0.5 rounded-xl bg-surface/75 p-0.5 backdrop-blur-md transition-opacity pointer-fine:opacity-0 pointer-fine:group-hover/tile:opacity-100 dark:bg-surface/65">
-          <button type="button" className="btn-icon size-7" title="Edit" onClick={(e) => { e.stopPropagation(); onEditSensor(sensor.id) }}>
-            <PencilSquareIcon className="size-3.5" />
-          </button>
-          <button type="button" className="btn-icon size-7 hover:!text-error hover:!ring-error/40" title="Remove" onClick={(e) => { e.stopPropagation(); setConfirmRemove(true) }}>
-            <XMarkIcon className="size-3.5" />
-          </button>
+          <Button plain title="Edit" aria-label="Edit" onClick={(e) => { e.stopPropagation(); onEditSensor(sensor.id) }}>
+            <PencilSquareIcon data-slot="icon" />
+          </Button>
+          <Button plain title="Remove" aria-label="Remove" onClick={(e) => { e.stopPropagation(); setConfirmRemove(true) }}>
+            <XMarkIcon data-slot="icon" />
+          </Button>
         </div>
       )}
 
