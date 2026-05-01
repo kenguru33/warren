@@ -3,6 +3,9 @@
 import { useMemo, useState } from 'react'
 import type { LightGroupView, RoomWithSensors, SensorView } from '@/lib/shared/types'
 import { useRooms } from '@/lib/hooks/use-rooms'
+import { Button } from '@/app/components/button'
+import { Heading } from '@/app/components/heading'
+import { Text } from '@/app/components/text'
 import { RoomCard } from '@/app/components/warren/room-card'
 import { AddRoomModal } from '@/app/components/warren/add-room-modal'
 import { AddSensorModal, type AddSensorPayload } from '@/app/components/warren/add-sensor-modal'
@@ -115,19 +118,19 @@ export default function DashboardPage() {
       <div className="space-y-6">
         <div className="flex items-baseline justify-between gap-4 flex-wrap">
           <div>
-            <h1 className="text-2xl/8 font-semibold tracking-tight text-text">Dashboard</h1>
-            <p className="text-sm/6 text-subtle mt-1">Last updated {lastUpdated}</p>
+            <Heading>Dashboard</Heading>
+            <Text className="mt-1">Last updated {lastUpdated}</Text>
           </div>
-          <button type="button" className="btn-primary" onClick={() => setShowAddRoom(true)}>
+          <Button onClick={() => setShowAddRoom(true)}>
             Add room
-          </button>
+          </Button>
         </div>
 
         {rooms.length === 0 ? (
           <div className="rounded-xl bg-surface ring-1 ring-default shadow-sm dark:ring-white/10 dark:shadow-none p-8 text-center">
-            <p className="text-sm/6 text-subtle">
+            <Text>
               No rooms yet. Click &quot;Add room&quot; to create one and assign sensors to it.
-            </p>
+            </Text>
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-5 lg:grid-cols-2 xl:grid-cols-3">

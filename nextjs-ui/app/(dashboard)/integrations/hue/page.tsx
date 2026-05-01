@@ -3,6 +3,9 @@
 import { useState } from 'react'
 import useSWR from 'swr'
 import { Badge } from '@/app/components/badge'
+import { Button } from '@/app/components/button'
+import { Heading, Subheading } from '@/app/components/heading'
+import { Text } from '@/app/components/text'
 import { ConfirmDialog } from '@/app/components/warren/confirm-dialog'
 import { HuePairingModal } from '@/app/components/warren/hue-pairing-modal'
 
@@ -87,8 +90,8 @@ export default function HueIntegrationPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight text-text">Philips Hue</h1>
-        <p className="mt-1 text-sm/6 text-muted">Connect a Hue Bridge to bring its lights and sensors into Warren.</p>
+        <Heading>Philips Hue</Heading>
+        <Text className="mt-1">Connect a Hue Bridge to bring its lights and sensors into Warren.</Text>
       </div>
 
       <section className="rounded-xl bg-surface ring-1 ring-default shadow-sm dark:ring-white/10 dark:shadow-none overflow-hidden">
@@ -97,14 +100,14 @@ export default function HueIntegrationPage() {
             <div className="mx-auto flex size-14 items-center justify-center rounded-2xl bg-accent-soft ring-1 ring-accent/20">
               <span className="text-3xl">💡</span>
             </div>
-            <h2 className="mt-4 text-base/6 font-semibold text-text">No Hue Bridge connected</h2>
-            <p className="mt-1 text-sm/6 text-muted max-w-md mx-auto">
+            <Subheading className="mt-4">No Hue Bridge connected</Subheading>
+            <Text className="mt-1 mx-auto max-w-md">
               Discover the bridge on your network or enter its IP address manually.
-            </p>
+            </Text>
             <div className="mt-6">
-              <button type="button" className="btn-primary" onClick={() => setShowPairing(true)}>
+              <Button onClick={() => setShowPairing(true)}>
                 Connect Hue Bridge
-              </button>
+              </Button>
             </div>
           </div>
         ) : (
@@ -144,12 +147,12 @@ export default function HueIntegrationPage() {
             )}
 
             <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-default bg-surface-2/50">
-              <button type="button" className="btn-secondary" disabled={syncing} onClick={syncNow}>
+              <Button outline disabled={syncing} onClick={syncNow}>
                 {syncing ? 'Syncing…' : 'Sync now'}
-              </button>
-              <button type="button" className="btn-danger" onClick={() => setShowDisconnect(true)}>
+              </Button>
+              <Button color="red" onClick={() => setShowDisconnect(true)}>
                 Disconnect
-              </button>
+              </Button>
             </div>
           </div>
         )}
