@@ -156,8 +156,20 @@ export function RoomCard({
   }
 
   return (
-    <div className="group/room relative rounded-xl bg-surface p-6 ring-1 ring-default shadow-sm dark:ring-white/10 dark:shadow-none [container-type:inline-size]">
-      <div className="flex items-center justify-between gap-3 min-h-[32px]">
+    <article
+      className={[
+        'group/room relative rounded-2xl bg-surface p-6 ring-1 ring-default transition-[box-shadow,--tw-ring-color] duration-150',
+        'shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_20px_-12px_rgba(0,0,0,0.08)] hover:ring-strong',
+        'dark:ring-white/10 dark:shadow-none dark:[box-shadow:inset_0_1px_0_0_rgba(255,255,255,0.04)] dark:hover:ring-white/20',
+        '[container-type:inline-size]',
+      ].join(' ')}
+    >
+      <div
+        className={[
+          'flex min-h-[32px] items-center justify-between gap-3',
+          hasAnyContent ? 'border-b border-default/60 pb-4 mb-5 dark:border-white/5' : '',
+        ].join(' ')}
+      >
         {editing ? (
           <Input
             value={editName}
@@ -170,7 +182,7 @@ export function RoomCard({
             className="flex-1"
           />
         ) : (
-          <Heading level={2} className="truncate !text-base/6">{room.name}</Heading>
+          <Heading level={2} className="truncate !text-lg/6 font-semibold tracking-tight">{room.name}</Heading>
         )}
 
         <div className="flex items-center gap-1 ml-auto">
@@ -203,7 +215,7 @@ export function RoomCard({
       </div>
 
       {hasAnyContent && (
-        <div className="mt-6 flex flex-col gap-5 [&>*+*]:pt-5 [&>*+*]:border-t [&>*+*]:border-default dark:[&>*+*]:border-white/5">
+        <div className="flex flex-col gap-6 [&>*+*]:pt-6 [&>*+*]:border-t [&>*+*]:border-default/60 dark:[&>*+*]:border-white/5">
           {hasAmbient && (
             <div className="grid grid-cols-[repeat(auto-fill,minmax(140px,1fr))] gap-3">
               {tempSensor && (
@@ -299,7 +311,7 @@ export function RoomCard({
       )}
 
       {editing && lights.length >= 2 && (
-        <div className="mt-5 pt-4 border-t border-default dark:border-white/5">
+        <div className="mt-6 pt-6 border-t border-default/60 dark:border-white/5">
           <Button outline onClick={() => onAddGroup(room.id)}>
             <PlusIcon data-slot="icon" />
             Group lights
@@ -308,7 +320,7 @@ export function RoomCard({
       )}
 
       {editing && hasClimate && (
-        <div className="mt-5 pt-5 border-t border-default dark:border-white/5 flex flex-col gap-5">
+        <div className="mt-6 pt-6 border-t border-default/60 dark:border-white/5 flex flex-col gap-5">
           {tempSensor && (
             <div className="flex flex-col gap-2.5">
               <div className="flex items-center justify-between">
@@ -351,6 +363,6 @@ export function RoomCard({
         onConfirm={() => { onRemoveRoom(room.id); setConfirmRoom(false) }}
         onCancel={() => setConfirmRoom(false)}
       />
-    </div>
+    </article>
   )
 }
