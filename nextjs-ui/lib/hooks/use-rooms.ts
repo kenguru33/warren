@@ -4,7 +4,6 @@ import useSWR from 'swr'
 import { useRouter } from 'next/navigation'
 import { useCallback, useMemo } from 'react'
 import type { RoomReference, RoomWithSensors, SensorType } from '@/lib/shared/types'
-import type { LightThemeKey } from '@/lib/shared/light-themes'
 
 const fetcher = async (url: string) => {
   const res = await fetch(url, { credentials: 'include' })
@@ -99,15 +98,22 @@ export function useRooms() {
     await mutate()
   }, [rooms, mutate])
 
-  const saveLightGroup = useCallback(async (
-    groupId: number,
-    changes: { name: string; theme: LightThemeKey },
-  ) => {
+  const renameSensor = useCallback(async (sensorId: number, label: string) => {
+    await fetch(`/api/sensors/${sensorId}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ label: label.trim() || null }),
+    })
+    await mutate()
+  }, [mutate])
+
+  const renameLightGroup = useCallback(async (groupId: number, name: string) => {
     await fetch(`/api/light-groups/${groupId}`, {
       method: 'PATCH',
       headers: { 'content-type': 'application/json' },
       credentials: 'include',
-      body: JSON.stringify({ name: changes.name.trim(), theme: changes.theme }),
+      body: JSON.stringify({ name: name.trim() }),
     })
     await mutate()
   }, [mutate])
@@ -142,7 +148,8 @@ export function useRooms() {
     addSensor,
     removeSensor,
     hideSensor,
-    saveLightGroup,
+    renameSensor,
+    renameLightGroup,
     refresh,
   }
 }

@@ -2,13 +2,12 @@
 
 import { useEffect, useState } from 'react'
 import {
-  PencilSquareIcon,
   PlusIcon,
   Squares2X2Icon,
+  TagIcon,
   TrashIcon,
 } from '@heroicons/react/20/solid'
 import type { RoomReference, RoomWithSensors, SensorView } from '@/lib/shared/types'
-import type { LightThemeKey } from '@/lib/shared/light-themes'
 import { Heading } from '@/app/components/heading'
 import { Input } from '@/app/components/input'
 import { ClimateTile } from './climate-tile'
@@ -47,7 +46,8 @@ export function RoomCard({
   onMasterToggled,
   onOpenGroupDetail,
   onHideSensor,
-  onSaveLightGroup,
+  onRenameSensor,
+  onRenameLightGroup,
   onSaveReference,
   lightColorOverrides,
 }: {
@@ -63,7 +63,8 @@ export function RoomCard({
   onMasterToggled: () => void
   onOpenGroupDetail: (groupId: number) => void
   onHideSensor?: (sensorId: number) => void
-  onSaveLightGroup?: (groupId: number, changes: { name: string; theme: LightThemeKey }) => void
+  onRenameSensor?: (sensorId: number, label: string) => void
+  onRenameLightGroup?: (groupId: number, name: string) => void
   onSaveReference?: (roomId: number, ref: RoomReference) => void
   /** Per-sensor color picks from EditLightModal — painted on the matching
    *  HueLightTile's bulb-icon background when on. */
@@ -244,7 +245,7 @@ export function RoomCard({
     {
       key: 'rename-room',
       label: 'Rename room',
-      icon: <PencilSquareIcon data-slot="icon" />,
+      icon: <TagIcon data-slot="icon" />,
       onSelect: () => startRename(),
     },
     {
@@ -410,8 +411,9 @@ export function RoomCard({
                       members={group.memberSensorIds.map(id => lightsById.get(id)).filter((s): s is SensorView => !!s)}
                       onUngroup={onUngroup}
                       onOpenDetail={onOpenGroupDetail}
+                      onSetTheme={onOpenGroupDetail}
                       onEditMembers={startEditMembers}
-                      onSaveGroup={onSaveLightGroup}
+                      onRenameGroup={onRenameLightGroup}
                       onToggled={onMasterToggled}
                     />
                   ))}
@@ -427,6 +429,7 @@ export function RoomCard({
                       selected={selectedLightIds.has(light.id)}
                       selectionMode={selectionMode !== 'idle'}
                       onEditSensor={onEditSensor}
+                      onRenameSensor={onRenameSensor}
                       onRemoveSensor={onRemoveSensor}
                       onHideSensor={onHideSensor}
                       onToggleSelect={toggleLightSelection}

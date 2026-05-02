@@ -17,7 +17,7 @@ import { LiveStreamModal } from '@/app/components/warren/live-stream-modal'
 import { EditLightModal } from '@/app/components/warren/edit-light-modal'
 
 export default function DashboardPage() {
-  const { rooms, lastUpdated, refresh, addRoom, removeRoom, renameRoom, removeSensor, hideSensor, saveLightGroup, addSensor, saveReference, clearReference } = useRooms()
+  const { rooms, lastUpdated, refresh, addRoom, removeRoom, renameRoom, removeSensor, hideSensor, renameSensor, renameLightGroup, addSensor, saveReference, clearReference } = useRooms()
 
   const [showAddRoom, setShowAddRoom] = useState(false)
   const [addSensorRoomId, setAddSensorRoomId] = useState<number | null>(null)
@@ -183,7 +183,8 @@ export default function DashboardPage() {
                 onMasterToggled={refresh}
                 onOpenGroupDetail={(groupId) => setGroupDetailId(groupId)}
                 onHideSensor={hideSensor}
-                onSaveLightGroup={saveLightGroup}
+                onRenameSensor={renameSensor}
+                onRenameLightGroup={renameLightGroup}
                 onSaveReference={(roomId, ref) => {
                   if (ref.refTemp === null && ref.refHumidity === null) clearReference(roomId)
                   else saveReference(roomId, ref)
