@@ -230,14 +230,10 @@ export function RoomCard({
     }
   }
 
+  // Room-level actions only. Light-specific actions ("Group lights…") live on
+  // the Lights section header alongside the MasterLightToggle, so each kebab's
+  // scope matches the user's mental model when they reach for it.
   const roomMenuItems: TileMenuItem[] = [
-    {
-      key: 'group-lights',
-      label: 'Group lights…',
-      icon: <Squares2X2Icon data-slot="icon" />,
-      disabled: lights.length < 2,
-      onSelect: () => startCreateSelection(),
-    },
     {
       key: 'add-sensor',
       label: 'Add sensor',
@@ -252,6 +248,15 @@ export function RoomCard({
       onSelect: () => setConfirmRoom(true),
     },
   ]
+
+  const lightsMenuItems: TileMenuItem[] = lights.length >= 2
+    ? [{
+      key: 'group-lights',
+      label: 'Group lights…',
+      icon: <Squares2X2Icon data-slot="icon" />,
+      onSelect: () => startCreateSelection(),
+    }]
+    : []
 
   return (
     <article
@@ -360,19 +365,28 @@ export function RoomCard({
 
           {hasLighting && (
             <div className="flex flex-col gap-3">
-              <div className="flex items-center justify-between gap-3">
+              <div className="relative flex items-center justify-between gap-3">
                 <span className="text-xs font-semibold uppercase tracking-wider text-subtle">
                   Lights
                 </span>
-                {room.lightMaster && (
-                  <MasterLightToggle
-                    master={room.lightMaster}
-                    pending={masterPending}
-                    error={masterError}
-                    partial={masterPartial}
-                    onToggle={toggleRoomMaster}
-                  />
-                )}
+                <div className="flex items-center gap-1">
+                  {room.lightMaster && (
+                    <MasterLightToggle
+                      master={room.lightMaster}
+                      pending={masterPending}
+                      error={masterError}
+                      partial={masterPartial}
+                      onToggle={toggleRoomMaster}
+                    />
+                  )}
+                  {lightsMenuItems.length > 0 && (
+                    <TileMenu
+                      items={lightsMenuItems}
+                      aria-label="Lights menu"
+                      positionClassName="shrink-0"
+                    />
+                  )}
+                </div>
               </div>
               {lightGroups.length > 0 && (
                 <div className="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-3">
