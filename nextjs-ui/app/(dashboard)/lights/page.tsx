@@ -35,6 +35,11 @@ import { Text } from '@/app/components/text'
 import { SwitchField } from '@/app/components/switch'
 import { AppSwitch } from '@/app/components/warren/app-switch'
 import { ConfirmDialog } from '@/app/components/warren/confirm-dialog'
+import {
+  GroupedLightGuardDialog,
+  MoveLightDialog,
+  RemoveLightFromRoomDialog,
+} from '@/app/components/warren/light-room-dialogs'
 import { MasterLightToggle } from '@/app/components/warren/master-light-toggle'
 
 interface LightRow {
@@ -66,6 +71,10 @@ function briFromHue(b: number | null | undefined) {
   return Math.round(((b ?? 0) / 254) * 100)
 }
 
+function displayName(row: LightRow): string {
+  return row.label?.trim() || row.hueName?.trim() || 'Light'
+}
+
 export default function LightsPage() {
   const { data: sensors = [], mutate: refresh } = useSWR<LightRow[]>('/api/sensors', fetcher, { refreshInterval: 15_000 })
   const { data: blocked = [], mutate: refreshBlocked } = useSWR<{ deviceId: string; type: string }[]>(
@@ -83,6 +92,19 @@ export default function LightsPage() {
   const [editingLabel, setEditingLabel] = useState('')
   const [errorById, setErrorById] = useState<Record<string, string>>({})
   const [pendingById, setPendingById] = useState<Record<string, boolean>>({})
+
+  const [pendingMove, setPendingMove] = useState<{
+    row: LightRow
+    targetRoomId: number
+    targetRoomName: string
+  } | null>(null)
+  const [pendingRemove, setPendingRemove] = useState<LightRow | null>(null)
+  const [groupGuard, setGroupGuard] = useState<{
+    row: LightRow
+    intent: 'move' | 'remove'
+  } | null>(null)
+  const [dialogBusy, setDialogBusy] = useState(false)
+  const [groupGuardError, setGroupGuardError] = useState<string | null>(null)
 
   const [globalMasterPending, setGlobalMasterPending] = useState(false)
   const [globalMasterError, setGlobalMasterError] = useState<string | null>(null)
@@ -209,34 +231,96 @@ export default function LightsPage() {
     await refresh()
   }
 
-  async function moveToRoom(row: LightRow, roomId: number) {
-    if (row.id !== null) {
+  function requestMove(row: LightRow, room: { id: number; name: string }) {
+    if (row.groupId != null) {
+      setGroupGuardError(null)
+      setGroupGuard({ row, intent: 'move' })
+      return
+    }
+    setPendingMove({ row, targetRoomId: room.id, targetRoomName: room.name })
+  }
+
+  async function commitMove() {
+    const move = pendingMove
+    if (!move) return
+    const { row, targetRoomId } = move
+    setDialogBusy(true)
+    try {
+      if (row.id !== null) {
+        await fetch(`/api/sensors/${row.id}`, {
+          method: 'PATCH',
+          headers: { 'content-type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ roomId: targetRoomId }),
+        })
+      } else if (row.deviceId) {
+        await fetch('/api/sensors', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ type: row.type, deviceId: row.deviceId, roomId: targetRoomId, label: row.label ?? null }),
+        })
+      }
+      await refresh()
+      setPendingMove(null)
+    } finally {
+      setDialogBusy(false)
+    }
+  }
+
+  function requestRemove(row: LightRow) {
+    if (row.id === null) return
+    if (row.groupId != null) {
+      setGroupGuardError(null)
+      setGroupGuard({ row, intent: 'remove' })
+      return
+    }
+    setPendingRemove(row)
+  }
+
+  async function commitRemove() {
+    const row = pendingRemove
+    if (!row || row.id === null) return
+    setDialogBusy(true)
+    try {
       await fetch(`/api/sensors/${row.id}`, {
         method: 'PATCH',
         headers: { 'content-type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ roomId }),
+        body: JSON.stringify({ roomId: null }),
       })
-    } else if (row.deviceId) {
-      await fetch('/api/sensors', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ type: row.type, deviceId: row.deviceId, roomId, label: row.label ?? null }),
-      })
+      await refresh()
+      setPendingRemove(null)
+    } finally {
+      setDialogBusy(false)
     }
-    await refresh()
   }
 
-  async function removeFromRoom(row: LightRow) {
-    if (row.id === null) return
-    await fetch(`/api/sensors/${row.id}`, {
-      method: 'PATCH',
-      headers: { 'content-type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({ roomId: null }),
-    })
-    await refresh()
+  async function commitRemoveFromGroup() {
+    const guard = groupGuard
+    if (!guard) return
+    const { row } = guard
+    if (row.id === null || row.groupId == null) return
+    setDialogBusy(true)
+    setGroupGuardError(null)
+    try {
+      const res = await fetch(`/api/light-groups/${row.groupId}/members/${row.id}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      })
+      if (!res.ok) {
+        let payload: { message?: string } = {}
+        try { payload = await res.json() } catch {}
+        setGroupGuardError(payload.message ?? 'Failed to remove from group')
+        return
+      }
+      await refresh()
+      setGroupGuard(null)
+    } catch {
+      setGroupGuardError('Failed to remove from group')
+    } finally {
+      setDialogBusy(false)
+    }
   }
 
   async function confirmDelete() {
@@ -328,7 +412,7 @@ export default function LightsPage() {
                 <div className="min-w-0 flex-auto">
                   <div className="flex items-center gap-2 flex-wrap">
                     <p className="text-sm/6 font-semibold text-text truncate">
-                      {row.label?.trim() || row.hueName?.trim() || 'Light'}
+                      {displayName(row)}
                     </p>
                     {row.origin === 'hue' && <Badge color="amber">Hue</Badge>}
                     {row.lightReachable === false && <Badge color="red">Unreachable</Badge>}
@@ -398,7 +482,7 @@ export default function LightsPage() {
                             <DropdownItem
                               key={r.id}
                               disabled={current}
-                              onClick={() => { if (!current) moveToRoom(row, r.id) }}
+                              onClick={() => { if (!current) requestMove(row, r) }}
                             >
                               {current ? <CheckIcon data-slot="icon" /> : <HomeIcon data-slot="icon" />}
                               <DropdownLabel>{r.name}</DropdownLabel>
@@ -407,7 +491,7 @@ export default function LightsPage() {
                         })}
                         {row.roomId !== null && row.id !== null && (
                           <DropdownItem
-                            onClick={() => removeFromRoom(row)}
+                            onClick={() => requestRemove(row)}
                             className="!text-error data-focus:!text-white"
                           >
                             <ArrowUturnLeftIcon data-slot="icon" />
@@ -458,6 +542,36 @@ export default function LightsPage() {
         confirmLabel="Hide"
         onConfirm={confirmDelete}
         onCancel={() => setPendingDelete(null)}
+      />
+
+      <GroupedLightGuardDialog
+        open={!!groupGuard}
+        lightLabel={groupGuard ? displayName(groupGuard.row) : ''}
+        groupName={groupGuard?.row.groupName ?? ''}
+        busy={dialogBusy}
+        error={groupGuardError}
+        onRemoveFromGroup={commitRemoveFromGroup}
+        onCancel={() => { setGroupGuard(null); setGroupGuardError(null) }}
+      />
+
+      <MoveLightDialog
+        open={!!pendingMove}
+        lightLabel={pendingMove ? displayName(pendingMove.row) : ''}
+        sourceRoomName={pendingMove?.row.roomName ?? null}
+        targetRoomName={pendingMove?.targetRoomName ?? ''}
+        mode={pendingMove?.row.id === null ? 'add' : 'move'}
+        busy={dialogBusy}
+        onConfirm={commitMove}
+        onCancel={() => setPendingMove(null)}
+      />
+
+      <RemoveLightFromRoomDialog
+        open={!!pendingRemove}
+        lightLabel={pendingRemove ? displayName(pendingRemove) : ''}
+        roomName={pendingRemove?.roomName ?? ''}
+        busy={dialogBusy}
+        onConfirm={commitRemove}
+        onCancel={() => setPendingRemove(null)}
       />
 
       <Dialog open={!!editingLight} onClose={() => setEditingLight(null)} size="md">
