@@ -167,7 +167,7 @@ export default function SensorsPage() {
               value={search}
               onChange={e => setSearch(e.target.value)}
               type="search"
-              className="min-w-[220px]"
+              className="w-full sm:w-72"
               placeholder="Search sensors…"
             />
             <SwitchField className="!grid-cols-[auto_auto] !gap-x-3">

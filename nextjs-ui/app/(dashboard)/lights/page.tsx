@@ -221,13 +221,19 @@ export default function LightsPage() {
             <Heading>Lights</Heading>
             <Text className="mt-1">Toggle and dim every light, or filter to ones not yet placed in a room.</Text>
           </div>
-          <Input
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            type="search"
-            className="w-full sm:w-72"
-            placeholder="Search lights…"
-          />
+          <div className="flex items-center gap-4">
+            <Input
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              type="search"
+              className="w-full sm:w-72"
+              placeholder="Search lights…"
+            />
+            <SwitchField className="!grid-cols-[auto_auto] !gap-x-3">
+              <Label>Unused only</Label>
+              <AppSwitch checked={onlyUnused} onChange={setOnlyUnused} label="Show only unused" />
+            </SwitchField>
+          </div>
         </div>
 
         {globalMaster && (
@@ -241,11 +247,6 @@ export default function LightsPage() {
             onToggle={toggleGlobalMaster}
           />
         )}
-
-        <SwitchField className="w-fit !grid-cols-[auto_auto] !gap-x-3">
-          <Label>Show only unused</Label>
-          <AppSwitch checked={onlyUnused} onChange={setOnlyUnused} label="Show only unused" />
-        </SwitchField>
 
         {visibleLights.length === 0 ? (
           <div className="rounded-xl bg-surface ring-1 ring-default shadow-sm dark:ring-white/10 dark:shadow-none p-12 text-center text-sm text-muted">
