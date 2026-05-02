@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react'
 import {
-  PaintBrushIcon,
   PencilSquareIcon,
   TagIcon,
   TrashIcon,
@@ -24,7 +23,6 @@ export function LightGroupTile({
   onOpenDetail,
   onEditMembers,
   onRenameGroup,
-  onSetTheme,
   onToggled,
 }: {
   group: LightGroupView
@@ -33,7 +31,6 @@ export function LightGroupTile({
   onOpenDetail: (groupId: number) => void
   onEditMembers?: (groupId: number) => void
   onRenameGroup?: (groupId: number, name: string) => void
-  onSetTheme?: (groupId: number) => void
   onToggled: () => void
 }) {
   const [confirmUngroup, setConfirmUngroup] = useState(false)
@@ -185,12 +182,6 @@ export function LightGroupTile({
       label: 'Rename group',
       icon: <TagIcon data-slot="icon" />,
       onSelect: () => setRenaming(true),
-    }] : []),
-    ...(onSetTheme ? [{
-      key: 'theme',
-      label: 'Set theme',
-      icon: <PaintBrushIcon data-slot="icon" />,
-      onSelect: () => onSetTheme(group.id),
     }] : []),
     ...(onEditMembers ? [{
       key: 'members',

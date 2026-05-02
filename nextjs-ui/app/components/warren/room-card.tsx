@@ -411,7 +411,6 @@ export function RoomCard({
                       members={group.memberSensorIds.map(id => lightsById.get(id)).filter((s): s is SensorView => !!s)}
                       onUngroup={onUngroup}
                       onOpenDetail={onOpenGroupDetail}
-                      onSetTheme={onOpenGroupDetail}
                       onEditMembers={startEditMembers}
                       onRenameGroup={onRenameLightGroup}
                       onToggled={onMasterToggled}
