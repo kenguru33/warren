@@ -168,10 +168,10 @@ export default function DashboardPage() {
             </Text>
           </div>
         ) : (
-          // Auto-fill columns capped at the room-card max width (32rem),
+          // Auto-fill columns capped at the room-card max width (28rem),
           // left-aligned via justify-start so cards pack to the left edge
           // rather than stretching on wide monitors.
-          <div className="grid grid-cols-1 gap-6 sm:grid-cols-[repeat(auto-fill,minmax(0,32rem))] sm:justify-start">
+          <div className="grid grid-cols-1 gap-6 sm:grid-cols-[repeat(auto-fill,minmax(0,28rem))] sm:justify-start">
             {rooms.map(room => (
               <RoomCard
                 key={room.id}
