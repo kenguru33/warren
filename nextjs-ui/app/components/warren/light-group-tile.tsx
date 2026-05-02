@@ -2,19 +2,17 @@
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react'
 import {
-  PaintBrushIcon,
   PencilSquareIcon,
-  TagIcon,
   TrashIcon,
   UsersIcon,
 } from '@heroicons/react/20/solid'
 import type { LightGroupView, LightGroupState, SensorView } from '@/lib/shared/types'
-import { resolveLightTheme, MIXED_RING_DEFAULT } from '@/lib/shared/light-themes'
+import { resolveLightTheme, MIXED_RING_DEFAULT, type LightThemeKey } from '@/lib/shared/light-themes'
 import { useTheme } from '@/lib/hooks/use-theme'
 import { Badge } from '@/app/components/badge'
 import { useLongPress } from '@/lib/hooks/use-long-press'
 import { ConfirmDialog } from './confirm-dialog'
-import { RenameDialog } from './rename-dialog'
+import { EditGroupDialog } from './edit-group-dialog'
 import { TileMenu, type TileMenuHandle, type TileMenuItem } from './tile-menu'
 
 export function LightGroupTile({
@@ -23,8 +21,7 @@ export function LightGroupTile({
   onUngroup,
   onOpenDetail,
   onEditMembers,
-  onRenameGroup,
-  onSetTheme,
+  onSaveGroup,
   onToggled,
 }: {
   group: LightGroupView
@@ -32,12 +29,12 @@ export function LightGroupTile({
   onUngroup: (groupId: number) => void
   onOpenDetail: (groupId: number) => void
   onEditMembers?: (groupId: number) => void
-  onRenameGroup?: (groupId: number, name: string) => void
-  onSetTheme?: (groupId: number) => void
+  /** Save name + theme together via PATCH /api/light-groups/[id]. */
+  onSaveGroup?: (groupId: number, changes: { name: string; theme: LightThemeKey }) => void
   onToggled: () => void
 }) {
   const [confirmUngroup, setConfirmUngroup] = useState(false)
-  const [renaming, setRenaming] = useState(false)
+  const [editing, setEditing] = useState(false)
   const [localOn, setLocalOn] = useState<boolean | null>(null)
   const [localBri, setLocalBri] = useState<number | null>(null)
   const [dragging, setDragging] = useState(false)
@@ -180,22 +177,16 @@ export function LightGroupTile({
       icon: <UsersIcon data-slot="icon" />,
       onSelect: () => onOpenDetail(group.id),
     },
-    ...(onRenameGroup ? [{
-      key: 'rename',
-      label: 'Rename group',
-      icon: <TagIcon data-slot="icon" />,
-      onSelect: () => setRenaming(true),
-    }] : []),
-    ...(onSetTheme ? [{
-      key: 'theme',
-      label: 'Set theme',
-      icon: <PaintBrushIcon data-slot="icon" />,
-      onSelect: () => onSetTheme(group.id),
+    ...(onSaveGroup ? [{
+      key: 'edit',
+      label: 'Edit',
+      icon: <PencilSquareIcon data-slot="icon" />,
+      onSelect: () => setEditing(true),
     }] : []),
     ...(onEditMembers ? [{
       key: 'members',
       label: 'Edit members',
-      icon: <PencilSquareIcon data-slot="icon" />,
+      icon: <UsersIcon data-slot="icon" />,
       onSelect: () => onEditMembers(group.id),
     }] : []),
     {
@@ -325,12 +316,11 @@ export function LightGroupTile({
         onConfirm={() => { onUngroup(group.id); setConfirmUngroup(false) }}
         onCancel={() => setConfirmUngroup(false)}
       />
-      <RenameDialog
-        open={renaming}
-        title="Rename light group"
-        currentName={group.name}
-        onSave={name => onRenameGroup?.(group.id, name)}
-        onClose={() => setRenaming(false)}
+      <EditGroupDialog
+        open={editing}
+        group={group}
+        onSave={changes => onSaveGroup?.(group.id, changes)}
+        onClose={() => setEditing(false)}
       />
     </div>
   )

@@ -12,7 +12,6 @@ import type { SensorView } from '@/lib/shared/types'
 import { Badge } from '@/app/components/badge'
 import { useLongPress } from '@/lib/hooks/use-long-press'
 import { ConfirmDialog } from './confirm-dialog'
-import { RenameDialog } from './rename-dialog'
 import { TileMenu, type TileMenuHandle, type TileMenuItem } from './tile-menu'
 
 function briFromHue(b: number): number {
@@ -25,7 +24,6 @@ export function HueLightTile({
   selected,
   selectionMode,
   onEditSensor,
-  onRenameSensor,
   onRemoveSensor,
   onHideSensor,
   onToggleSelect,
@@ -43,7 +41,6 @@ export function HueLightTile({
    *  selection instead of toggling the bulb; bulb button is disabled. */
   selectionMode?: boolean
   onEditSensor: (sensorId: number) => void
-  onRenameSensor?: (sensorId: number, label: string) => void
   onRemoveSensor: (sensorId: number) => void
   onHideSensor?: (sensorId: number) => void
   onToggleSelect?: (sensorId: number) => void
@@ -57,7 +54,6 @@ export function HueLightTile({
   const [error, setError] = useState<string | null>(null)
   const [confirmRemove, setConfirmRemove] = useState(false)
   const [confirmHide, setConfirmHide] = useState(false)
-  const [renaming, setRenaming] = useState(false)
 
   const menuRef = useRef<TileMenuHandle>(null)
   const { handlers: pressHandlers, wasLongPressRef } = useLongPress(() => {
@@ -170,16 +166,11 @@ export function HueLightTile({
   }
 
   const items: TileMenuItem[] = [
-    ...(onRenameSensor ? [{
-      key: 'rename',
-      label: 'Rename',
-      icon: <PencilSquareIcon data-slot="icon" />,
-      onSelect: () => setRenaming(true),
-    }] : []),
     {
-      key: 'edit-color',
-      label: 'Edit color',
+      key: 'edit',
+      label: 'Edit',
       icon: <PaintBrushIcon data-slot="icon" />,
+      // EditLightModal already covers both rename and color in one dialog.
       onSelect: () => onEditSensor(sensor.id),
     },
     ...(onStartSelect ? [{
@@ -311,14 +302,6 @@ export function HueLightTile({
         tone="default"
         onConfirm={() => { onHideSensor?.(sensor.id); setConfirmHide(false) }}
         onCancel={() => setConfirmHide(false)}
-      />
-      <RenameDialog
-        open={renaming}
-        title="Rename light"
-        currentName={sensor.label ?? sensor.hueName ?? ''}
-        placeholder={sensor.hueName ?? 'Light'}
-        onSave={name => onRenameSensor?.(sensor.id, name)}
-        onClose={() => setRenaming(false)}
       />
     </div>
   )

@@ -4,34 +4,29 @@ import { useRef, useState } from 'react'
 import Image from 'next/image'
 import {
   EyeSlashIcon,
-  PencilSquareIcon,
   PlayIcon,
   TrashIcon,
 } from '@heroicons/react/20/solid'
 import type { SensorView } from '@/lib/shared/types'
 import { useLongPress } from '@/lib/hooks/use-long-press'
 import { ConfirmDialog } from './confirm-dialog'
-import { RenameDialog } from './rename-dialog'
 import { TileMenu, type TileMenuHandle, type TileMenuItem } from './tile-menu'
 
 export function CameraTile({
   sensor,
   recentMotion,
   onOpenLive,
-  onRenameSensor,
   onRemoveSensor,
   onHideSensor,
 }: {
   sensor: SensorView
   recentMotion: boolean
   onOpenLive: (sensorId: number) => void
-  onRenameSensor?: (sensorId: number, label: string) => void
   onRemoveSensor: (sensorId: number) => void
   onHideSensor?: (sensorId: number) => void
 }) {
   const [confirmRemove, setConfirmRemove] = useState(false)
   const [confirmHide, setConfirmHide] = useState(false)
-  const [renaming, setRenaming] = useState(false)
 
   const menuRef = useRef<TileMenuHandle>(null)
   const { handlers: pressHandlers, wasLongPressRef } = useLongPress(() => menuRef.current?.open())
@@ -48,12 +43,6 @@ export function CameraTile({
       icon: <PlayIcon data-slot="icon" />,
       onSelect: () => onOpenLive(sensor.id),
     },
-    ...(onRenameSensor ? [{
-      key: 'rename',
-      label: 'Rename',
-      icon: <PencilSquareIcon data-slot="icon" />,
-      onSelect: () => setRenaming(true),
-    }] : []),
     ...(onHideSensor ? [{
       key: 'hide',
       label: 'Hide',
@@ -136,14 +125,6 @@ export function CameraTile({
         tone="default"
         onConfirm={() => { onHideSensor?.(sensor.id); setConfirmHide(false) }}
         onCancel={() => setConfirmHide(false)}
-      />
-      <RenameDialog
-        open={renaming}
-        title="Rename camera"
-        currentName={sensor.label}
-        placeholder="Camera"
-        onSave={name => onRenameSensor?.(sensor.id, name)}
-        onClose={() => setRenaming(false)}
       />
     </div>
   )

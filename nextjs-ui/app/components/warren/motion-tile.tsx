@@ -4,14 +4,12 @@ import { useRef, useState } from 'react'
 import {
   ChartBarIcon,
   EyeSlashIcon,
-  PencilSquareIcon,
   TrashIcon,
 } from '@heroicons/react/20/solid'
 import type { SensorView } from '@/lib/shared/types'
 import { Badge } from '@/app/components/badge'
 import { useLongPress } from '@/lib/hooks/use-long-press'
 import { ConfirmDialog } from './confirm-dialog'
-import { RenameDialog } from './rename-dialog'
 import { TileMenu, type TileMenuHandle, type TileMenuItem } from './tile-menu'
 
 export function MotionTile({
@@ -20,7 +18,6 @@ export function MotionTile({
   recentMotion,
   motionLabel,
   onViewHistory,
-  onRenameSensor,
   onRemoveSensor,
   onHideSensor,
 }: {
@@ -29,13 +26,11 @@ export function MotionTile({
   recentMotion: boolean
   motionLabel: string | null
   onViewHistory: (sensor: SensorView) => void
-  onRenameSensor?: (sensorId: number, label: string) => void
   onRemoveSensor: (sensorId: number) => void
   onHideSensor?: (sensorId: number) => void
 }) {
   const [confirmRemove, setConfirmRemove] = useState(false)
   const [confirmHide, setConfirmHide] = useState(false)
-  const [renaming, setRenaming] = useState(false)
   const valueText = !sensor.lastMotion ? '—' : recentMotion ? 'Detected' : 'Clear'
 
   const menuRef = useRef<TileMenuHandle>(null)
@@ -53,12 +48,6 @@ export function MotionTile({
       icon: <ChartBarIcon data-slot="icon" />,
       onSelect: () => onViewHistory(sensor),
     },
-    ...(onRenameSensor ? [{
-      key: 'rename',
-      label: 'Rename',
-      icon: <PencilSquareIcon data-slot="icon" />,
-      onSelect: () => setRenaming(true),
-    }] : []),
     ...(onHideSensor ? [{
       key: 'hide',
       label: 'Hide',
@@ -126,14 +115,6 @@ export function MotionTile({
         tone="default"
         onConfirm={() => { onHideSensor?.(sensor.id); setConfirmHide(false) }}
         onCancel={() => setConfirmHide(false)}
-      />
-      <RenameDialog
-        open={renaming}
-        title="Rename motion sensor"
-        currentName={sensor.label}
-        placeholder="Motion"
-        onSave={name => onRenameSensor?.(sensor.id, name)}
-        onClose={() => setRenaming(false)}
       />
     </div>
   )

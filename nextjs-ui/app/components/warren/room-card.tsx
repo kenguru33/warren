@@ -8,6 +8,7 @@ import {
   TrashIcon,
 } from '@heroicons/react/20/solid'
 import type { RoomReference, RoomWithSensors, SensorView } from '@/lib/shared/types'
+import type { LightThemeKey } from '@/lib/shared/light-themes'
 import { Heading } from '@/app/components/heading'
 import { Input } from '@/app/components/input'
 import { ClimateTile } from './climate-tile'
@@ -46,8 +47,7 @@ export function RoomCard({
   onMasterToggled,
   onOpenGroupDetail,
   onHideSensor,
-  onRenameSensor,
-  onRenameLightGroup,
+  onSaveLightGroup,
   onSaveReference,
   lightColorOverrides,
 }: {
@@ -63,8 +63,7 @@ export function RoomCard({
   onMasterToggled: () => void
   onOpenGroupDetail: (groupId: number) => void
   onHideSensor?: (sensorId: number) => void
-  onRenameSensor?: (sensorId: number, label: string) => void
-  onRenameLightGroup?: (groupId: number, name: string) => void
+  onSaveLightGroup?: (groupId: number, changes: { name: string; theme: LightThemeKey }) => void
   onSaveReference?: (roomId: number, ref: RoomReference) => void
   /** Per-sensor color picks from EditLightModal — painted on the matching
    *  HueLightTile's bulb-icon background when on. */
@@ -331,7 +330,6 @@ export function RoomCard({
                   onViewHistory={onViewHistory}
                   onEditSensor={onEditSensor}
                   onSetTarget={onSaveReference ? setTargetVariant : undefined}
-                  onRenameSensor={onRenameSensor}
                   onRemoveSensor={onRemoveSensor}
                   onHideSensor={onHideSensor}
                 />
@@ -345,7 +343,6 @@ export function RoomCard({
                   onViewHistory={onViewHistory}
                   onEditSensor={onEditSensor}
                   onSetTarget={onSaveReference ? setTargetVariant : undefined}
-                  onRenameSensor={onRenameSensor}
                   onRemoveSensor={onRemoveSensor}
                   onHideSensor={onHideSensor}
                 />
@@ -357,7 +354,6 @@ export function RoomCard({
                   recentMotion={recentMotion(motionSensor.lastMotion)}
                   motionLabel={motionLabelFor(motionSensor.lastMotion)}
                   onViewHistory={onViewHistory}
-                  onRenameSensor={onRenameSensor}
                   onRemoveSensor={onRemoveSensor}
                   onHideSensor={onHideSensor}
                 />
@@ -373,7 +369,6 @@ export function RoomCard({
                   sensor={cam}
                   recentMotion={recentMotion(cam.lastMotion)}
                   onOpenLive={onOpenLive}
-                  onRenameSensor={onRenameSensor}
                   onRemoveSensor={onRemoveSensor}
                   onHideSensor={onHideSensor}
                 />
@@ -415,9 +410,8 @@ export function RoomCard({
                       members={group.memberSensorIds.map(id => lightsById.get(id)).filter((s): s is SensorView => !!s)}
                       onUngroup={onUngroup}
                       onOpenDetail={onOpenGroupDetail}
-                      onSetTheme={onOpenGroupDetail}
                       onEditMembers={startEditMembers}
-                      onRenameGroup={onRenameLightGroup}
+                      onSaveGroup={onSaveLightGroup}
                       onToggled={onMasterToggled}
                     />
                   ))}
@@ -433,7 +427,6 @@ export function RoomCard({
                       selected={selectedLightIds.has(light.id)}
                       selectionMode={selectionMode !== 'idle'}
                       onEditSensor={onEditSensor}
-                      onRenameSensor={onRenameSensor}
                       onRemoveSensor={onRemoveSensor}
                       onHideSensor={onHideSensor}
                       onToggleSelect={toggleLightSelection}
