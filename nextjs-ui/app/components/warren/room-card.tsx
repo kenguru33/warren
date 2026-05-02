@@ -15,8 +15,9 @@ import { MasterLightToggle } from './master-light-toggle'
 import { ConfirmDialog } from './confirm-dialog'
 import { AppSwitch } from './app-switch'
 
-// Compact icon button used inside the room-card's floating control pill. Smaller
-// than Catalyst's Button plain so the pill stays unobtrusive on the border.
+// Compact icon button used in the room-card header for the per-room controls
+// (add sensor, edit, remove). Quieter than Catalyst's Button plain so a row of
+// three reads as chrome rather than primary actions.
 function CardIconButton({
   title,
   onClick,
@@ -32,7 +33,7 @@ function CardIconButton({
       title={title}
       aria-label={title}
       onClick={onClick}
-      className="inline-flex size-7 items-center justify-center rounded-lg text-subtle transition-colors hover:bg-default hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent dark:hover:bg-white/10 dark:hover:text-white"
+      className="inline-flex size-8 items-center justify-center rounded-lg text-subtle transition-colors hover:bg-default hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent dark:hover:bg-white/10 dark:hover:text-white"
     >
       {children}
     </button>
@@ -188,30 +189,6 @@ export function RoomCard({
         '[container-type:inline-size]',
       ].join(' ')}
     >
-      {/* Floating control pill — straddles the card's top-right border (vertically
-       *  centered on the ring line). On touch (coarse pointer) it's always visible
-       *  so the controls are discoverable; on mouse (fine pointer) it fades in on
-       *  card hover or keyboard focus to keep the chrome quiet. */}
-      <div
-        className={[
-          'absolute right-4 top-0 z-10 flex -translate-y-1/2 items-center rounded-xl bg-surface px-1 py-1',
-          'shadow-[0_1px_2px_rgba(0,0,0,0.06),0_4px_12px_-6px_rgba(0,0,0,0.12)] ring-1 ring-default',
-          'dark:bg-surface-2 dark:ring-white/10',
-          'transition-opacity duration-150',
-          'pointer-fine:opacity-0 pointer-fine:group-hover/room:opacity-100 pointer-fine:group-focus-within/room:opacity-100 pointer-fine:focus-within:opacity-100',
-        ].join(' ')}
-      >
-        <CardIconButton title="Add sensor" onClick={() => onAddSensor(room.id)}>
-          <PlusIcon className="size-3.5" />
-        </CardIconButton>
-        <CardIconButton title="Edit room" onClick={editing ? closeEditing : openEditing}>
-          <PencilSquareIcon className="size-3.5" />
-        </CardIconButton>
-        <CardIconButton title="Remove room" onClick={() => setConfirmRoom(true)}>
-          <TrashIcon className="size-3.5" />
-        </CardIconButton>
-      </div>
-
       <div
         className={[
           'flex min-h-[32px] items-center justify-between gap-3',
@@ -233,15 +210,17 @@ export function RoomCard({
           <Heading level={2} className="truncate !text-lg/6 font-semibold tracking-tight">{room.name}</Heading>
         )}
 
-        {room.lightMaster && (
-          <MasterLightToggle
-            master={room.lightMaster}
-            pending={masterPending}
-            error={masterError}
-            partial={masterPartial}
-            onToggle={toggleRoomMaster}
-          />
-        )}
+        <div className="flex shrink-0 items-center gap-0.5">
+          <CardIconButton title="Add sensor" onClick={() => onAddSensor(room.id)}>
+            <PlusIcon className="size-4" />
+          </CardIconButton>
+          <CardIconButton title="Edit room" onClick={editing ? closeEditing : openEditing}>
+            <PencilSquareIcon className="size-4" />
+          </CardIconButton>
+          <CardIconButton title="Remove room" onClick={() => setConfirmRoom(true)}>
+            <TrashIcon className="size-4" />
+          </CardIconButton>
+        </div>
       </div>
 
       {hasAnyContent && (
@@ -305,6 +284,20 @@ export function RoomCard({
 
           {hasLighting && (
             <div className="flex flex-col gap-3">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-xs font-semibold uppercase tracking-wider text-subtle">
+                  Lights
+                </span>
+                {room.lightMaster && (
+                  <MasterLightToggle
+                    master={room.lightMaster}
+                    pending={masterPending}
+                    error={masterError}
+                    partial={masterPartial}
+                    onToggle={toggleRoomMaster}
+                  />
+                )}
+              </div>
               {lightGroups.length > 0 && (
                 <div className="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-3">
                   {lightGroups.map(group => (
