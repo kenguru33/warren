@@ -4,7 +4,6 @@ import { usePathname, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import {
-  Bars3Icon,
   XMarkIcon,
   HomeIcon,
   CpuChipIcon,
@@ -12,6 +11,11 @@ import {
   Squares2X2Icon,
   ChevronUpIcon,
 } from '@heroicons/react/20/solid'
+// Bars3Icon comes from the 24/solid set so its three bars carry the same
+// visual weight as the filled rabbit / avatar shapes next to it. The 20/solid
+// variant scaled up renders with proportionally thinner strokes and looks
+// lighter than the filled shapes.
+import { Bars3Icon } from '@heroicons/react/24/solid'
 import { useSession } from '@/lib/hooks/use-session'
 import {
   Sidebar,
