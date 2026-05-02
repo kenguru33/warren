@@ -183,7 +183,7 @@ export function RoomCard({
   return (
     <article
       className={[
-        'group/room relative rounded-2xl bg-surface p-6 ring-1 ring-default transition-[box-shadow,--tw-ring-color] duration-150',
+        'group/room relative w-full max-w-xl rounded-2xl bg-surface p-6 ring-1 ring-default transition-[box-shadow,--tw-ring-color] duration-150',
         'shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_20px_-12px_rgba(0,0,0,0.08)] hover:ring-strong',
         'dark:ring-white/10 dark:shadow-none dark:[box-shadow:inset_0_1px_0_0_rgba(255,255,255,0.04)] dark:hover:ring-white/20',
         '[container-type:inline-size]',
