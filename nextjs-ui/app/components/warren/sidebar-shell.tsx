@@ -112,7 +112,7 @@ export function SidebarShell({ children }: { children: React.ReactNode }) {
       <div className="fixed inset-y-0 left-0 w-64 max-lg:hidden">
         <Sidebar>
           <SidebarHeader>
-            <Link href="/" className="flex items-center gap-3 rounded-lg p-1.5 hover:bg-default">
+            <Link href="/" className="flex items-center gap-3 rounded-lg p-1.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">
               <BrandMark className="h-8 w-auto shrink-0 text-text" />
               <div className="flex flex-col">
                 <span className="text-sm/5 font-semibold text-text">Warren</span>
@@ -173,7 +173,7 @@ export function SidebarShell({ children }: { children: React.ReactNode }) {
         >
           <Bars3Icon className="size-7" />
         </button>
-        <Link href="/" className="flex min-w-0 items-center gap-2 rounded-lg p-1.5 hover:bg-default focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">
+        <Link href="/" className="flex min-w-0 items-center gap-2 rounded-lg p-1.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">
           <BrandMark className="h-9 w-auto shrink-0 text-text" />
           <span className="text-base/6 font-semibold tracking-tight text-text">Warren</span>
         </Link>
@@ -205,7 +205,7 @@ export function SidebarShell({ children }: { children: React.ReactNode }) {
             <Sidebar>
               <SidebarHeader>
                 <div className="flex items-center justify-between">
-                  <Link href="/" className="flex items-center gap-3 rounded-lg p-1.5 hover:bg-default">
+                  <Link href="/" className="flex items-center gap-3 rounded-lg p-1.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">
                     <BrandMark className="h-8 w-auto shrink-0 text-text" />
                     <div className="flex flex-col">
                       <span className="text-sm/5 font-semibold text-text">Warren</span>
