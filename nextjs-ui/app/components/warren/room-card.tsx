@@ -235,8 +235,8 @@ export function RoomCard({
   // scope matches the user's mental model when they reach for it.
   const roomMenuItems: TileMenuItem[] = [
     {
-      key: 'add-sensor',
-      label: 'Add sensor',
+      key: 'add-device',
+      label: 'Add device',
       icon: <PlusIcon data-slot="icon" />,
       onSelect: () => onAddSensor(room.id),
     },
