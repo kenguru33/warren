@@ -10,6 +10,7 @@ import {
   LightBulbIcon,
   Squares2X2Icon,
   ChevronUpIcon,
+  UserIcon,
 } from '@heroicons/react/20/solid'
 // Bars3Icon comes from the 24/solid set so its three bars carry the same
 // visual weight as the filled rabbit / avatar shapes next to it. The 20/solid
@@ -36,7 +37,6 @@ import {
   DropdownMenu,
   DropdownSection,
 } from '@/app/components/dropdown'
-import { Avatar, AvatarButton } from '@/app/components/avatar'
 import { ColorSchemePicker } from './color-scheme-picker'
 import { ThemeToggle } from './theme-toggle'
 import { InstallMenuItem } from './install-menu-item'
@@ -79,7 +79,11 @@ export function SidebarShell({ children }: { children: React.ReactNode }) {
     router.push('/login')
   }
 
-  const initials = (user?.name ?? '?').slice(0, 1).toUpperCase()
+  // Generic user-icon badge used as the dropdown trigger in both the desktop
+  // sidebar footer and the mobile top bar. We don't store profile photos, so
+  // this is the canonical "user / settings" indicator instead of a per-user
+  // letter avatar that doesn't actually personalize anything.
+  const userBadgeClasses = 'inline-grid size-9 shrink-0 place-items-center rounded-full bg-zinc-900 text-white dark:bg-white dark:text-zinc-950'
 
   const userMenu = loggedIn && (
     <DropdownMenu className="min-w-72" anchor="top start">
@@ -142,10 +146,9 @@ export function SidebarShell({ children }: { children: React.ReactNode }) {
                   as="button"
                   className="flex w-full items-center gap-3 rounded-lg p-2 text-left hover:bg-default focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
                 >
-                  <Avatar
-                    initials={initials}
-                    className="size-9 bg-zinc-900 text-white dark:bg-white dark:text-zinc-950"
-                  />
+                  <span className={userBadgeClasses}>
+                    <UserIcon className="size-5" />
+                  </span>
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-sm/5 font-medium text-text">{user?.name}</span>
                     <span className="block truncate text-xs/4 text-subtle">Signed in</span>
@@ -181,11 +184,12 @@ export function SidebarShell({ children }: { children: React.ReactNode }) {
           <div className="ml-auto flex shrink-0 items-center">
             <Dropdown>
               <DropdownButton
-                as={AvatarButton}
+                as="button"
                 aria-label="User menu"
-                initials={initials}
-                className="size-9 bg-zinc-900 text-white dark:bg-white dark:text-zinc-950"
-              />
+                className={`${userBadgeClasses} focus:outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent`}
+              >
+                <UserIcon className="size-5" />
+              </DropdownButton>
               {userMenu}
             </Dropdown>
           </div>
