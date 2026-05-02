@@ -200,7 +200,7 @@ export async function GET() {
 
 export async function POST(req: Request) {
   let body: {
-    roomId?: number
+    roomId?: number | null
     type?: SensorType
     sensorId?: number
     deviceId?: string
@@ -210,16 +210,21 @@ export async function POST(req: Request) {
   } = {}
   try { body = (await req.json()) ?? {} } catch {}
 
-  if (!body.roomId) return Response.json({ statusCode: 400, message: 'roomId is required' }, { status: 400 })
   if (!body.type || !VALID_TYPES.includes(body.type)) {
     return Response.json({ statusCode: 400, message: 'invalid type' }, { status: 400 })
   }
+  const roomId = body.roomId ?? null
 
   const db = getDb()
 
+  if (roomId !== null) {
+    const room = db.prepare('SELECT id FROM rooms WHERE id = ?').get(roomId)
+    if (!room) return Response.json({ statusCode: 404, message: 'room not found' }, { status: 404 })
+  }
+
   if (body.sensorId) {
     const result = db.prepare('UPDATE sensors SET room_id = ?, label = ? WHERE id = ? AND room_id IS NULL')
-      .run(body.roomId, body.label ?? null, body.sensorId)
+      .run(roomId, body.label ?? null, body.sensorId)
     if (result.changes === 0) {
       return Response.json({ statusCode: 404, message: 'sensor not found or already assigned' }, { status: 404 })
     }
@@ -243,8 +248,8 @@ export async function POST(req: Request) {
   const result = db.prepare(`
     INSERT INTO sensors (room_id, type, device_id, label, stream_url, snapshot_url)
     VALUES (?, ?, ?, ?, ?, ?)
-  `).run(body.roomId, body.type, body.deviceId ?? null, body.label ?? null, streamUrl, snapshotUrl)
-  console.log(`[sensors] registered sensor id=${result.lastInsertRowid} type=${body.type} roomId=${body.roomId}`,
+  `).run(roomId, body.type, body.deviceId ?? null, body.label ?? null, streamUrl, snapshotUrl)
+  console.log(`[sensors] registered sensor id=${result.lastInsertRowid} type=${body.type} roomId=${roomId}`,
     { deviceId: body.deviceId ?? null, label: body.label ?? null })
 
   return Response.json({ id: result.lastInsertRowid })

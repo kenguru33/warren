@@ -189,7 +189,9 @@ export default function SensorsPage() {
                 className="group/row flex items-center gap-x-4 px-5 py-4 transition-colors hover:bg-default/50 dark:hover:bg-white/[0.02]"
               >
                 <div className="flex size-10 flex-none items-center justify-center rounded-lg bg-surface-2 text-lg dark:bg-white/5">
-                  {TYPE_ICONS[sensor.type] ?? '?'}
+                  <span className={`transition ${sensor.type !== 'camera' && isOffline(sensor.lastRecordedAt) ? 'grayscale opacity-50' : ''}`}>
+                    {TYPE_ICONS[sensor.type] ?? '?'}
+                  </span>
                 </div>
 
                 <div className="min-w-0 flex-auto">
