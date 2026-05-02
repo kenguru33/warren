@@ -32,7 +32,7 @@ import {
   DropdownMenu,
   DropdownSection,
 } from '@/app/components/dropdown'
-import { Avatar, AvatarButton } from '@/app/components/avatar'
+import { Avatar } from '@/app/components/avatar'
 import { Navbar, NavbarItem, NavbarSection, NavbarSpacer } from '@/app/components/navbar'
 import { ColorSchemePicker } from './color-scheme-picker'
 import { ThemeToggle } from './theme-toggle'
@@ -153,7 +153,8 @@ export function SidebarShell({ children }: { children: React.ReactNode }) {
         </Sidebar>
       </div>
 
-      {/* Mobile top bar — hamburger far left, brand mark + user menu on the right */}
+      {/* Mobile top bar — hamburger far left, brand mark on the right.
+          The user menu lives in the drawer footer (mirroring desktop). */}
       <header className="flex items-center px-4 lg:hidden">
         <NavbarItem onClick={() => setSidebarOpen(true)} aria-label="Open navigation">
           <Bars3Icon data-slot="icon" />
@@ -161,18 +162,7 @@ export function SidebarShell({ children }: { children: React.ReactNode }) {
         <Navbar>
           <NavbarSpacer />
           <NavbarSection>
-            {loggedIn && (
-              <Dropdown>
-                <DropdownButton as={AvatarButton} aria-label="User menu">
-                  <Avatar
-                    initials={initials}
-                    className="size-7 bg-zinc-900 text-white dark:bg-white dark:text-zinc-950"
-                  />
-                </DropdownButton>
-                {userMenu}
-              </Dropdown>
-            )}
-            <Link href="/" className="ml-2 flex min-w-0 items-center gap-2">
+            <Link href="/" className="flex min-w-0 items-center gap-2">
               <BrandMark className="size-7 shrink-0 text-text" />
               <span className="text-sm/5 font-semibold tracking-tight text-text">Warren</span>
             </Link>
@@ -180,37 +170,72 @@ export function SidebarShell({ children }: { children: React.ReactNode }) {
         </Navbar>
       </header>
 
-      {/* Mobile drawer */}
+      {/* Mobile drawer — full Sidebar mirror of the desktop layout: brand
+          header at the top, nav links in the body, user menu in the footer. */}
       {sidebarOpen && (
         <>
           <div
             className="fixed inset-0 z-40 bg-black/30 lg:hidden dark:bg-black/60"
             onClick={() => setSidebarOpen(false)}
           />
-          <div className="fixed inset-y-0 left-0 z-50 flex w-72 max-w-[85vw] flex-col bg-surface p-2 shadow-xl ring-1 ring-default lg:hidden dark:ring-white/10">
-            <div className="flex items-center justify-between p-2">
-              <span className="text-sm/5 font-semibold text-text">Warren</span>
-              <button
-                type="button"
-                className="inline-flex items-center justify-center rounded-lg p-2 text-muted hover:bg-default"
-                aria-label="Close navigation"
-                onClick={() => setSidebarOpen(false)}
-              >
-                <XMarkIcon className="size-5" />
-              </button>
-            </div>
-            <SidebarDivider />
-            <SidebarSection className="px-2">
-              {navLinks.map(link => {
-                const Icon = link.icon
-                return (
-                  <SidebarItem key={link.to} href={link.to} current={pathname === link.to}>
-                    <Icon data-slot="icon" />
-                    <SidebarLabel>{link.label}</SidebarLabel>
-                  </SidebarItem>
-                )
-              })}
-            </SidebarSection>
+          <div className="fixed inset-y-0 left-0 z-50 w-72 max-w-[85vw] bg-surface shadow-xl ring-1 ring-default lg:hidden dark:ring-white/10">
+            <Sidebar>
+              <SidebarHeader>
+                <div className="flex items-center justify-between">
+                  <Link href="/" className="flex items-center gap-3 rounded-lg p-1.5 hover:bg-default">
+                    <BrandMark className="size-8 shrink-0 text-text" />
+                    <div className="flex flex-col">
+                      <span className="text-sm/5 font-semibold text-text">Warren</span>
+                      <span className="text-xs/4 text-subtle">Home dashboard</span>
+                    </div>
+                  </Link>
+                  <button
+                    type="button"
+                    className="inline-flex items-center justify-center rounded-lg p-2 text-muted hover:bg-default"
+                    aria-label="Close navigation"
+                    onClick={() => setSidebarOpen(false)}
+                  >
+                    <XMarkIcon className="size-5" />
+                  </button>
+                </div>
+              </SidebarHeader>
+
+              <SidebarBody>
+                <SidebarSection>
+                  {navLinks.map(link => {
+                    const Icon = link.icon
+                    return (
+                      <SidebarItem key={link.to} href={link.to} current={pathname === link.to}>
+                        <Icon data-slot="icon" />
+                        <SidebarLabel>{link.label}</SidebarLabel>
+                      </SidebarItem>
+                    )
+                  })}
+                </SidebarSection>
+              </SidebarBody>
+
+              {loggedIn && (
+                <SidebarFooter>
+                  <Dropdown>
+                    <DropdownButton
+                      as="button"
+                      className="flex w-full items-center gap-3 rounded-lg p-2 text-left hover:bg-default focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                    >
+                      <Avatar
+                        initials={initials}
+                        className="size-9 bg-zinc-900 text-white dark:bg-white dark:text-zinc-950"
+                      />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm/5 font-medium text-text">{user?.name}</span>
+                        <span className="block truncate text-xs/4 text-subtle">Signed in</span>
+                      </span>
+                      <ChevronUpIcon className="size-4 text-subtle" />
+                    </DropdownButton>
+                    {userMenu}
+                  </Dropdown>
+                </SidebarFooter>
+              )}
+            </Sidebar>
           </div>
         </>
       )}
