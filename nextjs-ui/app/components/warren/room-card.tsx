@@ -15,6 +15,31 @@ import { MasterLightToggle } from './master-light-toggle'
 import { ConfirmDialog } from './confirm-dialog'
 import { AppSwitch } from './app-switch'
 
+// Compact icon button used in the room-card header for the per-room controls
+// (add sensor, edit, remove). Quieter than Catalyst's Button plain so a row of
+// three reads as chrome rather than primary actions.
+function CardIconButton({
+  title,
+  onClick,
+  children,
+}: {
+  title: string
+  onClick: () => void
+  children: React.ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      title={title}
+      aria-label={title}
+      onClick={onClick}
+      className="inline-flex size-8 items-center justify-center rounded-lg text-subtle transition-colors hover:bg-default hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent dark:hover:bg-white/10 dark:hover:text-white"
+    >
+      {children}
+    </button>
+  )
+}
+
 function motionLabelFor(ts: number | null) {
   if (!ts) return null
   const diff = Math.round((Date.now() - ts) / 1000)
@@ -156,8 +181,20 @@ export function RoomCard({
   }
 
   return (
-    <div className="group/room relative rounded-xl bg-surface p-6 ring-1 ring-default shadow-sm dark:ring-white/10 dark:shadow-none [container-type:inline-size]">
-      <div className="flex items-center justify-between gap-3 min-h-[32px]">
+    <article
+      className={[
+        'group/room relative w-full max-w-md rounded-2xl bg-surface p-6 ring-1 ring-default transition-[box-shadow,--tw-ring-color] duration-150',
+        'shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_20px_-12px_rgba(0,0,0,0.08)] hover:ring-strong',
+        'dark:ring-white/10 dark:shadow-none dark:[box-shadow:inset_0_1px_0_0_rgba(255,255,255,0.04)] dark:hover:ring-white/20',
+        '[container-type:inline-size]',
+      ].join(' ')}
+    >
+      <div
+        className={[
+          'flex min-h-[32px] items-center justify-between gap-3',
+          hasAnyContent ? 'border-b border-default/60 pb-4 mb-5 dark:border-white/5' : '',
+        ].join(' ')}
+      >
         {editing ? (
           <Input
             value={editName}
@@ -170,40 +207,24 @@ export function RoomCard({
             className="flex-1"
           />
         ) : (
-          <Heading level={2} className="truncate !text-base/6">{room.name}</Heading>
+          <Heading level={2} className="truncate !text-lg/6 font-semibold tracking-tight">{room.name}</Heading>
         )}
 
-        <div className="flex items-center gap-1 ml-auto">
-          {room.lightMaster && (
-            <MasterLightToggle
-              master={room.lightMaster}
-              pending={masterPending}
-              error={masterError}
-              partial={masterPartial}
-              onToggle={toggleRoomMaster}
-            />
-          )}
-          <div className={[
-            'flex items-center gap-0.5 transition-opacity',
-            editing
-              ? 'opacity-100'
-              : 'pointer-fine:opacity-0 pointer-fine:group-hover/room:opacity-100 pointer-fine:group-focus-within/room:opacity-100',
-          ].join(' ')}>
-            <Button plain title="Add sensor" aria-label="Add sensor" onClick={() => onAddSensor(room.id)}>
-              <PlusIcon data-slot="icon" />
-            </Button>
-            <Button plain title="Edit room" aria-label="Edit room" onClick={editing ? closeEditing : openEditing}>
-              <PencilSquareIcon data-slot="icon" />
-            </Button>
-            <Button plain title="Remove room" aria-label="Remove room" onClick={() => setConfirmRoom(true)}>
-              <TrashIcon data-slot="icon" />
-            </Button>
-          </div>
+        <div className="flex shrink-0 items-center gap-0.5">
+          <CardIconButton title="Add sensor" onClick={() => onAddSensor(room.id)}>
+            <PlusIcon className="size-4" />
+          </CardIconButton>
+          <CardIconButton title="Edit room" onClick={editing ? closeEditing : openEditing}>
+            <PencilSquareIcon className="size-4" />
+          </CardIconButton>
+          <CardIconButton title="Remove room" onClick={() => setConfirmRoom(true)}>
+            <TrashIcon className="size-4" />
+          </CardIconButton>
         </div>
       </div>
 
       {hasAnyContent && (
-        <div className="mt-6 flex flex-col gap-5 [&>*+*]:pt-5 [&>*+*]:border-t [&>*+*]:border-default dark:[&>*+*]:border-white/5">
+        <div className="flex flex-col gap-6 [&>*+*]:pt-6 [&>*+*]:border-t [&>*+*]:border-default/60 dark:[&>*+*]:border-white/5">
           {hasAmbient && (
             <div className="grid grid-cols-[repeat(auto-fill,minmax(140px,1fr))] gap-3">
               {tempSensor && (
@@ -263,6 +284,20 @@ export function RoomCard({
 
           {hasLighting && (
             <div className="flex flex-col gap-3">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-xs font-semibold uppercase tracking-wider text-subtle">
+                  Lights
+                </span>
+                {room.lightMaster && (
+                  <MasterLightToggle
+                    master={room.lightMaster}
+                    pending={masterPending}
+                    error={masterError}
+                    partial={masterPartial}
+                    onToggle={toggleRoomMaster}
+                  />
+                )}
+              </div>
               {lightGroups.length > 0 && (
                 <div className="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-3">
                   {lightGroups.map(group => (
@@ -299,7 +334,7 @@ export function RoomCard({
       )}
 
       {editing && lights.length >= 2 && (
-        <div className="mt-5 pt-4 border-t border-default dark:border-white/5">
+        <div className="mt-6 pt-6 border-t border-default/60 dark:border-white/5">
           <Button outline onClick={() => onAddGroup(room.id)}>
             <PlusIcon data-slot="icon" />
             Group lights
@@ -308,7 +343,7 @@ export function RoomCard({
       )}
 
       {editing && hasClimate && (
-        <div className="mt-5 pt-5 border-t border-default dark:border-white/5 flex flex-col gap-5">
+        <div className="mt-6 pt-6 border-t border-default/60 dark:border-white/5 flex flex-col gap-5">
           {tempSensor && (
             <div className="flex flex-col gap-2.5">
               <div className="flex items-center justify-between">
@@ -351,6 +386,6 @@ export function RoomCard({
         onConfirm={() => { onRemoveRoom(room.id); setConfirmRoom(false) }}
         onCancel={() => setConfirmRoom(false)}
       />
-    </div>
+    </article>
   )
 }

@@ -292,7 +292,7 @@ export default function LightsPage() {
                         <input
                           type="range" min={0} max={100} step={1}
                           defaultValue={briFromHue(row.lightBrightness)}
-                          disabled={!row.deviceId || (row.deviceId ? !!pendingById[row.deviceId] : false) || row.lightReachable === false}
+                          disabled={!row.deviceId || (row.deviceId ? !!pendingById[row.deviceId] : false) || row.lightReachable === false || !row.lightOn}
                           className="slider slider-sm flex-1"
                           onChange={e => setBrightness(row, Number(e.target.value))}
                         />

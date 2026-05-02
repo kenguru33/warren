@@ -162,13 +162,16 @@ export default function DashboardPage() {
         </div>
 
         {rooms.length === 0 ? (
-          <div className="rounded-xl bg-surface ring-1 ring-default shadow-sm dark:ring-white/10 dark:shadow-none p-8 text-center">
+          <div className="rounded-2xl bg-surface ring-1 ring-default shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_20px_-12px_rgba(0,0,0,0.08)] dark:ring-white/10 dark:shadow-none dark:[box-shadow:inset_0_1px_0_0_rgba(255,255,255,0.04)] p-10 text-center">
             <Text>
               No rooms yet. Click &quot;Add room&quot; to create one and assign sensors to it.
             </Text>
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-5 lg:grid-cols-2 xl:grid-cols-3">
+          // Auto-fill columns capped at the room-card max width (28rem),
+          // left-aligned via justify-start so cards pack to the left edge
+          // rather than stretching on wide monitors.
+          <div className="grid grid-cols-1 gap-6 sm:grid-cols-[repeat(auto-fill,minmax(0,28rem))] sm:justify-start">
             {rooms.map(room => (
               <RoomCard
                 key={room.id}

@@ -181,7 +181,7 @@ export function LightGroupDetailRow({
           <input
             type="range" min={0} max={100} step={1}
             value={localBri}
-            disabled={!reachable}
+            disabled={!reachable || !localOn}
             title={`Brightness ${localBri}%`}
             className="slider slider-sm w-full"
             onMouseDown={() => setDragging(true)}
