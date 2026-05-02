@@ -47,8 +47,11 @@ const navLinks = [
 ]
 
 function BrandMark({ className }: { className?: string }) {
+  // Tight viewBox (2:0 → 22:24, aspect 5:6) crops the empty horizontal padding
+  // from the original 24x24 box so the rabbit visually fills its container at
+  // a given height. Pair with `h-N w-auto` at call sites to preserve aspect.
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden>
+    <svg className={className} viewBox="2 0 20 24" fill="none" aria-hidden>
       <ellipse cx="8.5" cy="6" rx="2.5" ry="5" fill="currentColor" />
       <ellipse cx="15.5" cy="6" rx="2.5" ry="5" fill="currentColor" />
       <circle cx="12" cy="17" r="6" fill="currentColor" />
@@ -107,7 +110,7 @@ export function SidebarShell({ children }: { children: React.ReactNode }) {
         <Sidebar>
           <SidebarHeader>
             <Link href="/" className="flex items-center gap-3 rounded-lg p-1.5 hover:bg-default">
-              <BrandMark className="size-8 shrink-0 text-text" />
+              <BrandMark className="h-8 w-auto shrink-0 text-text" />
               <div className="flex flex-col">
                 <span className="text-sm/5 font-semibold text-text">Warren</span>
                 <span className="text-xs/4 text-subtle">Home dashboard</span>
@@ -163,7 +166,7 @@ export function SidebarShell({ children }: { children: React.ReactNode }) {
         </NavbarItem>
         <Navbar>
           <Link href="/" className="flex min-w-0 items-center gap-2">
-            <BrandMark className="size-7 shrink-0 text-text" />
+            <BrandMark className="h-7 w-auto shrink-0 text-text" />
             <span className="text-sm/5 font-semibold tracking-tight text-text">Warren</span>
           </Link>
           <NavbarSpacer />
@@ -196,7 +199,7 @@ export function SidebarShell({ children }: { children: React.ReactNode }) {
               <SidebarHeader>
                 <div className="flex items-center justify-between">
                   <Link href="/" className="flex items-center gap-3 rounded-lg p-1.5 hover:bg-default">
-                    <BrandMark className="size-8 shrink-0 text-text" />
+                    <BrandMark className="h-8 w-auto shrink-0 text-text" />
                     <div className="flex flex-col">
                       <span className="text-sm/5 font-semibold text-text">Warren</span>
                       <span className="text-xs/4 text-subtle">Home dashboard</span>
