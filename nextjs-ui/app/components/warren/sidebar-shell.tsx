@@ -83,6 +83,10 @@ export function SidebarShell({ children }: { children: React.ReactNode }) {
   // sidebar footer and the mobile top bar. We don't store profile photos, so
   // this is the canonical "user / settings" indicator instead of a per-user
   // letter avatar that doesn't actually personalize anything.
+  // Color stays neutral (bg-zinc-900 / dark:bg-white) by design — accent is
+  // reserved for action and state, not identity chrome (matches GitHub /
+  // Linear / Notion conventions, and avoids competing with the active sidebar
+  // item's accent indicator).
   const userBadgeClasses = 'inline-grid size-9 shrink-0 place-items-center rounded-full bg-zinc-900 text-white dark:bg-white dark:text-zinc-950'
 
   const userMenu = loggedIn && (
@@ -116,7 +120,7 @@ export function SidebarShell({ children }: { children: React.ReactNode }) {
       <div className="fixed inset-y-0 left-0 w-64 max-lg:hidden">
         <Sidebar>
           <SidebarHeader>
-            <Link href="/" className="flex items-center gap-3 rounded-lg p-1.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">
+            <Link href="/" className="flex items-center gap-3 rounded-lg p-1.5 focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
               <BrandMark className="h-8 w-auto shrink-0 text-text" />
               <div className="flex flex-col">
                 <span className="text-sm/5 font-semibold text-text">Warren</span>
@@ -172,11 +176,11 @@ export function SidebarShell({ children }: { children: React.ReactNode }) {
           type="button"
           onClick={() => setSidebarOpen(true)}
           aria-label="Open navigation"
-          className="inline-flex size-9 shrink-0 items-center justify-center rounded-lg text-muted transition-colors hover:bg-default hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent dark:hover:bg-white/10 dark:hover:text-white"
+          className="inline-flex size-9 shrink-0 items-center justify-center rounded-lg text-muted transition-colors hover:bg-default hover:text-text focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent dark:hover:bg-white/10 dark:hover:text-white"
         >
           <Bars3Icon className="size-7" />
         </button>
-        <Link href="/" className="flex min-w-0 items-center gap-2 rounded-lg p-1.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">
+        <Link href="/" className="flex min-w-0 items-center gap-2 rounded-lg p-1.5 focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
           <BrandMark className="h-9 w-auto shrink-0 text-text" />
           <span className="text-base/6 font-semibold tracking-tight text-text">Warren</span>
         </Link>
@@ -209,7 +213,7 @@ export function SidebarShell({ children }: { children: React.ReactNode }) {
             <Sidebar>
               <SidebarHeader>
                 <div className="flex items-center justify-between">
-                  <Link href="/" className="flex items-center gap-3 rounded-lg p-1.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">
+                  <Link href="/" className="flex items-center gap-3 rounded-lg p-1.5 focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
                     <BrandMark className="h-8 w-auto shrink-0 text-text" />
                     <div className="flex flex-col">
                       <span className="text-sm/5 font-semibold text-text">Warren</span>

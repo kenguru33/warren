@@ -139,6 +139,10 @@ export function LightGroupDetailRow({
         disabled={pending || !reachable}
         title={localOn ? 'Turn off' : 'Turn on'}
         onClick={toggleOn}
+        // accentColor is the literal hex from the group theme's bulbPalette
+        // (lib/shared/light-themes.ts) — the same value sent to the bulb. It's
+        // intentionally an inline style hex (not a token) so the UI bulb visually
+        // matches the actual painted-light color.
         style={
           localOn && reachable && accentColor
             ? {

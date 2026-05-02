@@ -167,7 +167,7 @@ export function LightGroupTile({
       onClick={() => onOpenDetail(group.id)}
       onKeyDown={handleKey}
       className={[
-        'group/tile relative flex flex-col items-center gap-3 rounded-2xl px-4 pt-4 pb-3.5 ring-1 transition cursor-pointer',
+        'group/tile relative flex flex-col items-center gap-3 rounded-2xl p-4 ring-1 transition cursor-pointer',
         'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--theme-on-border)]',
         displayState === 'mixed'
           ? 'bg-surface ring-warning/60 hover:bg-surface-2 dark:ring-warning/40 dark:hover:bg-white/[0.02]'
@@ -179,11 +179,19 @@ export function LightGroupTile({
         disabled={pending || group.memberCount === 0}
         title={isOn ? 'Turn group off' : 'Turn group on'}
         onClick={(e) => { e.stopPropagation(); toggleMaster() }}
+        // When on, paint the bulb-cluster background with the theme's bulbPalette
+        // as a soft gradient so the cluster becomes the active-theme visual.
+        // Off / mixed keep the neutral surface styling.
+        style={
+          isOn && displayState !== 'mixed' && theme.bulbPalette.length > 0
+            ? { background: `linear-gradient(135deg, ${theme.bulbPalette.join(', ')})` }
+            : undefined
+        }
         className={[
           'relative flex h-12 w-16 shrink-0 items-center justify-center rounded-2xl transition-colors',
           'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent',
           isOn && displayState !== 'mixed'
-            ? 'bg-[var(--theme-on-bg)] ring-1 ring-[var(--theme-on-border)]/30'
+            ? 'ring-1 ring-[var(--theme-on-border)]/40'
             : 'bg-surface ring-1 ring-default',
           displayState === 'mixed' ? '!ring-warning/60 dark:!ring-warning/40' : '',
           pending || group.memberCount === 0 ? 'opacity-50 cursor-not-allowed' : '',
@@ -207,7 +215,20 @@ export function LightGroupTile({
 
       <div className="flex flex-col items-center gap-0.5 w-full min-w-0 text-center">
         <span className="text-sm font-semibold text-text truncate max-w-full" title={group.name}>{group.name}</span>
-        <span className="text-[0.7rem] font-medium text-subtle">{stateLabel} · {group.memberCount}</span>
+        <span className="inline-flex items-center gap-2 text-[0.7rem] font-medium text-subtle">
+          <span>{stateLabel} · {group.memberCount}</span>
+          {/* Theme palette signature inline with the state line — keeps the tile
+           *  compact while still making the active theme visible at a glance. */}
+          <span className="inline-flex items-center gap-0.5" aria-hidden title={theme.label}>
+            {theme.bulbPalette.map(c => (
+              <span
+                key={c}
+                className="size-1.5 rounded-full ring-1 ring-white/15"
+                style={{ background: c }}
+              />
+            ))}
+          </span>
+        </span>
       </div>
 
       {group.hasBrightnessCapableMember && (

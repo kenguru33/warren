@@ -19,7 +19,8 @@ import { Field, Label } from '@/app/components/fieldset'
 import { Heading } from '@/app/components/heading'
 import { Input } from '@/app/components/input'
 import { Text } from '@/app/components/text'
-import { Switch, SwitchField } from '@/app/components/switch'
+import { SwitchField } from '@/app/components/switch'
+import { AppSwitch } from '@/app/components/warren/app-switch'
 import { ConfirmDialog } from '@/app/components/warren/confirm-dialog'
 import { MasterLightToggle } from '@/app/components/warren/master-light-toggle'
 
@@ -220,13 +221,19 @@ export default function LightsPage() {
             <Heading>Lights</Heading>
             <Text className="mt-1">Toggle and dim every light, or filter to ones not yet placed in a room.</Text>
           </div>
-          <Input
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            type="search"
-            className="w-full sm:w-72"
-            placeholder="Search lights…"
-          />
+          <div className="flex items-center gap-4">
+            <Input
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              type="search"
+              className="w-full sm:w-72"
+              placeholder="Search lights…"
+            />
+            <SwitchField className="!grid-cols-[auto_auto] !gap-x-3">
+              <Label>Unused only</Label>
+              <AppSwitch checked={onlyUnused} onChange={setOnlyUnused} label="Show only unused" />
+            </SwitchField>
+          </div>
         </div>
 
         {globalMaster && (
@@ -241,11 +248,6 @@ export default function LightsPage() {
           />
         )}
 
-        <SwitchField className="!grid-cols-[auto_auto] !gap-x-3">
-          <Label>Show only unused</Label>
-          <Switch checked={onlyUnused} onChange={setOnlyUnused} color="dark/zinc" />
-        </SwitchField>
-
         {visibleLights.length === 0 ? (
           <div className="rounded-xl bg-surface ring-1 ring-default shadow-sm dark:ring-white/10 dark:shadow-none p-12 text-center text-sm text-muted">
             {onlyUnused ? 'No unused lights.' : 'No lights registered. Connect a Hue Bridge from Integrations.'}
@@ -257,7 +259,7 @@ export default function LightsPage() {
                 key={row.id ?? `${row.deviceId}:${row.type}:${i}`}
                 className={[
                   'group/row flex items-center gap-x-4 px-5 py-4 transition-colors',
-                  row.lightReachable === false ? 'bg-red-500/[0.04]' : 'hover:bg-default/50 dark:hover:bg-white/[0.02]',
+                  row.lightReachable === false ? 'bg-error/[0.04]' : 'hover:bg-default/50 dark:hover:bg-white/[0.02]',
                 ].join(' ')}
               >
                 <div className={[
@@ -300,11 +302,10 @@ export default function LightsPage() {
                       </>
                     )}
                   </div>
-                  <Switch
+                  <AppSwitch
                     checked={!!row.lightOn}
                     disabled={!row.deviceId || (row.deviceId ? !!pendingById[row.deviceId] : false) || row.lightReachable === false}
-                    aria-label="On/Off"
-                    color="dark/zinc"
+                    label="On/Off"
                     onChange={() => toggle(row)}
                   />
                   <div className="w-5 shrink-0">
