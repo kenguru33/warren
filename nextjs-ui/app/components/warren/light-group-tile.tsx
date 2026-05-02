@@ -179,11 +179,19 @@ export function LightGroupTile({
         disabled={pending || group.memberCount === 0}
         title={isOn ? 'Turn group off' : 'Turn group on'}
         onClick={(e) => { e.stopPropagation(); toggleMaster() }}
+        // When on, paint the bulb-cluster background with the theme's bulbPalette
+        // as a soft gradient so the cluster becomes the active-theme visual.
+        // Off / mixed keep the neutral surface styling.
+        style={
+          isOn && displayState !== 'mixed' && theme.bulbPalette.length > 0
+            ? { background: `linear-gradient(135deg, ${theme.bulbPalette.join(', ')})` }
+            : undefined
+        }
         className={[
           'relative flex h-12 w-16 shrink-0 items-center justify-center rounded-2xl transition-colors',
           'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent',
           isOn && displayState !== 'mixed'
-            ? 'bg-[var(--theme-on-bg)] ring-1 ring-[var(--theme-on-border)]/30'
+            ? 'ring-1 ring-[var(--theme-on-border)]/40'
             : 'bg-surface ring-1 ring-default',
           displayState === 'mixed' ? '!ring-warning/60 dark:!ring-warning/40' : '',
           pending || group.memberCount === 0 ? 'opacity-50 cursor-not-allowed' : '',
