@@ -75,13 +75,12 @@ export function RoomCard({
   const motionSensor = room.sensors.find(s => s.type === 'motion')      ?? null
   const cameras      = room.sensors.filter(s => s.type === 'camera')
   const lights       = room.sensors.filter(s => s.type === 'light')
-  const ungroupedLights = lights.filter(l => !l.groupId)
   const lightsById = new Map(lights.map(l => [l.id, l]))
   const lightGroups = room.lightGroups ?? []
 
   const hasAmbient = !!(tempSensor || humSensor || motionSensor)
   const hasCamera  = cameras.length > 0
-  const hasLighting = lightGroups.length > 0 || ungroupedLights.length > 0
+  const hasLighting = lightGroups.length > 0 || lights.some(l => !l.groupId)
   const hasAnyContent = hasAmbient || hasCamera || hasLighting
 
   const [renaming, setRenaming] = useState(false)
@@ -94,6 +93,19 @@ export function RoomCard({
   const [selectedLightIds, setSelectedLightIds] = useState<Set<number>>(new Set())
   const [editingGroupId, setEditingGroupId] = useState<number | null>(null)
   const [groupingError, setGroupingError] = useState<string | null>(null)
+
+  // While editing a group's membership, surface its current members as tiles
+  // alongside the ungrouped lights so the user can deselect them. Outside
+  // edit-group mode, only ungrouped lights are shown as tiles (members live
+  // inside the group tile).
+  const ungroupedLights = lights.filter(l => (
+    !l.groupId || (selectionMode === 'edit-group' && l.groupId === editingGroupId)
+  ))
+  // Hide the group tile being edited so we don't show the group + its members
+  // as separate tiles at the same time.
+  const visibleLightGroups = selectionMode === 'edit-group' && editingGroupId !== null
+    ? lightGroups.filter(g => g.id !== editingGroupId)
+    : lightGroups
 
   const [masterPending, setMasterPending] = useState(false)
   const [masterError, setMasterError]     = useState<string | null>(null)
@@ -402,9 +414,9 @@ export function RoomCard({
                   )}
                 </div>
               </div>
-              {lightGroups.length > 0 && (
+              {visibleLightGroups.length > 0 && (
                 <div className="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-3">
-                  {lightGroups.map(group => (
+                  {visibleLightGroups.map(group => (
                     <LightGroupTile
                       key={`group-${group.id}`}
                       group={group}
