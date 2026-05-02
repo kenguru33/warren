@@ -1,10 +1,15 @@
 'use client'
 
+import * as Headless from '@headlessui/react'
 import { useMemo, useState } from 'react'
 import useSWR from 'swr'
 import {
-  PencilSquareIcon,
-  TrashIcon,
+  ArrowUturnLeftIcon,
+  CheckIcon,
+  EllipsisVerticalIcon,
+  EyeSlashIcon,
+  HomeIcon,
+  TagIcon,
 } from '@heroicons/react/20/solid'
 import type { MasterState } from '@/lib/shared/types'
 import { Badge } from '@/app/components/badge'
@@ -15,6 +20,14 @@ import {
   DialogBody,
   DialogTitle,
 } from '@/app/components/dialog'
+import {
+  DropdownDivider,
+  DropdownHeading,
+  DropdownItem,
+  DropdownLabel,
+  DropdownMenu,
+  DropdownSection,
+} from '@/app/components/dropdown'
 import { Field, Label } from '@/app/components/fieldset'
 import { Heading } from '@/app/components/heading'
 import { Input } from '@/app/components/input'
@@ -58,6 +71,7 @@ export default function LightsPage() {
   const { data: blocked = [], mutate: refreshBlocked } = useSWR<{ deviceId: string; type: string }[]>(
     '/api/sensors/blocked', fetcher, { refreshInterval: 15_000 },
   )
+  const { data: rooms = [] } = useSWR<{ id: number; name: string }[]>('/api/rooms', fetcher, { refreshInterval: 30_000 })
   const { data: globalMaster = null, mutate: refreshGlobalMaster } = useSWR<MasterState | null>(
     '/api/lights/master-state', fetcher, { refreshInterval: 15_000 },
   )
@@ -168,21 +182,60 @@ export default function LightsPage() {
   }
 
   function openEdit(row: LightRow) {
-    if (row.id === null) return
     setEditingLight(row)
     setEditingLabel(row.label ?? '')
   }
 
   async function saveEdit() {
     const row = editingLight
-    if (!row?.id) return
+    if (!row) return
+    const label = editingLabel.trim() || null
+    if (row.id !== null) {
+      await fetch(`/api/sensors/${row.id}`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ label }),
+      })
+    } else if (row.deviceId) {
+      await fetch('/api/sensors', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ type: row.type, deviceId: row.deviceId, label }),
+      })
+    }
+    setEditingLight(null)
+    await refresh()
+  }
+
+  async function moveToRoom(row: LightRow, roomId: number) {
+    if (row.id !== null) {
+      await fetch(`/api/sensors/${row.id}`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ roomId }),
+      })
+    } else if (row.deviceId) {
+      await fetch('/api/sensors', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ type: row.type, deviceId: row.deviceId, roomId, label: row.label ?? null }),
+      })
+    }
+    await refresh()
+  }
+
+  async function removeFromRoom(row: LightRow) {
+    if (row.id === null) return
     await fetch(`/api/sensors/${row.id}`, {
       method: 'PATCH',
       headers: { 'content-type': 'application/json' },
       credentials: 'include',
-      body: JSON.stringify({ label: editingLabel.trim() || null }),
+      body: JSON.stringify({ roomId: null }),
     })
-    setEditingLight(null)
     await refresh()
   }
 
@@ -191,7 +244,8 @@ export default function LightsPage() {
     if (!row) return
     if (row.id !== null) {
       await fetch(`/api/sensors/${row.id}`, { method: 'DELETE', credentials: 'include' })
-    } else if (row.deviceId) {
+    }
+    if (row.deviceId) {
       await fetch('/api/sensors/block', {
         method: 'DELETE',
         headers: { 'content-type': 'application/json' },
@@ -268,7 +322,7 @@ export default function LightsPage() {
                     ? 'bg-accent/20 ring-accent/40 text-accent-strong'
                     : 'bg-surface-2 ring-default text-subtle dark:bg-white/5 dark:ring-white/10',
                 ].join(' ')}>
-                  💡
+                  <span className={`transition ${!row.lightOn ? 'grayscale opacity-50' : ''}`}>💡</span>
                 </div>
 
                 <div className="min-w-0 flex-auto">
@@ -315,15 +369,62 @@ export default function LightsPage() {
                   </div>
                 </div>
 
-                <div className="flex w-[72px] shrink-0 items-center justify-end gap-0.5 transition-opacity pointer-fine:opacity-0 pointer-fine:group-hover/row:opacity-100 pointer-fine:group-focus-within/row:opacity-100">
-                  {row.id !== null && (
-                    <Button plain title="Edit" aria-label="Edit" onClick={() => openEdit(row)}>
-                      <PencilSquareIcon data-slot="icon" />
-                    </Button>
-                  )}
-                  <Button plain title="Remove" aria-label="Remove" onClick={() => setPendingDelete(row)}>
-                    <TrashIcon data-slot="icon" />
-                  </Button>
+                <div className="flex shrink-0 items-center" onClick={e => e.stopPropagation()}>
+                  <Headless.Menu>
+                    <Headless.MenuButton
+                      as="button"
+                      type="button"
+                      aria-label="Light actions"
+                      className="inline-flex size-8 items-center justify-center rounded-lg text-subtle transition-colors hover:bg-surface-2/50 hover:text-text focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent dark:hover:bg-white/10 dark:hover:text-white"
+                    >
+                      <EllipsisVerticalIcon className="size-5" />
+                    </Headless.MenuButton>
+                    <DropdownMenu className="min-w-56" anchor="bottom end">
+                      <DropdownItem onClick={() => openEdit(row)}>
+                        <TagIcon data-slot="icon" />
+                        <DropdownLabel>Rename</DropdownLabel>
+                      </DropdownItem>
+                      <DropdownDivider />
+                      <DropdownSection>
+                        <DropdownHeading>Room</DropdownHeading>
+                        {rooms.length === 0 && (
+                          <DropdownItem disabled>
+                            <DropdownLabel>No rooms yet</DropdownLabel>
+                          </DropdownItem>
+                        )}
+                        {rooms.map(r => {
+                          const current = r.id === row.roomId
+                          return (
+                            <DropdownItem
+                              key={r.id}
+                              disabled={current}
+                              onClick={() => { if (!current) moveToRoom(row, r.id) }}
+                            >
+                              {current ? <CheckIcon data-slot="icon" /> : <HomeIcon data-slot="icon" />}
+                              <DropdownLabel>{r.name}</DropdownLabel>
+                            </DropdownItem>
+                          )
+                        })}
+                        {row.roomId !== null && row.id !== null && (
+                          <DropdownItem
+                            onClick={() => removeFromRoom(row)}
+                            className="!text-error data-focus:!text-white"
+                          >
+                            <ArrowUturnLeftIcon data-slot="icon" />
+                            <DropdownLabel>Remove from room</DropdownLabel>
+                          </DropdownItem>
+                        )}
+                      </DropdownSection>
+                      <DropdownDivider />
+                      <DropdownItem
+                        onClick={() => setPendingDelete(row)}
+                        className="!text-warning data-focus:!text-white"
+                      >
+                        <EyeSlashIcon data-slot="icon" />
+                        <DropdownLabel>Hide</DropdownLabel>
+                      </DropdownItem>
+                    </DropdownMenu>
+                  </Headless.Menu>
                 </div>
               </li>
             ))}
@@ -353,12 +454,8 @@ export default function LightsPage() {
 
       <ConfirmDialog
         open={!!pendingDelete}
-        message={
-          pendingDelete?.id === null
-            ? `Hide light "${pendingDelete?.label || 'Light'}"? You can restore it from the Hidden lights section below.`
-            : `Remove light "${pendingDelete?.label || 'Light'}" from its room?`
-        }
-        confirmLabel={pendingDelete?.id === null ? 'Hide' : 'Remove'}
+        message={`Hide light "${pendingDelete?.label || pendingDelete?.hueName || 'Light'}"? You can restore it from the Hidden lights section below.`}
+        confirmLabel="Hide"
         onConfirm={confirmDelete}
         onCancel={() => setPendingDelete(null)}
       />

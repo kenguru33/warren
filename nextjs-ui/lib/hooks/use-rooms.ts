@@ -98,6 +98,40 @@ export function useRooms() {
     await mutate()
   }, [rooms, mutate])
 
+  const renameSensor = useCallback(async (sensorId: number, label: string) => {
+    await fetch(`/api/sensors/${sensorId}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ label: label.trim() || null }),
+    })
+    await mutate()
+  }, [mutate])
+
+  const renameLightGroup = useCallback(async (groupId: number, name: string) => {
+    await fetch(`/api/light-groups/${groupId}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ name: name.trim() }),
+    })
+    await mutate()
+  }, [mutate])
+
+  const hideSensor = useCallback(async (sensorId: number) => {
+    // Look up the sensor's deviceId + type so the block API can find it again
+    // even after we've detached it from any room.
+    const sensor = rooms.flatMap(r => r.sensors).find(s => s.id === sensorId)
+    if (!sensor?.deviceId) return
+    await fetch('/api/sensors/block', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ deviceId: sensor.deviceId, type: sensor.type }),
+    })
+    await mutate()
+  }, [rooms, mutate])
+
   const lastUpdated = useMemo(
     () => new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     [data],
@@ -113,6 +147,9 @@ export function useRooms() {
     clearReference,
     addSensor,
     removeSensor,
+    hideSensor,
+    renameSensor,
+    renameLightGroup,
     refresh,
   }
 }

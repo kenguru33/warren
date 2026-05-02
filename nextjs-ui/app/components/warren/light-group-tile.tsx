@@ -1,32 +1,40 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react'
-import { PencilSquareIcon, XMarkIcon } from '@heroicons/react/20/solid'
+import {
+  PencilSquareIcon,
+  TagIcon,
+  TrashIcon,
+  UsersIcon,
+} from '@heroicons/react/20/solid'
 import type { LightGroupView, LightGroupState, SensorView } from '@/lib/shared/types'
 import { resolveLightTheme, MIXED_RING_DEFAULT } from '@/lib/shared/light-themes'
 import { useTheme } from '@/lib/hooks/use-theme'
 import { Badge } from '@/app/components/badge'
-import { Button } from '@/app/components/button'
+import { useLongPress } from '@/lib/hooks/use-long-press'
 import { ConfirmDialog } from './confirm-dialog'
+import { RenameDialog } from './rename-dialog'
+import { TileMenu, type TileMenuHandle, type TileMenuItem } from './tile-menu'
 
 export function LightGroupTile({
   group,
   members,
-  editing,
-  onEditGroup,
   onUngroup,
   onOpenDetail,
+  onEditMembers,
+  onRenameGroup,
   onToggled,
 }: {
   group: LightGroupView
   members: SensorView[]
-  editing: boolean
-  onEditGroup: (groupId: number) => void
   onUngroup: (groupId: number) => void
   onOpenDetail: (groupId: number) => void
+  onEditMembers?: (groupId: number) => void
+  onRenameGroup?: (groupId: number, name: string) => void
   onToggled: () => void
 }) {
   const [confirmUngroup, setConfirmUngroup] = useState(false)
+  const [renaming, setRenaming] = useState(false)
   const [localOn, setLocalOn] = useState<boolean | null>(null)
   const [localBri, setLocalBri] = useState<number | null>(null)
   const [dragging, setDragging] = useState(false)
@@ -159,13 +167,50 @@ export function LightGroupTile({
     }
   }
 
+  const menuRef = useRef<TileMenuHandle>(null)
+  const { handlers: pressHandlers, wasLongPressRef } = useLongPress(() => menuRef.current?.open())
+
+  const items: TileMenuItem[] = [
+    {
+      key: 'open',
+      label: 'Open group',
+      icon: <UsersIcon data-slot="icon" />,
+      onSelect: () => onOpenDetail(group.id),
+    },
+    ...(onRenameGroup ? [{
+      key: 'rename',
+      label: 'Rename group',
+      icon: <TagIcon data-slot="icon" />,
+      onSelect: () => setRenaming(true),
+    }] : []),
+    ...(onEditMembers ? [{
+      key: 'members',
+      label: 'Edit members',
+      icon: <PencilSquareIcon data-slot="icon" />,
+      onSelect: () => onEditMembers(group.id),
+    }] : []),
+    {
+      key: 'ungroup',
+      label: 'Ungroup',
+      icon: <TrashIcon data-slot="icon" />,
+      tone: 'destructive',
+      onSelect: () => setConfirmUngroup(true),
+    },
+  ]
+
+  function tap() {
+    if (wasLongPressRef.current) return
+    onOpenDetail(group.id)
+  }
+
   return (
     <div
       role="button"
       tabIndex={0}
-      style={themeVars}
-      onClick={() => onOpenDetail(group.id)}
+      style={{ ...themeVars, WebkitTouchCallout: 'none', userSelect: 'none' }}
+      onClick={tap}
       onKeyDown={handleKey}
+      {...pressHandlers}
       className={[
         'group/tile relative flex flex-col items-center gap-3 rounded-2xl p-4 ring-1 transition cursor-pointer',
         'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--theme-on-border)]',
@@ -262,16 +307,7 @@ export function LightGroupTile({
         >!</span>
       )}
 
-      {editing && (
-        <div className="absolute top-1.5 right-1.5 flex items-center gap-0.5 rounded-xl bg-surface/75 p-0.5 backdrop-blur-md transition-opacity pointer-fine:opacity-0 pointer-fine:group-hover/tile:opacity-100 dark:bg-surface/65">
-          <Button plain title="Edit group" aria-label="Edit group" onClick={(e) => { e.stopPropagation(); onEditGroup(group.id) }}>
-            <PencilSquareIcon data-slot="icon" />
-          </Button>
-          <Button plain title="Ungroup" aria-label="Ungroup" onClick={(e) => { e.stopPropagation(); setConfirmUngroup(true) }}>
-            <XMarkIcon data-slot="icon" />
-          </Button>
-        </div>
-      )}
+      <TileMenu ref={menuRef} items={items} />
 
       <ConfirmDialog
         open={confirmUngroup}
@@ -279,6 +315,13 @@ export function LightGroupTile({
         confirmLabel="Ungroup"
         onConfirm={() => { onUngroup(group.id); setConfirmUngroup(false) }}
         onCancel={() => setConfirmUngroup(false)}
+      />
+      <RenameDialog
+        open={renaming}
+        title="Rename light group"
+        currentName={group.name}
+        onSave={name => onRenameGroup?.(group.id, name)}
+        onClose={() => setRenaming(false)}
       />
     </div>
   )

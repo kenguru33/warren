@@ -1,12 +1,18 @@
 'use client'
 
-import { useState } from 'react'
-import { PencilSquareIcon, XMarkIcon } from '@heroicons/react/20/solid'
+import { useRef, useState } from 'react'
+import {
+  ChartBarIcon,
+  Cog6ToothIcon,
+  EyeSlashIcon,
+  TrashIcon,
+} from '@heroicons/react/20/solid'
 import type { RoomReference, SensorView } from '@/lib/shared/types'
 import { Badge } from '@/app/components/badge'
-import { Button } from '@/app/components/button'
 import { Strong, Text } from '@/app/components/text'
+import { useLongPress } from '@/lib/hooks/use-long-press'
 import { ConfirmDialog } from './confirm-dialog'
+import { TileMenu, type TileMenuHandle, type TileMenuItem } from './tile-menu'
 
 function activate(handler: () => void) {
   return (e: React.KeyboardEvent) => {
@@ -21,22 +27,28 @@ export function ClimateTile({
   sensor,
   reference,
   variant,
-  editing,
   isOffline,
   onViewHistory,
   onEditSensor,
+  onSetTarget,
   onRemoveSensor,
+  onHideSensor,
 }: {
   sensor: SensorView
   reference: RoomReference | null
   variant: 'temperature' | 'humidity'
-  editing: boolean
   isOffline: boolean
   onViewHistory: (sensor: SensorView) => void
   onEditSensor: (sensorId: number) => void
+  onSetTarget?: (variant: 'temperature' | 'humidity') => void
   onRemoveSensor: (sensorId: number) => void
+  onHideSensor?: (sensorId: number) => void
 }) {
   const [confirmRemove, setConfirmRemove] = useState(false)
+  const [confirmHide, setConfirmHide] = useState(false)
+
+  const menuRef = useRef<TileMenuHandle>(null)
+  const { handlers: pressHandlers, wasLongPressRef } = useLongPress(() => menuRef.current?.open())
 
   const isTemp = variant === 'temperature'
   const icon = isTemp ? '🌡️' : '💧'
@@ -54,19 +66,63 @@ export function ClimateTile({
   })()
   const deviationDirection = deviation ? (parseFloat(deviation) > 0 ? 'over' : 'under') : null
 
+  function tap() {
+    if (wasLongPressRef.current) return
+    onViewHistory(sensor)
+  }
+
+  const items: TileMenuItem[] = [
+    {
+      key: 'history',
+      label: 'View history',
+      icon: <ChartBarIcon data-slot="icon" />,
+      onSelect: () => onViewHistory(sensor),
+    },
+    ...(onSetTarget ? [{
+      key: 'set-target',
+      label: 'Set target',
+      icon: <ChartBarIcon data-slot="icon" />,
+      onSelect: () => onSetTarget(variant),
+    }] : []),
+    ...(isTemp ? [{
+      key: 'configure',
+      label: 'Configure',
+      icon: <Cog6ToothIcon data-slot="icon" />,
+      onSelect: () => onEditSensor(sensor.id),
+    }] : []),
+    ...(onHideSensor ? [{
+      key: 'hide',
+      label: 'Hide',
+      icon: <EyeSlashIcon data-slot="icon" />,
+      tone: 'warning' as const,
+      onSelect: () => setConfirmHide(true),
+    }] : []),
+    {
+      key: 'remove',
+      label: 'Remove from room',
+      icon: <TrashIcon data-slot="icon" />,
+      tone: 'destructive',
+      onSelect: () => setConfirmRemove(true),
+    },
+  ]
+
   return (
     <div
       role="button"
       tabIndex={0}
-      onClick={() => onViewHistory(sensor)}
-      onKeyDown={activate(() => onViewHistory(sensor))}
+      onClick={tap}
+      onKeyDown={activate(tap)}
+      style={{ WebkitTouchCallout: 'none', userSelect: 'none' }}
+      {...pressHandlers}
       className={[
-        'group/tile relative flex cursor-pointer flex-col items-start gap-1.5 rounded-2xl px-4 py-4 text-left ring-1 transition focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent',
+        'group/tile relative flex cursor-pointer flex-col items-start gap-1.5 rounded-2xl px-4 py-4 pr-10 text-left ring-1 transition focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent',
         isOffline
           ? 'bg-error/[0.04] ring-error/30 hover:ring-error/50'
           : 'bg-surface-2/60 ring-default/70 hover:bg-surface-2 hover:ring-default dark:ring-white/5 dark:hover:ring-white/10',
       ].join(' ')}
     >
+      <TileMenu ref={menuRef} items={items} />
+
       <div className="flex w-full items-center justify-between">
         <span className="text-lg">{icon}</span>
         {isOffline && <Badge color="red">Offline</Badge>}
@@ -77,8 +133,18 @@ export function ClimateTile({
       <div className="text-xs font-medium tracking-wider text-subtle uppercase">{label}</div>
       {sensor.label && <Text className="max-w-full truncate !text-xs">{sensor.label}</Text>}
       {refValue !== null && (
-        <div className="mt-0.5 flex items-center gap-1.5 text-xs text-subtle">
-          <span>Target {refValue}{refUnit}</span>
+        <div
+          className="mt-0.5 flex items-center gap-1.5 text-xs text-subtle"
+          // Tap on the target sub-line to open the per-tile target editor —
+          // suppresses the outer tile-tap (history) so the action is unambiguous.
+          onClick={onSetTarget ? (e) => { e.stopPropagation(); onSetTarget(variant) } : undefined}
+          role={onSetTarget ? 'button' : undefined}
+          tabIndex={onSetTarget ? 0 : undefined}
+          title={onSetTarget ? 'Tap to change target' : undefined}
+        >
+          <span className={onSetTarget ? 'underline-offset-2 hover:underline' : undefined}>
+            Target {refValue}{refUnit}
+          </span>
           {deviation && (
             <span className={`font-semibold ${deviationDirection === 'over' ? 'text-error' : 'text-success'}`}>
               {deviation}
@@ -105,23 +171,21 @@ export function ClimateTile({
         </div>
       )}
 
-      {editing && (
-        <div className="absolute top-1.5 right-1.5 flex items-center gap-0.5 rounded-xl bg-surface/75 p-0.5 backdrop-blur-md transition-opacity pointer-fine:opacity-0 pointer-fine:group-hover/tile:opacity-100 dark:bg-surface/65">
-          <Button plain title="Edit" aria-label="Edit" onClick={(e) => { e.stopPropagation(); onEditSensor(sensor.id) }}>
-            <PencilSquareIcon data-slot="icon" />
-          </Button>
-          <Button plain title="Remove" aria-label="Remove" onClick={(e) => { e.stopPropagation(); setConfirmRemove(true) }}>
-            <XMarkIcon data-slot="icon" />
-          </Button>
-        </div>
-      )}
-
       <ConfirmDialog
         open={confirmRemove}
         message="Remove this sensor from the room?"
         confirmLabel="Remove"
         onConfirm={() => { onRemoveSensor(sensor.id); setConfirmRemove(false) }}
         onCancel={() => setConfirmRemove(false)}
+      />
+      <ConfirmDialog
+        open={confirmHide}
+        title="Hide this sensor?"
+        message="Hidden sensors won't appear in discovery. You can unhide from /sensors."
+        confirmLabel="Hide"
+        tone="default"
+        onConfirm={() => { onHideSensor?.(sensor.id); setConfirmHide(false) }}
+        onCancel={() => setConfirmHide(false)}
       />
     </div>
   )

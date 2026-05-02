@@ -1,44 +1,81 @@
 'use client'
 
-import { useState } from 'react'
-import { PencilSquareIcon, XMarkIcon } from '@heroicons/react/20/solid'
+import { useRef, useState } from 'react'
+import {
+  ChartBarIcon,
+  EyeSlashIcon,
+  TrashIcon,
+} from '@heroicons/react/20/solid'
 import type { SensorView } from '@/lib/shared/types'
 import { Badge } from '@/app/components/badge'
-import { Button } from '@/app/components/button'
+import { useLongPress } from '@/lib/hooks/use-long-press'
 import { ConfirmDialog } from './confirm-dialog'
+import { TileMenu, type TileMenuHandle, type TileMenuItem } from './tile-menu'
 
 export function MotionTile({
   sensor,
-  editing,
   isOffline,
   recentMotion,
   motionLabel,
   onViewHistory,
-  onEditSensor,
   onRemoveSensor,
+  onHideSensor,
 }: {
   sensor: SensorView
-  editing: boolean
   isOffline: boolean
   recentMotion: boolean
   motionLabel: string | null
   onViewHistory: (sensor: SensorView) => void
-  onEditSensor: (sensorId: number) => void
   onRemoveSensor: (sensorId: number) => void
+  onHideSensor?: (sensorId: number) => void
 }) {
   const [confirmRemove, setConfirmRemove] = useState(false)
+  const [confirmHide, setConfirmHide] = useState(false)
   const valueText = !sensor.lastMotion ? '—' : recentMotion ? 'Detected' : 'Clear'
+
+  const menuRef = useRef<TileMenuHandle>(null)
+  const { handlers: pressHandlers, wasLongPressRef } = useLongPress(() => menuRef.current?.open())
+
+  function tap() {
+    if (wasLongPressRef.current) return
+    onViewHistory(sensor)
+  }
+
+  const items: TileMenuItem[] = [
+    {
+      key: 'history',
+      label: 'View history',
+      icon: <ChartBarIcon data-slot="icon" />,
+      onSelect: () => onViewHistory(sensor),
+    },
+    ...(onHideSensor ? [{
+      key: 'hide',
+      label: 'Hide',
+      icon: <EyeSlashIcon data-slot="icon" />,
+      tone: 'warning' as const,
+      onSelect: () => setConfirmHide(true),
+    }] : []),
+    {
+      key: 'remove',
+      label: 'Remove from room',
+      icon: <TrashIcon data-slot="icon" />,
+      tone: 'destructive',
+      onSelect: () => setConfirmRemove(true),
+    },
+  ]
 
   return (
     <div
       role="button"
       tabIndex={0}
-      onClick={() => onViewHistory(sensor)}
+      onClick={tap}
       onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onViewHistory(sensor) }
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); tap() }
       }}
+      style={{ WebkitTouchCallout: 'none', userSelect: 'none' }}
+      {...pressHandlers}
       className={[
-        'group/tile relative flex cursor-pointer flex-col items-start gap-1.5 rounded-2xl px-4 py-4 text-left ring-1 transition focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent',
+        'group/tile relative flex cursor-pointer flex-col items-start gap-1.5 rounded-2xl px-4 py-4 pr-10 text-left ring-1 transition focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent',
         isOffline
           ? 'bg-error/[0.04] ring-error/30'
           : recentMotion
@@ -46,6 +83,8 @@ export function MotionTile({
             : 'bg-surface-2/60 ring-default/70 hover:bg-surface-2 hover:ring-default dark:ring-white/5 dark:hover:ring-white/10',
       ].join(' ')}
     >
+      <TileMenu ref={menuRef} items={items} />
+
       <div className="flex w-full items-center justify-between">
         <span className="text-lg">🏃</span>
         {isOffline ? (
@@ -61,23 +100,21 @@ export function MotionTile({
       {sensor.label && <div className="max-w-full truncate text-xs text-muted">{sensor.label}</div>}
       {sensor.lastMotion && motionLabel && <div className="text-xs text-subtle">{motionLabel}</div>}
 
-      {editing && (
-        <div className="absolute top-1.5 right-1.5 flex items-center gap-0.5 rounded-xl bg-surface/75 p-0.5 backdrop-blur-md transition-opacity pointer-fine:opacity-0 pointer-fine:group-hover/tile:opacity-100 dark:bg-surface/65">
-          <Button plain title="Edit" aria-label="Edit" onClick={(e) => { e.stopPropagation(); onEditSensor(sensor.id) }}>
-            <PencilSquareIcon data-slot="icon" />
-          </Button>
-          <Button plain title="Remove" aria-label="Remove" onClick={(e) => { e.stopPropagation(); setConfirmRemove(true) }}>
-            <XMarkIcon data-slot="icon" />
-          </Button>
-        </div>
-      )}
-
       <ConfirmDialog
         open={confirmRemove}
         message="Remove this sensor from the room?"
         confirmLabel="Remove"
         onConfirm={() => { onRemoveSensor(sensor.id); setConfirmRemove(false) }}
         onCancel={() => setConfirmRemove(false)}
+      />
+      <ConfirmDialog
+        open={confirmHide}
+        title="Hide this sensor?"
+        message="Hidden sensors won't appear in discovery. You can unhide from /sensors."
+        confirmLabel="Hide"
+        tone="default"
+        onConfirm={() => { onHideSensor?.(sensor.id); setConfirmHide(false) }}
+        onCancel={() => setConfirmHide(false)}
       />
     </div>
   )

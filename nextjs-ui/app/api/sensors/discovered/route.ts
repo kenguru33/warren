@@ -66,17 +66,6 @@ export async function GET() {
       snapshotUrl: a.snapshot_url,
     }))
 
-  const unassignedSensors: DiscoveredSensor[] = unassignedDb.map(s => ({
-    deviceId: s.device_id,
-    sensorId: s.id,
-    sensorType: s.type,
-    label: s.label,
-    lastSeen: s.created_at,
-    latestValue: null,
-    streamUrl: s.stream_url,
-    snapshotUrl: s.snapshot_url,
-  }))
-
   const hueDevices = db.prepare(`
     SELECT device_id, kind, subtype, name, capabilities, last_seen
     FROM hue_devices
@@ -85,6 +74,25 @@ export async function GET() {
     device_id: string; kind: string; subtype: string | null
     name: string | null; capabilities: string | null; last_seen: number
   }[]
+  const hueByDeviceId = new Map(hueDevices.map(h => [h.device_id, h]))
+
+  const unassignedSensors: DiscoveredSensor[] = unassignedDb.map(s => {
+    const hue = s.device_id ? hueByDeviceId.get(s.device_id) : undefined
+    const caps = hue?.capabilities
+      ? (JSON.parse(hue.capabilities) as { brightness?: boolean; colorTemp?: boolean; color?: boolean })
+      : undefined
+    return {
+      deviceId: s.device_id,
+      sensorId: s.id,
+      sensorType: s.type,
+      label: s.label ?? hue?.name ?? null,
+      lastSeen: hue?.last_seen ?? s.created_at,
+      latestValue: null,
+      streamUrl: s.stream_url,
+      snapshotUrl: s.snapshot_url,
+      ...(hue ? { origin: 'hue' as const, capabilities: caps } : {}),
+    }
+  })
 
   const hueSensors: DiscoveredSensor[] = hueDevices
     .flatMap(h => {

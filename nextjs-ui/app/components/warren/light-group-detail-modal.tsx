@@ -22,6 +22,7 @@ export function LightGroupDetailModal({
   onClose,
   onToggled,
   onEditSensor,
+  onClearColorOverrides,
 }: {
   open: boolean
   group: LightGroupView | null
@@ -32,6 +33,10 @@ export function LightGroupDetailModal({
   onClose: () => void
   onToggled: () => void
   onEditSensor: (sensorId: number) => void
+  /** After a successful theme change the bridge repaints every member with
+   *  the new palette, so previously stored color picks become stale. The
+   *  dashboard implements this to drop those keys from its override map. */
+  onClearColorOverrides?: (sensorIds: number[]) => void
 }) {
   const [localTheme, setLocalTheme] = useState<LightThemeKey | null>(group?.theme ?? null)
   const [themeError, setThemeError] = useState<string | null>(null)
@@ -92,6 +97,9 @@ export function LightGroupDetailModal({
         body: JSON.stringify({ on: true, theme: key }),
       }).catch(() => {})
     }
+    // Theme paint resets per-member colors, so previous EditLightModal picks
+    // are stale — drop them so the new palette colors show in the row bulbs.
+    onClearColorOverrides?.(members.map(m => m.id))
   }
 
   return (
@@ -128,10 +136,15 @@ export function LightGroupDetailModal({
             {sortedMembers.map((m, i) => {
               const palette = LIGHT_THEMES[localTheme ?? group.theme]?.bulbPalette ?? []
               const override = colorOverrides?.[m.id]
+              // Visualize the theme signature on every member's bulb in the row,
+              // not just color-capable ones — hardware capability gates the
+              // physical paint, but the UI consistently reflects "this is the
+              // theme color slot for this light". Without this, on/off-only bulbs
+              // fell through to bg-accent (the active app scheme) and broke the
+              // visual story when the rest of the row was painted in palette
+              // colors.
               const accentColor = override
-                ?? (m.capabilities?.color && palette.length > 0
-                  ? palette[i % palette.length]
-                  : undefined)
+                ?? (palette.length > 0 ? palette[i % palette.length] : undefined)
               return (
                 <li key={m.id}>
                   <LightGroupDetailRow

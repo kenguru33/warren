@@ -10,7 +10,6 @@ import { Text } from '@/app/components/text'
 import { RoomCard } from '@/app/components/warren/room-card'
 import { AddRoomModal } from '@/app/components/warren/add-room-modal'
 import { AddSensorModal, type AddSensorPayload } from '@/app/components/warren/add-sensor-modal'
-import { LightGroupModal } from '@/app/components/warren/light-group-modal'
 import { LightGroupDetailModal } from '@/app/components/warren/light-group-detail-modal'
 import { SensorConfigModal } from '@/app/components/warren/sensor-config-modal'
 import { SensorHistoryModal } from '@/app/components/warren/sensor-history-modal'
@@ -18,13 +17,12 @@ import { LiveStreamModal } from '@/app/components/warren/live-stream-modal'
 import { EditLightModal } from '@/app/components/warren/edit-light-modal'
 
 export default function DashboardPage() {
-  const { rooms, lastUpdated, refresh, addRoom, removeRoom, renameRoom, removeSensor, addSensor, saveReference, clearReference } = useRooms()
+  const { rooms, lastUpdated, refresh, addRoom, removeRoom, renameRoom, removeSensor, hideSensor, renameSensor, renameLightGroup, addSensor, saveReference, clearReference } = useRooms()
 
   const [showAddRoom, setShowAddRoom] = useState(false)
   const [addSensorRoomId, setAddSensorRoomId] = useState<number | null>(null)
 
-  // Light group modal — used for both create (groupId === null) and edit
-  const [groupModalCtx, setGroupModalCtx] = useState<{ roomId: number; groupId: number | null } | null>(null)
+  // Light group detail modal — opened via tile tap to inspect / re-theme a group.
   const [groupDetailId, setGroupDetailId] = useState<number | null>(null)
 
   // Sensor modals
@@ -41,11 +39,6 @@ export default function DashboardPage() {
     () => addSensorRoomId !== null ? rooms.find(r => r.id === addSensorRoomId) ?? null : null,
     [addSensorRoomId, rooms],
   )
-
-  const groupModalRoom = useMemo(() => {
-    if (!groupModalCtx) return null
-    return rooms.find(r => r.id === groupModalCtx.roomId) ?? null
-  }, [groupModalCtx, rooms])
 
   const groupDetail = useMemo<{ room: RoomWithSensors; group: LightGroupView; members: SensorView[] } | null>(() => {
     if (groupDetailId === null) return null
@@ -123,13 +116,24 @@ export default function DashboardPage() {
     : undefined
   // Current color the bulb displays: prefer an explicit override (a previous
   // pick this session), otherwise the round-robin palette color the group
-  // would assign by member index.
+  // would assign. Must match LightGroupDetailModal's row ordering — that
+  // dialog sorts members alphabetically by display name before assigning
+  // palette colors, so the unsorted memberSensorIds order would diverge.
   const editingLightCurrentColor = (() => {
     if (!editingLight) return undefined
     const override = lightColorOverrides[editingLight.id]
     if (override) return override
     if (!editingLightGroup || !editingLightPalette?.length) return undefined
-    const idx = editingLightGroup.memberSensorIds.indexOf(editingLight.id)
+    const room = rooms.find(r => r.sensors.some(s => s.id === editingLight.id))
+    const lightsById = new Map(room?.sensors.map(s => [s.id, s]) ?? [])
+    const sortedIds = [...editingLightGroup.memberSensorIds].sort((a, b) => {
+      const sa = lightsById.get(a)
+      const sb = lightsById.get(b)
+      const na = (sa?.label?.trim() || sa?.hueName?.trim() || '').toLowerCase()
+      const nb = (sb?.label?.trim() || sb?.hueName?.trim() || '').toLowerCase()
+      return na.localeCompare(nb)
+    })
+    const idx = sortedIds.indexOf(editingLight.id)
     if (idx < 0) return undefined
     return editingLightPalette[idx % editingLightPalette.length]
   })()
@@ -176,7 +180,6 @@ export default function DashboardPage() {
               <RoomCard
                 key={room.id}
                 room={room}
-                onSaveRef={handleSaveRef}
                 onRemoveRoom={removeRoom}
                 onRemoveSensor={removeSensor}
                 onRenameRoom={renameRoom}
@@ -184,21 +187,19 @@ export default function DashboardPage() {
                 onOpenLive={handleOpenLive}
                 onViewHistory={handleViewHistory}
                 onEditSensor={handleEditSensor}
-                onAddGroup={(roomId) => setGroupModalCtx({ roomId, groupId: null })}
-                onEditGroup={(groupId) => {
-                  for (const r of rooms) {
-                    if (r.lightGroups.some(g => g.id === groupId)) {
-                      setGroupModalCtx({ roomId: r.id, groupId })
-                      return
-                    }
-                  }
-                }}
                 onUngroup={async (groupId) => {
                   await fetch(`/api/light-groups/${groupId}`, { method: 'DELETE', credentials: 'include' })
                   refresh()
                 }}
                 onMasterToggled={refresh}
                 onOpenGroupDetail={(groupId) => setGroupDetailId(groupId)}
+                onHideSensor={hideSensor}
+                onRenameSensor={renameSensor}
+                onRenameLightGroup={renameLightGroup}
+                onSaveReference={(roomId, ref) => {
+                  if (ref.refTemp === null && ref.refHumidity === null) clearReference(roomId)
+                  else saveReference(roomId, ref)
+                }}
                 lightColorOverrides={lightColorOverrides}
               />
             ))}
@@ -222,24 +223,6 @@ export default function DashboardPage() {
         onAdd={handleAddSensors}
       />
 
-      {groupModalRoom && groupModalCtx && (
-        <LightGroupModal
-          open
-          roomId={groupModalRoom.id}
-          roomName={groupModalRoom.name}
-          lights={groupModalRoom.sensors.filter(s => s.type === 'light')}
-          group={
-            groupModalCtx.groupId !== null
-              ? groupModalRoom.lightGroups.find(g => g.id === groupModalCtx.groupId) ?? null
-              : null
-          }
-          groupsInRoom={groupModalRoom.lightGroups}
-          onClose={() => setGroupModalCtx(null)}
-          onSaved={() => { setGroupModalCtx(null); refresh() }}
-          onDeleted={() => { setGroupModalCtx(null); refresh() }}
-        />
-      )}
-
       <LightGroupDetailModal
         open={groupDetail !== null}
         group={groupDetail?.group ?? null}
@@ -248,6 +231,13 @@ export default function DashboardPage() {
         onClose={() => setGroupDetailId(null)}
         onToggled={refresh}
         onEditSensor={handleEditSensor}
+        onClearColorOverrides={(sensorIds) => {
+          setLightColorOverrides(prev => {
+            const next = { ...prev }
+            for (const id of sensorIds) delete next[id]
+            return next
+          })
+        }}
       />
 
       {historySensor && (
@@ -284,7 +274,6 @@ export default function DashboardPage() {
         groupName={editingLightGroup?.name}
         currentColor={editingLightCurrentColor}
         onClose={() => setEditingLight(null)}
-        onSaved={refresh}
         onColorApplied={(sensorId, hex) => {
           setLightColorOverrides(prev => ({ ...prev, [sensorId]: hex }))
         }}

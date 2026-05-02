@@ -123,15 +123,26 @@ export function LightGroupDetailRow({
   const hasBrightness = sensor.capabilities?.brightness === true
   const displayName = sensor.label?.trim() || sensor.hueName?.trim() || `Light #${sensor.id}`
 
+  // When the light is on and has a themed accent color, tint the whole row
+  // pill in that color (low-opacity bg + soft ring) so each list item visually
+  // matches its bulb. Without this the pill stayed `bg-accent` (the active app
+  // scheme), making one bulb's row look like every other's.
+  const rowStyle = localOn && reachable && accentColor
+    ? { backgroundColor: `${accentColor}1f`, boxShadow: `inset 0 0 0 1px ${accentColor}55` }
+    : undefined
+
   return (
     <div
+      style={rowStyle}
       className={[
         'grid grid-cols-[40px_minmax(0,1fr)_minmax(120px,220px)_auto] items-center gap-4 px-3 py-2.5 rounded-xl ring-1 transition-colors',
         !reachable
           ? 'bg-error/5 ring-error/25'
-          : localOn
-            ? 'bg-accent/10 ring-accent/30'
-            : 'bg-surface-2/60 ring-default/70 dark:ring-white/5',
+          : localOn && accentColor
+            ? 'ring-0' // ring is provided by the inline rowStyle box-shadow
+            : localOn
+              ? 'bg-accent/10 ring-accent/30'
+              : 'bg-surface-2/60 ring-default/70 dark:ring-white/5',
       ].join(' ')}
     >
       <button

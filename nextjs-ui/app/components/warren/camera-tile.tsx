@@ -1,36 +1,74 @@
 'use client'
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import Image from 'next/image'
-import { PencilSquareIcon, XMarkIcon, PlayIcon } from '@heroicons/react/20/solid'
+import {
+  EyeSlashIcon,
+  PlayIcon,
+  TrashIcon,
+} from '@heroicons/react/20/solid'
 import type { SensorView } from '@/lib/shared/types'
+import { useLongPress } from '@/lib/hooks/use-long-press'
 import { ConfirmDialog } from './confirm-dialog'
+import { TileMenu, type TileMenuHandle, type TileMenuItem } from './tile-menu'
 
 export function CameraTile({
   sensor,
-  editing,
   recentMotion,
   onOpenLive,
-  onEditSensor,
   onRemoveSensor,
+  onHideSensor,
 }: {
   sensor: SensorView
-  editing: boolean
   recentMotion: boolean
   onOpenLive: (sensorId: number) => void
-  onEditSensor: (sensorId: number) => void
   onRemoveSensor: (sensorId: number) => void
+  onHideSensor?: (sensorId: number) => void
 }) {
   const [confirmRemove, setConfirmRemove] = useState(false)
+  const [confirmHide, setConfirmHide] = useState(false)
+
+  const menuRef = useRef<TileMenuHandle>(null)
+  const { handlers: pressHandlers, wasLongPressRef } = useLongPress(() => menuRef.current?.open())
+
+  function tap() {
+    if (wasLongPressRef.current) return
+    onOpenLive(sensor.id)
+  }
+
+  const items: TileMenuItem[] = [
+    {
+      key: 'live',
+      label: 'Open live',
+      icon: <PlayIcon data-slot="icon" />,
+      onSelect: () => onOpenLive(sensor.id),
+    },
+    ...(onHideSensor ? [{
+      key: 'hide',
+      label: 'Hide',
+      icon: <EyeSlashIcon data-slot="icon" />,
+      tone: 'warning' as const,
+      onSelect: () => setConfirmHide(true),
+    }] : []),
+    {
+      key: 'remove',
+      label: 'Remove from room',
+      icon: <TrashIcon data-slot="icon" />,
+      tone: 'destructive',
+      onSelect: () => setConfirmRemove(true),
+    },
+  ]
 
   return (
     <div
       role="button"
       tabIndex={0}
-      onClick={() => onOpenLive(sensor.id)}
+      onClick={tap}
       onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpenLive(sensor.id) }
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); tap() }
       }}
+      style={{ WebkitTouchCallout: 'none', userSelect: 'none' }}
+      {...pressHandlers}
       className="group/tile relative aspect-video w-full cursor-pointer overflow-hidden rounded-2xl bg-surface-2 ring-1 ring-default/70 transition hover:ring-default focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent dark:ring-white/5 dark:hover:ring-white/10"
     >
       {sensor.snapshotUrl ? (
@@ -50,13 +88,11 @@ export function CameraTile({
         <div className="text-sm font-medium text-white text-left truncate">{sensor.label ?? 'Camera'}</div>
       </div>
 
-      {!editing && (
-        <div className="absolute inset-0 flex items-center justify-center bg-black/40 backdrop-blur-sm opacity-0 transition-opacity group-hover/tile:opacity-100">
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-white/15 backdrop-blur px-4 py-2 text-sm font-semibold text-white ring-1 ring-white/25">
-            <PlayIcon className="size-4" /> Live
-          </span>
-        </div>
-      )}
+      <div className="absolute inset-0 flex items-center justify-center bg-black/40 backdrop-blur-sm opacity-0 transition-opacity group-hover/tile:opacity-100">
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-white/15 backdrop-blur px-4 py-2 text-sm font-semibold text-white ring-1 ring-white/25">
+          <PlayIcon className="size-4" /> Live
+        </span>
+      </div>
 
       {recentMotion && (
         <span className="absolute top-2 left-2 inline-flex items-center gap-1 rounded-full bg-error/90 px-2 py-0.5 text-[0.65rem] font-bold uppercase tracking-wider text-white">
@@ -65,28 +101,14 @@ export function CameraTile({
         </span>
       )}
 
-      {editing && (
-        <div className="absolute top-2 right-2 flex items-center gap-0.5 rounded-xl bg-black/55 p-0.5 backdrop-blur-md transition-opacity pointer-fine:opacity-0 pointer-fine:group-hover/tile:opacity-100">
-          <span
-            role="button"
-            tabIndex={0}
-            className="inline-flex items-center justify-center size-7 rounded-lg text-white transition-colors hover:bg-white/15"
-            title="Edit"
-            onClick={(e) => { e.stopPropagation(); onEditSensor(sensor.id) }}
-          >
-            <PencilSquareIcon className="size-3.5" />
-          </span>
-          <span
-            role="button"
-            tabIndex={0}
-            className="inline-flex items-center justify-center size-7 rounded-lg text-white transition-colors hover:bg-error/80"
-            title="Remove"
-            onClick={(e) => { e.stopPropagation(); setConfirmRemove(true) }}
-          >
-            <XMarkIcon className="size-3.5" />
-          </span>
-        </div>
-      )}
+      <TileMenu
+        ref={menuRef}
+        items={items}
+        positionClassName="absolute top-2 right-2 z-10"
+        // White-on-image variant — the camera tile sits over a snapshot, so the
+        // ghost-button hover bg is darker for legibility.
+        triggerClassName="inline-flex size-7 items-center justify-center rounded-lg bg-black/40 text-white transition-colors hover:bg-black/60 focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+      />
 
       <ConfirmDialog
         open={confirmRemove}
@@ -94,6 +116,15 @@ export function CameraTile({
         confirmLabel="Remove"
         onConfirm={() => { onRemoveSensor(sensor.id); setConfirmRemove(false) }}
         onCancel={() => setConfirmRemove(false)}
+      />
+      <ConfirmDialog
+        open={confirmHide}
+        title="Hide this sensor?"
+        message="Hidden sensors won't appear in discovery. You can unhide from /sensors."
+        confirmLabel="Hide"
+        tone="default"
+        onConfirm={() => { onHideSensor?.(sensor.id); setConfirmHide(false) }}
+        onCancel={() => setConfirmHide(false)}
       />
     </div>
   )

@@ -1,44 +1,25 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { PencilSquareIcon, PlusIcon, TrashIcon } from '@heroicons/react/20/solid'
-import type { RoomWithSensors, SensorView } from '@/lib/shared/types'
-import { Button } from '@/app/components/button'
+import {
+  PlusIcon,
+  Squares2X2Icon,
+  TagIcon,
+  TrashIcon,
+} from '@heroicons/react/20/solid'
+import type { RoomReference, RoomWithSensors, SensorView } from '@/lib/shared/types'
 import { Heading } from '@/app/components/heading'
 import { Input } from '@/app/components/input'
 import { ClimateTile } from './climate-tile'
+import { ClimateTargetDialog } from './climate-target-dialog'
 import { MotionTile } from './motion-tile'
 import { CameraTile } from './camera-tile'
 import { HueLightTile } from './hue-light-tile'
 import { LightGroupTile } from './light-group-tile'
 import { MasterLightToggle } from './master-light-toggle'
 import { ConfirmDialog } from './confirm-dialog'
-import { AppSwitch } from './app-switch'
-
-// Compact icon button used in the room-card header for the per-room controls
-// (add sensor, edit, remove). Quieter than Catalyst's Button plain so a row of
-// three reads as chrome rather than primary actions.
-function CardIconButton({
-  title,
-  onClick,
-  children,
-}: {
-  title: string
-  onClick: () => void
-  children: React.ReactNode
-}) {
-  return (
-    <button
-      type="button"
-      title={title}
-      aria-label={title}
-      onClick={onClick}
-      className="inline-flex size-8 items-center justify-center rounded-lg text-subtle transition-colors hover:bg-default hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent dark:hover:bg-white/10 dark:hover:text-white"
-    >
-      {children}
-    </button>
-  )
-}
+import { MultiSelectActionBar } from './multi-select-action-bar'
+import { TileMenu, type TileMenuItem } from './tile-menu'
 
 function motionLabelFor(ts: number | null) {
   if (!ts) return null
@@ -54,7 +35,6 @@ function recentMotion(ts: number | null) {
 
 export function RoomCard({
   room,
-  onSaveRef,
   onRemoveRoom,
   onRemoveSensor,
   onRenameRoom,
@@ -62,15 +42,16 @@ export function RoomCard({
   onOpenLive,
   onViewHistory,
   onEditSensor,
-  onAddGroup,
-  onEditGroup,
   onUngroup,
   onMasterToggled,
   onOpenGroupDetail,
+  onHideSensor,
+  onRenameSensor,
+  onRenameLightGroup,
+  onSaveReference,
   lightColorOverrides,
 }: {
   room: RoomWithSensors
-  onSaveRef: (roomId: number, refTemp: number | null, refHumidity: number | null) => void
   onRemoveRoom: (roomId: number) => void
   onRemoveSensor: (sensorId: number) => void
   onRenameRoom: (roomId: number, name: string) => void
@@ -78,11 +59,13 @@ export function RoomCard({
   onOpenLive: (sensorId: number) => void
   onViewHistory: (sensor: SensorView) => void
   onEditSensor: (sensorId: number) => void
-  onAddGroup: (roomId: number) => void
-  onEditGroup: (groupId: number) => void
   onUngroup: (groupId: number) => void
   onMasterToggled: () => void
   onOpenGroupDetail: (groupId: number) => void
+  onHideSensor?: (sensorId: number) => void
+  onRenameSensor?: (sensorId: number, label: string) => void
+  onRenameLightGroup?: (groupId: number, name: string) => void
+  onSaveReference?: (roomId: number, ref: RoomReference) => void
   /** Per-sensor color picks from EditLightModal — painted on the matching
    *  HueLightTile's bulb-icon background when on. */
   lightColorOverrides?: Record<number, string>
@@ -92,23 +75,37 @@ export function RoomCard({
   const motionSensor = room.sensors.find(s => s.type === 'motion')      ?? null
   const cameras      = room.sensors.filter(s => s.type === 'camera')
   const lights       = room.sensors.filter(s => s.type === 'light')
-  const ungroupedLights = lights.filter(l => !l.groupId)
   const lightsById = new Map(lights.map(l => [l.id, l]))
   const lightGroups = room.lightGroups ?? []
 
-  const hasClimate = !!(tempSensor || humSensor)
   const hasAmbient = !!(tempSensor || humSensor || motionSensor)
   const hasCamera  = cameras.length > 0
-  const hasLighting = lightGroups.length > 0 || ungroupedLights.length > 0
+  const hasLighting = lightGroups.length > 0 || lights.some(l => !l.groupId)
   const hasAnyContent = hasAmbient || hasCamera || hasLighting
 
-  const [editing, setEditing] = useState(false)
-  const [refTempEnabled, setRefTempEnabled] = useState(room.reference !== null && room.reference.refTemp !== null)
-  const [refHumEnabled, setRefHumEnabled]   = useState(room.reference !== null && room.reference.refHumidity !== null)
-  const [refTemp, setRefTemp]               = useState<number>(room.reference?.refTemp     ?? 21)
-  const [refHumidity, setRefHumidity]       = useState<number>(room.reference?.refHumidity ?? 50)
-  const [editName, setEditName]             = useState(room.name)
-  const [confirmRoom, setConfirmRoom]       = useState(false)
+  const [renaming, setRenaming] = useState(false)
+  const [editName, setEditName] = useState(room.name)
+  const [confirmRoom, setConfirmRoom] = useState(false)
+  const [targetVariant, setTargetVariant] = useState<'temperature' | 'humidity' | null>(null)
+
+  // Multi-select grouping state — scoped to this room card per the spec.
+  const [selectionMode, setSelectionMode] = useState<'idle' | 'create' | 'edit-group'>('idle')
+  const [selectedLightIds, setSelectedLightIds] = useState<Set<number>>(new Set())
+  const [editingGroupId, setEditingGroupId] = useState<number | null>(null)
+  const [groupingError, setGroupingError] = useState<string | null>(null)
+
+  // While editing a group's membership, surface its current members as tiles
+  // alongside the ungrouped lights so the user can deselect them. Outside
+  // edit-group mode, only ungrouped lights are shown as tiles (members live
+  // inside the group tile).
+  const ungroupedLights = lights.filter(l => (
+    !l.groupId || (selectionMode === 'edit-group' && l.groupId === editingGroupId)
+  ))
+  // Hide the group tile being edited so we don't show the group + its members
+  // as separate tiles at the same time.
+  const visibleLightGroups = selectionMode === 'edit-group' && editingGroupId !== null
+    ? lightGroups.filter(g => g.id !== editingGroupId)
+    : lightGroups
 
   const [masterPending, setMasterPending] = useState(false)
   const [masterError, setMasterError]     = useState<string | null>(null)
@@ -124,34 +121,100 @@ export function RoomCard({
     return !ms || now - ms > 30_000
   }
 
-  // Reconcile refs from props when not editing.
-  useEffect(() => {
-    if (!editing) {
-      setRefTempEnabled(room.reference !== null && room.reference.refTemp !== null)
-      setRefHumEnabled(room.reference !== null && room.reference.refHumidity !== null)
-      setRefTemp(room.reference?.refTemp ?? 21)
-      setRefHumidity(room.reference?.refHumidity ?? 50)
-    }
-  }, [room.reference, editing])
-
-  function openEditing() {
-    setRefTempEnabled(room.reference !== null && room.reference.refTemp !== null)
-    setRefHumEnabled(room.reference !== null && room.reference.refHumidity !== null)
-    setRefTemp(room.reference?.refTemp ?? 21)
-    setRefHumidity(room.reference?.refHumidity ?? 50)
+  function startRename() {
     setEditName(room.name)
-    setEditing(true)
+    setRenaming(true)
   }
 
-  function closeEditing() {
-    if (editName.trim() && editName.trim() !== room.name) onRenameRoom(room.id, editName.trim())
-    setEditing(false)
+  function commitRename() {
+    const trimmed = editName.trim()
+    // Empty submit reverts silently per the spec ("I changed my mind" gesture).
+    if (trimmed && trimmed !== room.name) onRenameRoom(room.id, trimmed)
+    setRenaming(false)
   }
 
-  function saveRef() {
-    if (editName.trim() && editName.trim() !== room.name) onRenameRoom(room.id, editName.trim())
-    onSaveRef(room.id, refTempEnabled ? refTemp : null, refHumEnabled ? refHumidity : null)
-    setEditing(false)
+  function cancelRename() {
+    setRenaming(false)
+  }
+
+  function startCreateSelection(seedLightId?: number) {
+    setSelectionMode('create')
+    setEditingGroupId(null)
+    setSelectedLightIds(new Set(seedLightId ? [seedLightId] : []))
+    setGroupingError(null)
+  }
+
+  function startEditMembers(groupId: number) {
+    const group = lightGroups.find(g => g.id === groupId)
+    setSelectionMode('edit-group')
+    setEditingGroupId(groupId)
+    setSelectedLightIds(new Set(group?.memberSensorIds ?? []))
+    setGroupingError(null)
+  }
+
+  function cancelSelection() {
+    setSelectionMode('idle')
+    setEditingGroupId(null)
+    setSelectedLightIds(new Set())
+    setGroupingError(null)
+  }
+
+  function toggleLightSelection(lightId: number) {
+    setSelectedLightIds(prev => {
+      const next = new Set(prev)
+      if (next.has(lightId)) next.delete(lightId)
+      else next.add(lightId)
+      return next
+    })
+  }
+
+  async function commitCreateGroup(name: string) {
+    setGroupingError(null)
+    try {
+      const res = await fetch(`/api/rooms/${room.id}/light-groups`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ name, sensorIds: [...selectedLightIds], theme: 'slate' }),
+      })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      cancelSelection()
+      onMasterToggled()
+    } catch (err) {
+      setGroupingError(err instanceof Error ? err.message : 'Failed to group lights')
+    }
+  }
+
+  async function commitEditGroup(name: string) {
+    if (editingGroupId === null) return
+    setGroupingError(null)
+    try {
+      const res = await fetch(`/api/light-groups/${editingGroupId}`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ name, sensorIds: [...selectedLightIds] }),
+      })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      cancelSelection()
+      onMasterToggled()
+    } catch (err) {
+      setGroupingError(err instanceof Error ? err.message : 'Failed to save group')
+    }
+  }
+
+  async function commitUngroup() {
+    if (editingGroupId === null) return
+    onUngroup(editingGroupId)
+    cancelSelection()
+  }
+
+  function handleSaveSingleRef(value: number | null) {
+    if (!onSaveReference || !targetVariant) return
+    const next: RoomReference = targetVariant === 'temperature'
+      ? { refTemp: value, refHumidity: room.reference?.refHumidity ?? null }
+      : { refTemp: room.reference?.refTemp ?? null, refHumidity: value }
+    onSaveReference(room.id, next)
   }
 
   async function toggleRoomMaster(nextOn: boolean) {
@@ -184,6 +247,43 @@ export function RoomCard({
     }
   }
 
+  // Room-level actions only. Light-specific actions ("Group lights…") live on
+  // the Lights section header alongside the MasterLightToggle, so each kebab's
+  // scope matches the user's mental model when they reach for it.
+  //
+  // "Rename room" is also reachable by tapping the heading directly — the menu
+  // entry is the discoverable form; the heading-tap is a power-user shortcut.
+  const roomMenuItems: TileMenuItem[] = [
+    {
+      key: 'rename-room',
+      label: 'Rename room',
+      icon: <TagIcon data-slot="icon" />,
+      onSelect: () => startRename(),
+    },
+    {
+      key: 'add-device',
+      label: 'Add device',
+      icon: <PlusIcon data-slot="icon" />,
+      onSelect: () => onAddSensor(room.id),
+    },
+    {
+      key: 'remove-room',
+      label: 'Remove room',
+      icon: <TrashIcon data-slot="icon" />,
+      tone: 'destructive',
+      onSelect: () => setConfirmRoom(true),
+    },
+  ]
+
+  const lightsMenuItems: TileMenuItem[] = lights.length >= 2
+    ? [{
+      key: 'group-lights',
+      label: 'Group lights…',
+      icon: <Squares2X2Icon data-slot="icon" />,
+      onSelect: () => startCreateSelection(),
+    }]
+    : []
+
   return (
     <article
       className={[
@@ -199,32 +299,35 @@ export function RoomCard({
           hasAnyContent ? 'border-b border-default/60 pb-4 mb-5 dark:border-white/5' : '',
         ].join(' ')}
       >
-        {editing ? (
+        {renaming ? (
           <Input
             value={editName}
             onChange={e => setEditName(e.target.value)}
             onKeyDown={e => {
-              if (e.key === 'Enter') closeEditing()
-              if (e.key === 'Escape') setEditing(false)
+              if (e.key === 'Enter') commitRename()
+              if (e.key === 'Escape') cancelRename()
             }}
+            onBlur={commitRename}
             maxLength={60}
+            autoFocus
             className="flex-1 [&_input]:!text-lg/6 [&_input]:!font-semibold [&_input]:!tracking-tight"
           />
         ) : (
-          <Heading level={2} className="truncate !text-lg/6 font-semibold tracking-tight">{room.name}</Heading>
+          <Heading
+            level={2}
+            onClick={startRename}
+            title="Tap to rename"
+            className="cursor-text truncate !text-lg/6 font-semibold tracking-tight"
+          >
+            {room.name}
+          </Heading>
         )}
 
-        <div className="flex shrink-0 items-center gap-0.5">
-          <CardIconButton title="Add sensor" onClick={() => onAddSensor(room.id)}>
-            <PlusIcon className="size-4" />
-          </CardIconButton>
-          <CardIconButton title="Edit room" onClick={editing ? closeEditing : openEditing}>
-            <PencilSquareIcon className="size-4" />
-          </CardIconButton>
-          <CardIconButton title="Remove room" onClick={() => setConfirmRoom(true)}>
-            <TrashIcon className="size-4" />
-          </CardIconButton>
-        </div>
+        <TileMenu
+          items={roomMenuItems}
+          aria-label="Room menu"
+          positionClassName="shrink-0"
+        />
       </div>
 
       {hasAnyContent && (
@@ -236,11 +339,12 @@ export function RoomCard({
                   variant="temperature"
                   sensor={tempSensor}
                   reference={room.reference}
-                  editing={editing}
                   isOffline={isOffline(tempSensor.lastRecordedAt)}
                   onViewHistory={onViewHistory}
                   onEditSensor={onEditSensor}
+                  onSetTarget={onSaveReference ? setTargetVariant : undefined}
                   onRemoveSensor={onRemoveSensor}
+                  onHideSensor={onHideSensor}
                 />
               )}
               {humSensor && (
@@ -248,23 +352,23 @@ export function RoomCard({
                   variant="humidity"
                   sensor={humSensor}
                   reference={room.reference}
-                  editing={editing}
                   isOffline={isOffline(humSensor.lastRecordedAt)}
                   onViewHistory={onViewHistory}
                   onEditSensor={onEditSensor}
+                  onSetTarget={onSaveReference ? setTargetVariant : undefined}
                   onRemoveSensor={onRemoveSensor}
+                  onHideSensor={onHideSensor}
                 />
               )}
               {motionSensor && (
                 <MotionTile
                   sensor={motionSensor}
-                  editing={editing}
                   isOffline={isOffline(motionSensor.lastRecordedAt)}
                   recentMotion={recentMotion(motionSensor.lastMotion)}
                   motionLabel={motionLabelFor(motionSensor.lastMotion)}
                   onViewHistory={onViewHistory}
-                  onEditSensor={onEditSensor}
                   onRemoveSensor={onRemoveSensor}
+                  onHideSensor={onHideSensor}
                 />
               )}
             </div>
@@ -276,11 +380,10 @@ export function RoomCard({
                 <CameraTile
                   key={cam.id}
                   sensor={cam}
-                  editing={editing}
                   recentMotion={recentMotion(cam.lastMotion)}
                   onOpenLive={onOpenLive}
-                  onEditSensor={onEditSensor}
                   onRemoveSensor={onRemoveSensor}
+                  onHideSensor={onHideSensor}
                 />
               ))}
             </div>
@@ -288,31 +391,40 @@ export function RoomCard({
 
           {hasLighting && (
             <div className="flex flex-col gap-3">
-              <div className="flex items-center justify-between gap-3">
+              <div className="relative flex items-center justify-between gap-3">
                 <span className="text-xs font-semibold uppercase tracking-wider text-subtle">
                   Lights
                 </span>
-                {room.lightMaster && (
-                  <MasterLightToggle
-                    master={room.lightMaster}
-                    pending={masterPending}
-                    error={masterError}
-                    partial={masterPartial}
-                    onToggle={toggleRoomMaster}
-                  />
-                )}
+                <div className="flex items-center gap-1">
+                  {room.lightMaster && (
+                    <MasterLightToggle
+                      master={room.lightMaster}
+                      pending={masterPending}
+                      error={masterError}
+                      partial={masterPartial}
+                      onToggle={toggleRoomMaster}
+                    />
+                  )}
+                  {lightsMenuItems.length > 0 && (
+                    <TileMenu
+                      items={lightsMenuItems}
+                      aria-label="Lights menu"
+                      positionClassName="shrink-0"
+                    />
+                  )}
+                </div>
               </div>
-              {lightGroups.length > 0 && (
+              {visibleLightGroups.length > 0 && (
                 <div className="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-3">
-                  {lightGroups.map(group => (
+                  {visibleLightGroups.map(group => (
                     <LightGroupTile
                       key={`group-${group.id}`}
                       group={group}
                       members={group.memberSensorIds.map(id => lightsById.get(id)).filter((s): s is SensorView => !!s)}
-                      editing={editing}
-                      onEditGroup={onEditGroup}
                       onUngroup={onUngroup}
                       onOpenDetail={onOpenGroupDetail}
+                      onEditMembers={startEditMembers}
+                      onRenameGroup={onRenameLightGroup}
                       onToggled={onMasterToggled}
                     />
                   ))}
@@ -324,10 +436,19 @@ export function RoomCard({
                     <HueLightTile
                       key={light.id}
                       sensor={light}
-                      editing={editing}
                       colorOverride={lightColorOverrides?.[light.id]}
+                      selected={selectedLightIds.has(light.id)}
+                      selectionMode={selectionMode !== 'idle'}
                       onEditSensor={onEditSensor}
+                      onRenameSensor={onRenameSensor}
                       onRemoveSensor={onRemoveSensor}
+                      onHideSensor={onHideSensor}
+                      onToggleSelect={toggleLightSelection}
+                      onStartSelect={
+                        selectionMode === 'idle' && lights.length >= 2
+                          ? startCreateSelection
+                          : undefined
+                      }
                       onToggled={onMasterToggled}
                     />
                   ))}
@@ -338,51 +459,25 @@ export function RoomCard({
         </div>
       )}
 
-      {editing && lights.length >= 2 && (
-        <div className="mt-6 pt-6 border-t border-default/60 dark:border-white/5">
-          <Button outline onClick={() => onAddGroup(room.id)}>
-            <PlusIcon data-slot="icon" />
-            Group lights
-          </Button>
-        </div>
+      {selectionMode !== 'idle' && (
+        <MultiSelectActionBar
+          mode={selectionMode}
+          count={selectedLightIds.size}
+          initialName={
+            selectionMode === 'edit-group' && editingGroupId !== null
+              ? lightGroups.find(g => g.id === editingGroupId)?.name ?? ''
+              : ''
+          }
+          onCancel={cancelSelection}
+          onCreate={commitCreateGroup}
+          onSave={commitEditGroup}
+          onUngroup={commitUngroup}
+        />
       )}
-
-      {editing && hasClimate && (
-        <div className="mt-6 pt-6 border-t border-default/60 dark:border-white/5 flex flex-col gap-5">
-          {tempSensor && (
-            <div className="flex flex-col gap-2.5">
-              <div className="flex items-center justify-between">
-                <span className="text-sm/6 font-medium text-muted">Target temperature</span>
-                <AppSwitch checked={refTempEnabled} onChange={setRefTempEnabled} label="Enable target" />
-              </div>
-              {refTempEnabled && (
-                <div className="flex flex-col gap-1.5">
-                  <div className="text-sm/6 font-semibold text-text">{refTemp}°C</div>
-                  <input type="range" min={10} max={30} step={0.5} value={refTemp} onChange={e => setRefTemp(Number(e.target.value))} className="slider" />
-                  <div className="flex justify-between text-[0.65rem] text-subtle"><span>10°</span><span>20°</span><span>30°</span></div>
-                </div>
-              )}
-            </div>
-          )}
-          {humSensor && (
-            <div className="flex flex-col gap-2.5">
-              <div className="flex items-center justify-between">
-                <span className="text-sm/6 font-medium text-muted">Target humidity</span>
-                <AppSwitch checked={refHumEnabled} onChange={setRefHumEnabled} label="Enable target" />
-              </div>
-              {refHumEnabled && (
-                <div className="flex flex-col gap-1.5">
-                  <div className="text-sm/6 font-semibold text-text">{refHumidity}%</div>
-                  <input type="range" min={20} max={80} step={1} value={refHumidity} onChange={e => setRefHumidity(Number(e.target.value))} className="slider" />
-                  <div className="flex justify-between text-[0.65rem] text-subtle"><span>20%</span><span>50%</span><span>80%</span></div>
-                </div>
-              )}
-            </div>
-          )}
-          <div className="flex justify-end">
-            <Button onClick={saveRef}>Save</Button>
-          </div>
-        </div>
+      {groupingError && (
+        <p className="mt-2 rounded-lg bg-error/10 px-3 py-2 text-xs text-error ring-1 ring-error/30">
+          {groupingError}
+        </p>
       )}
 
       <ConfirmDialog
@@ -391,6 +486,25 @@ export function RoomCard({
         onConfirm={() => { onRemoveRoom(room.id); setConfirmRoom(false) }}
         onCancel={() => setConfirmRoom(false)}
       />
+
+      {targetVariant && (
+        <ClimateTargetDialog
+          open
+          variant={targetVariant}
+          currentValue={
+            targetVariant === 'temperature'
+              ? room.reference?.refTemp ?? null
+              : room.reference?.refHumidity ?? null
+          }
+          currentEnabled={
+            targetVariant === 'temperature'
+              ? (room.reference?.refTemp ?? null) !== null
+              : (room.reference?.refHumidity ?? null) !== null
+          }
+          onSave={handleSaveSingleRef}
+          onClose={() => setTargetVariant(null)}
+        />
+      )}
     </article>
   )
 }

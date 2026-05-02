@@ -1,11 +1,20 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { PencilSquareIcon, XMarkIcon } from '@heroicons/react/20/solid'
+import {
+  CheckCircleIcon,
+  EyeSlashIcon,
+  PaintBrushIcon,
+  PencilSquareIcon,
+  TagIcon,
+  TrashIcon,
+} from '@heroicons/react/20/solid'
 import type { SensorView } from '@/lib/shared/types'
 import { Badge } from '@/app/components/badge'
-import { Button } from '@/app/components/button'
+import { useLongPress } from '@/lib/hooks/use-long-press'
 import { ConfirmDialog } from './confirm-dialog'
+import { RenameDialog } from './rename-dialog'
+import { TileMenu, type TileMenuHandle, type TileMenuItem } from './tile-menu'
 
 function briFromHue(b: number): number {
   return Math.round((b / 254) * 100)
@@ -13,20 +22,33 @@ function briFromHue(b: number): number {
 
 export function HueLightTile({
   sensor,
-  editing,
   colorOverride,
+  selected,
+  selectionMode,
   onEditSensor,
+  onRenameSensor,
   onRemoveSensor,
+  onHideSensor,
+  onToggleSelect,
+  onStartSelect,
   onToggled,
 }: {
   sensor: SensorView
-  editing: boolean
   /** Hex color the user picked in EditLightModal this session. Painted on the
    *  bulb-icon background when the light is on so the tile reflects the
    *  light's color choice. Falls back to bg-accent-soft when undefined. */
   colorOverride?: string
+  /** True when the tile is checked in the room's multi-select grouping flow. */
+  selected?: boolean
+  /** True when the room is in multi-select mode. Tile primary tap toggles
+   *  selection instead of toggling the bulb; bulb button is disabled. */
+  selectionMode?: boolean
   onEditSensor: (sensorId: number) => void
+  onRenameSensor?: (sensorId: number, label: string) => void
   onRemoveSensor: (sensorId: number) => void
+  onHideSensor?: (sensorId: number) => void
+  onToggleSelect?: (sensorId: number) => void
+  onStartSelect?: (sensorId: number) => void
   onToggled: () => void
 }) {
   const [localOn, setLocalOn] = useState<boolean>(sensor.lightOn ?? false)
@@ -35,6 +57,14 @@ export function HueLightTile({
   const [pending, setPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [confirmRemove, setConfirmRemove] = useState(false)
+  const [confirmHide, setConfirmHide] = useState(false)
+  const [renaming, setRenaming] = useState(false)
+
+  const menuRef = useRef<TileMenuHandle>(null)
+  const { handlers: pressHandlers, wasLongPressRef } = useLongPress(() => {
+    if (onStartSelect) onStartSelect(sensor.id)
+    else menuRef.current?.open()
+  })
 
   // Reconcile from props when not pending or dragging.
   useEffect(() => {
@@ -135,20 +165,75 @@ export function HueLightTile({
   const hasBrightness = sensor.capabilities?.brightness === true
   const displayName = sensor.label?.trim() || sensor.hueName?.trim() || 'Light'
 
+  function tap() {
+    if (wasLongPressRef.current) return
+    if (selectionMode && onToggleSelect) onToggleSelect(sensor.id)
+    // Outside select mode, tapping the tile body opens the color editor.
+    // The bulb-icon button and the brightness slider both stopPropagation,
+    // so this only fires on body / name / state-label taps.
+    else onEditSensor(sensor.id)
+  }
+
+  const items: TileMenuItem[] = [
+    ...(onRenameSensor ? [{
+      key: 'rename',
+      label: 'Rename',
+      icon: <TagIcon data-slot="icon" />,
+      onSelect: () => setRenaming(true),
+    }] : []),
+    {
+      key: 'edit-color',
+      label: 'Edit color',
+      icon: <PaintBrushIcon data-slot="icon" />,
+      onSelect: () => onEditSensor(sensor.id),
+    },
+    ...(onStartSelect ? [{
+      key: 'select',
+      label: sensor.groupId ? 'Edit group members' : 'Select to group',
+      icon: <PencilSquareIcon data-slot="icon" />,
+      onSelect: () => onStartSelect(sensor.id),
+    }] : []),
+    ...(onHideSensor ? [{
+      key: 'hide',
+      label: 'Hide',
+      icon: <EyeSlashIcon data-slot="icon" />,
+      tone: 'warning' as const,
+      onSelect: () => setConfirmHide(true),
+    }] : []),
+    {
+      key: 'remove',
+      label: 'Remove from room',
+      icon: <TrashIcon data-slot="icon" />,
+      tone: 'destructive',
+      onSelect: () => setConfirmRemove(true),
+    },
+  ]
+
   return (
     <div
+      role="button"
+      tabIndex={0}
+      onClick={tap}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); tap() }
+      }}
+      style={{ WebkitTouchCallout: 'none', userSelect: 'none' }}
+      data-selected={selected ? 'true' : undefined}
+      {...pressHandlers}
       className={[
-        'group/tile relative flex flex-col items-center gap-3 rounded-2xl p-4 ring-1 transition',
+        'group/tile relative flex cursor-pointer flex-col items-center gap-3 rounded-2xl p-4 ring-1 transition focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent',
         !reachable
           ? 'bg-error/[0.04] ring-error/30'
-          : 'bg-surface ring-default hover:bg-surface-2 dark:ring-white/10 dark:hover:bg-white/[0.02]',
+          : selected
+            ? 'bg-accent-soft ring-2 ring-accent dark:bg-accent/15'
+            : 'bg-surface ring-default hover:bg-surface-2 dark:ring-white/10 dark:hover:bg-white/[0.02]',
       ].join(' ')}
     >
       <button
         type="button"
-        disabled={pending || !reachable}
+        disabled={pending || !reachable || selectionMode}
         title={localOn ? 'Turn off' : 'Turn on'}
-        onClick={(e) => { e.stopPropagation(); toggleOn() }}
+        onClick={(e) => { e.stopPropagation(); if (!selectionMode) toggleOn() }}
         // When on AND the user has picked a color in EditLightModal this
         // session, paint the bulb background with that color so the tile
         // reflects the light's actual color choice — same treatment as
@@ -182,7 +267,7 @@ export function HueLightTile({
         </span>
       </div>
 
-      {hasBrightness && (
+      {hasBrightness && !selectionMode && (
         <input
           type="range" min={0} max={100} step={1}
           value={localBri}
@@ -206,16 +291,14 @@ export function HueLightTile({
         >!</span>
       )}
 
-      {editing && (
-        <div className="absolute top-1.5 right-1.5 flex items-center gap-0.5 rounded-xl bg-surface/75 p-0.5 backdrop-blur-md transition-opacity pointer-fine:opacity-0 pointer-fine:group-hover/tile:opacity-100 dark:bg-surface/65">
-          <Button plain title="Edit" aria-label="Edit" onClick={(e) => { e.stopPropagation(); onEditSensor(sensor.id) }}>
-            <PencilSquareIcon data-slot="icon" />
-          </Button>
-          <Button plain title="Remove" aria-label="Remove" onClick={(e) => { e.stopPropagation(); setConfirmRemove(true) }}>
-            <XMarkIcon data-slot="icon" />
-          </Button>
-        </div>
+      {selected && (
+        <CheckCircleIcon
+          aria-hidden
+          className="absolute top-1.5 left-1.5 size-5 rounded-full bg-surface text-accent shadow-sm dark:bg-surface-2"
+        />
       )}
+
+      <TileMenu ref={menuRef} items={items} />
 
       <ConfirmDialog
         open={confirmRemove}
@@ -223,6 +306,23 @@ export function HueLightTile({
         confirmLabel="Remove"
         onConfirm={() => { onRemoveSensor(sensor.id); setConfirmRemove(false) }}
         onCancel={() => setConfirmRemove(false)}
+      />
+      <ConfirmDialog
+        open={confirmHide}
+        title="Hide this light?"
+        message="Hidden lights won't appear in discovery. You can unhide from /lights."
+        confirmLabel="Hide"
+        tone="default"
+        onConfirm={() => { onHideSensor?.(sensor.id); setConfirmHide(false) }}
+        onCancel={() => setConfirmHide(false)}
+      />
+      <RenameDialog
+        open={renaming}
+        title="Rename light"
+        currentName={sensor.label ?? sensor.hueName ?? ''}
+        placeholder={sensor.hueName ?? 'Light'}
+        onSave={name => onRenameSensor?.(sensor.id, name)}
+        onClose={() => setRenaming(false)}
       />
     </div>
   )
