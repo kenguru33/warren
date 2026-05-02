@@ -242,7 +242,7 @@ export default function LightsPage() {
           />
         )}
 
-        <SwitchField className="!grid-cols-[auto_auto] !gap-x-3">
+        <SwitchField className="w-fit !grid-cols-[auto_auto] !gap-x-3">
           <Label>Show only unused</Label>
           <AppSwitch checked={onlyUnused} onChange={setOnlyUnused} label="Show only unused" />
         </SwitchField>
