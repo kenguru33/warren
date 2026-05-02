@@ -192,8 +192,9 @@ export function SidebarShell({ children }: { children: React.ReactNode }) {
         )}
       </header>
 
-      {/* Mobile drawer — full Sidebar mirror of the desktop layout: brand
-          header at the top, nav links in the body, user menu in the footer. */}
+      {/* Mobile drawer — navigation only. The user menu lives in the top-bar
+          avatar (Material/Catalyst convention); putting it here too would be
+          duplication and muddy the drawer's "where do I want to go" intent. */}
       {sidebarOpen && (
         <>
           <div
@@ -235,28 +236,6 @@ export function SidebarShell({ children }: { children: React.ReactNode }) {
                   })}
                 </SidebarSection>
               </SidebarBody>
-
-              {loggedIn && (
-                <SidebarFooter>
-                  <Dropdown>
-                    <DropdownButton
-                      as="button"
-                      className="flex w-full items-center gap-3 rounded-lg p-2 text-left hover:bg-default focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-                    >
-                      <Avatar
-                        initials={initials}
-                        className="size-9 bg-zinc-900 text-white dark:bg-white dark:text-zinc-950"
-                      />
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate text-sm/5 font-medium text-text">{user?.name}</span>
-                        <span className="block truncate text-xs/4 text-subtle">Signed in</span>
-                      </span>
-                      <ChevronUpIcon className="size-4 text-subtle" />
-                    </DropdownButton>
-                    {userMenu}
-                  </Dropdown>
-                </SidebarFooter>
-              )}
             </Sidebar>
           </div>
         </>
