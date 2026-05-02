@@ -168,6 +168,10 @@ export function HueLightTile({
   function tap() {
     if (wasLongPressRef.current) return
     if (selectionMode && onToggleSelect) onToggleSelect(sensor.id)
+    // Outside select mode, tapping the tile body opens the color editor.
+    // The bulb-icon button and the brightness slider both stopPropagation,
+    // so this only fires on body / name / state-label taps.
+    else onEditSensor(sensor.id)
   }
 
   const items: TileMenuItem[] = [
@@ -207,23 +211,22 @@ export function HueLightTile({
 
   return (
     <div
-      role={selectionMode ? 'button' : undefined}
-      tabIndex={selectionMode ? 0 : undefined}
-      onClick={selectionMode ? tap : undefined}
-      onKeyDown={selectionMode ? (e) => {
+      role="button"
+      tabIndex={0}
+      onClick={tap}
+      onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); tap() }
-      } : undefined}
+      }}
       style={{ WebkitTouchCallout: 'none', userSelect: 'none' }}
       data-selected={selected ? 'true' : undefined}
       {...pressHandlers}
       className={[
-        'group/tile relative flex flex-col items-center gap-3 rounded-2xl p-4 ring-1 transition',
+        'group/tile relative flex cursor-pointer flex-col items-center gap-3 rounded-2xl p-4 ring-1 transition focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent',
         !reachable
           ? 'bg-error/[0.04] ring-error/30'
           : selected
             ? 'bg-accent-soft ring-2 ring-accent dark:bg-accent/15'
             : 'bg-surface ring-default hover:bg-surface-2 dark:ring-white/10 dark:hover:bg-white/[0.02]',
-        selectionMode ? 'cursor-pointer' : '',
       ].join(' ')}
     >
       <button
