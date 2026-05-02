@@ -136,10 +136,15 @@ export function LightGroupDetailModal({
             {sortedMembers.map((m, i) => {
               const palette = LIGHT_THEMES[localTheme ?? group.theme]?.bulbPalette ?? []
               const override = colorOverrides?.[m.id]
+              // Visualize the theme signature on every member's bulb in the row,
+              // not just color-capable ones — hardware capability gates the
+              // physical paint, but the UI consistently reflects "this is the
+              // theme color slot for this light". Without this, on/off-only bulbs
+              // fell through to bg-accent (the active app scheme) and broke the
+              // visual story when the rest of the row was painted in palette
+              // colors.
               const accentColor = override
-                ?? (m.capabilities?.color && palette.length > 0
-                  ? palette[i % palette.length]
-                  : undefined)
+                ?? (palette.length > 0 ? palette[i % palette.length] : undefined)
               return (
                 <li key={m.id}>
                   <LightGroupDetailRow
