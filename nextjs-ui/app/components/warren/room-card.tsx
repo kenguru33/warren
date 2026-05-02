@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import {
+  PencilSquareIcon,
   PlusIcon,
   Squares2X2Icon,
   TrashIcon,
@@ -237,7 +238,16 @@ export function RoomCard({
   // Room-level actions only. Light-specific actions ("Group lights…") live on
   // the Lights section header alongside the MasterLightToggle, so each kebab's
   // scope matches the user's mental model when they reach for it.
+  //
+  // "Rename room" is also reachable by tapping the heading directly — the menu
+  // entry is the discoverable form; the heading-tap is a power-user shortcut.
   const roomMenuItems: TileMenuItem[] = [
+    {
+      key: 'rename-room',
+      label: 'Rename room',
+      icon: <PencilSquareIcon data-slot="icon" />,
+      onSelect: () => startRename(),
+    },
     {
       key: 'add-device',
       label: 'Add device',
@@ -419,10 +429,11 @@ export function RoomCard({
                     <HueLightTile
                       key={light.id}
                       sensor={light}
-                          colorOverride={lightColorOverrides?.[light.id]}
+                      colorOverride={lightColorOverrides?.[light.id]}
                       selected={selectedLightIds.has(light.id)}
                       selectionMode={selectionMode !== 'idle'}
                       onEditSensor={onEditSensor}
+                      onRenameSensor={onRenameSensor}
                       onRemoveSensor={onRemoveSensor}
                       onHideSensor={onHideSensor}
                       onToggleSelect={toggleLightSelection}
