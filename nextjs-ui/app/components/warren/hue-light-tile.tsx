@@ -14,12 +14,17 @@ function briFromHue(b: number): number {
 export function HueLightTile({
   sensor,
   editing,
+  colorOverride,
   onEditSensor,
   onRemoveSensor,
   onToggled,
 }: {
   sensor: SensorView
   editing: boolean
+  /** Hex color the user picked in EditLightModal this session. Painted on the
+   *  bulb-icon background when the light is on so the tile reflects the
+   *  light's color choice. Falls back to bg-accent-soft when undefined. */
+  colorOverride?: string
   onEditSensor: (sensorId: number) => void
   onRemoveSensor: (sensorId: number) => void
   onToggled: () => void
@@ -144,11 +149,25 @@ export function HueLightTile({
         disabled={pending || !reachable}
         title={localOn ? 'Turn off' : 'Turn on'}
         onClick={(e) => { e.stopPropagation(); toggleOn() }}
+        // When on AND the user has picked a color in EditLightModal this
+        // session, paint the bulb background with that color so the tile
+        // reflects the light's actual color choice — same treatment as
+        // LightGroupDetailRow uses for in-group bulbs.
+        style={
+          localOn && reachable && colorOverride
+            ? {
+                backgroundColor: colorOverride,
+                boxShadow: `0 4px 12px -2px ${colorOverride}80, inset 0 0 0 1px ${colorOverride}`,
+              }
+            : undefined
+        }
         className={[
           'relative flex size-12 shrink-0 items-center justify-center rounded-2xl text-xl transition-colors',
           'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent',
           localOn && reachable
-            ? 'bg-accent-soft text-accent-strong ring-1 ring-accent/30 dark:bg-accent/15 dark:ring-accent/30'
+            ? colorOverride
+              ? 'text-white'
+              : 'bg-accent-soft text-accent-strong ring-1 ring-accent/30 dark:bg-accent/15 dark:ring-accent/30'
             : 'bg-surface ring-1 ring-default',
           pending || !reachable ? 'opacity-50 cursor-not-allowed' : '',
         ].join(' ')}

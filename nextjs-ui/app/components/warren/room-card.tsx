@@ -67,6 +67,7 @@ export function RoomCard({
   onUngroup,
   onMasterToggled,
   onOpenGroupDetail,
+  lightColorOverrides,
 }: {
   room: RoomWithSensors
   onSaveRef: (roomId: number, refTemp: number | null, refHumidity: number | null) => void
@@ -82,6 +83,9 @@ export function RoomCard({
   onUngroup: (groupId: number) => void
   onMasterToggled: () => void
   onOpenGroupDetail: (groupId: number) => void
+  /** Per-sensor color picks from EditLightModal — painted on the matching
+   *  HueLightTile's bulb-icon background when on. */
+  lightColorOverrides?: Record<number, string>
 }) {
   const tempSensor   = room.sensors.find(s => s.type === 'temperature') ?? null
   const humSensor    = room.sensors.find(s => s.type === 'humidity')    ?? null
@@ -321,6 +325,7 @@ export function RoomCard({
                       key={light.id}
                       sensor={light}
                       editing={editing}
+                      colorOverride={lightColorOverrides?.[light.id]}
                       onEditSensor={onEditSensor}
                       onRemoveSensor={onRemoveSensor}
                       onToggled={onMasterToggled}

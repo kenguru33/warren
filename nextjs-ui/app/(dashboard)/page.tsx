@@ -199,6 +199,7 @@ export default function DashboardPage() {
                 }}
                 onMasterToggled={refresh}
                 onOpenGroupDetail={(groupId) => setGroupDetailId(groupId)}
+                lightColorOverrides={lightColorOverrides}
               />
             ))}
           </div>
