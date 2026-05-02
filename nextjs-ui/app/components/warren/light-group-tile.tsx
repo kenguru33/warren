@@ -167,7 +167,7 @@ export function LightGroupTile({
       onClick={() => onOpenDetail(group.id)}
       onKeyDown={handleKey}
       className={[
-        'group/tile relative flex flex-col items-center gap-3 rounded-2xl px-4 pt-4 pb-3.5 ring-1 transition cursor-pointer',
+        'group/tile relative flex flex-col items-center gap-3 rounded-2xl p-4 ring-1 transition cursor-pointer',
         'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--theme-on-border)]',
         displayState === 'mixed'
           ? 'bg-surface ring-warning/60 hover:bg-surface-2 dark:ring-warning/40 dark:hover:bg-white/[0.02]'

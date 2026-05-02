@@ -204,7 +204,7 @@ export function RoomCard({
               if (e.key === 'Escape') setEditing(false)
             }}
             maxLength={60}
-            className="flex-1"
+            className="flex-1 [&_input]:!text-lg/6 [&_input]:!font-semibold [&_input]:!tracking-tight"
           />
         ) : (
           <Heading level={2} className="truncate !text-lg/6 font-semibold tracking-tight">{room.name}</Heading>

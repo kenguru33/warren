@@ -2,7 +2,7 @@
 
 import type { MasterState } from '@/lib/shared/types'
 import { Badge } from '@/app/components/badge'
-import { Switch } from '@/app/components/switch'
+import { AppSwitch } from './app-switch'
 
 export function MasterLightToggle({
   master,
@@ -42,15 +42,14 @@ export function MasterLightToggle({
             : isMixed
               ? 'bg-warning/10 ring-warning/30'
               : 'bg-surface ring-default/70 dark:ring-white/10',
-          pending ? 'opacity-70' : '',
+          pending ? 'opacity-50' : '',
         ].join(' ')}
       >
-        <Switch
-          color="dark/zinc"
+        <AppSwitch
           checked={checked}
           disabled={pending}
           onChange={() => onToggle(nextOn)}
-          aria-label={ariaLabel}
+          label={ariaLabel}
         />
         <div className="flex min-w-0 flex-col leading-tight">
           {label && <span className="text-[0.7rem] font-semibold tracking-wide text-subtle uppercase">{label}</span>}
@@ -77,12 +76,11 @@ export function MasterLightToggle({
 
   return (
     <div className="inline-flex h-8 items-center gap-2">
-      <Switch
-        color="dark/zinc"
+      <AppSwitch
         checked={checked}
         disabled={pending}
         onChange={() => onToggle(nextOn)}
-        aria-label={ariaLabel}
+        label={ariaLabel}
       />
       <span className="text-sm/5 font-medium text-muted">{stateLabel}</span>
       <span className="text-xs/5 tabular-nums text-subtle">· {master.memberCount}</span>

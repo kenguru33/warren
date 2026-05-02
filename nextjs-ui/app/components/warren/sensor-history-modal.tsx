@@ -46,6 +46,8 @@ export function SensorHistoryModal({
   const xPos = (time: number) => PL + ((time - startTime) / (24 * 60 * 60 * 1000)) * plotW
 
   const unit = sensor.type === 'temperature' ? '°C' : sensor.type === 'humidity' ? '%' : ''
+  // Chart line colors encode physical-quantity semantics (warm = temperature,
+  // blue = humidity, violet = motion fallback). Intentionally scheme-independent.
   const lineColor = sensor.type === 'temperature' ? '#ff9f5a' : sensor.type === 'humidity' ? '#4a9eff' : '#a78bfa'
   const title = `${ICONS[sensor.type] ?? '📡'} ${sensor.label ?? LABELS[sensor.type] ?? sensor.type}`
 

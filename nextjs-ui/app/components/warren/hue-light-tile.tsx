@@ -133,7 +133,7 @@ export function HueLightTile({
   return (
     <div
       className={[
-        'group/tile relative flex flex-col items-center gap-3 rounded-2xl px-4 pt-4 pb-3.5 ring-1 transition',
+        'group/tile relative flex flex-col items-center gap-3 rounded-2xl p-4 ring-1 transition',
         !reachable
           ? 'bg-error/[0.04] ring-error/30'
           : 'bg-surface ring-default hover:bg-surface-2 dark:ring-white/10 dark:hover:bg-white/[0.02]',

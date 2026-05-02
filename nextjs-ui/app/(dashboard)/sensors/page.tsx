@@ -19,7 +19,8 @@ import { Description, Field, Label } from '@/app/components/fieldset'
 import { Heading } from '@/app/components/heading'
 import { Input } from '@/app/components/input'
 import { Text } from '@/app/components/text'
-import { Switch, SwitchField } from '@/app/components/switch'
+import { SwitchField } from '@/app/components/switch'
+import { AppSwitch } from '@/app/components/warren/app-switch'
 import { ConfirmDialog } from '@/app/components/warren/confirm-dialog'
 import { SensorConfigModal } from '@/app/components/warren/sensor-config-modal'
 
@@ -169,9 +170,9 @@ export default function SensorsPage() {
               className="min-w-[220px]"
               placeholder="Search sensors…"
             />
-            <SwitchField className="!grid-cols-[auto_auto]">
+            <SwitchField className="!grid-cols-[auto_auto] !gap-x-3">
               <Label>Unused only</Label>
-              <Switch checked={onlyUnused} onChange={setOnlyUnused} color="dark/zinc" />
+              <AppSwitch checked={onlyUnused} onChange={setOnlyUnused} label="Show only unused" />
             </SwitchField>
           </div>
         </div>
@@ -216,6 +217,8 @@ export default function SensorsPage() {
                   </span>
                   <span className="text-xs/5 text-subtle tabular-nums">{formatAge(sensor.lastRecordedAt)}</span>
                   {sensor.type === 'temperature' && (
+                    // Heater = orange, fan = sky. Same fixed indicator colors as
+                    // ClimateTile — physical meaning is scheme-independent.
                     <div className="mt-1 flex gap-1">
                       <span className={`inline-flex items-center transition-colors ${sensor.heaterActive ? 'text-orange-500' : 'text-subtle/60'}`} title="Heater">
                         <svg className="size-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round">

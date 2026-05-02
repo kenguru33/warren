@@ -88,6 +88,9 @@ export function ClimateTile({
       )}
 
       {isTemp && (
+        // Heater = orange, fan = sky. Intentionally fixed indicator colors —
+        // they encode physical meaning (heat / cool) that's independent of
+        // the active color scheme.
         <div className="mt-1 flex gap-1.5">
           <span className={`inline-flex items-center transition-colors ${sensor.heaterActive ? 'text-orange-500' : 'text-default'}`} title="Heater">
             <svg className="size-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round">

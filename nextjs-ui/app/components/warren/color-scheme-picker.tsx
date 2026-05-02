@@ -11,6 +11,8 @@ const LABELS: Record<ColorSchemeKey, string> = {
   'zinc-violet': 'Zinc + Violet',
 }
 
+// Self-referential previews: each swatch is the literal accent of the scheme it
+// activates. Intentionally bypasses the semantic-token system.
 const SWATCH_BG: Record<ColorSchemeKey, string> = {
   'zinc-indigo': 'bg-indigo-500',
   'slate-sky': 'bg-sky-500',
