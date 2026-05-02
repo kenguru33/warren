@@ -116,13 +116,24 @@ export default function DashboardPage() {
     : undefined
   // Current color the bulb displays: prefer an explicit override (a previous
   // pick this session), otherwise the round-robin palette color the group
-  // would assign by member index.
+  // would assign. Must match LightGroupDetailModal's row ordering — that
+  // dialog sorts members alphabetically by display name before assigning
+  // palette colors, so the unsorted memberSensorIds order would diverge.
   const editingLightCurrentColor = (() => {
     if (!editingLight) return undefined
     const override = lightColorOverrides[editingLight.id]
     if (override) return override
     if (!editingLightGroup || !editingLightPalette?.length) return undefined
-    const idx = editingLightGroup.memberSensorIds.indexOf(editingLight.id)
+    const room = rooms.find(r => r.sensors.some(s => s.id === editingLight.id))
+    const lightsById = new Map(room?.sensors.map(s => [s.id, s]) ?? [])
+    const sortedIds = [...editingLightGroup.memberSensorIds].sort((a, b) => {
+      const sa = lightsById.get(a)
+      const sb = lightsById.get(b)
+      const na = (sa?.label?.trim() || sa?.hueName?.trim() || '').toLowerCase()
+      const nb = (sb?.label?.trim() || sb?.hueName?.trim() || '').toLowerCase()
+      return na.localeCompare(nb)
+    })
+    const idx = sortedIds.indexOf(editingLight.id)
     if (idx < 0) return undefined
     return editingLightPalette[idx % editingLightPalette.length]
   })()
