@@ -33,7 +33,6 @@ import {
   DropdownSection,
 } from '@/app/components/dropdown'
 import { Avatar, AvatarButton } from '@/app/components/avatar'
-import { Navbar, NavbarItem, NavbarSection, NavbarSpacer } from '@/app/components/navbar'
 import { ColorSchemePicker } from './color-scheme-picker'
 import { ThemeToggle } from './theme-toggle'
 import { InstallMenuItem } from './install-menu-item'
@@ -157,33 +156,36 @@ export function SidebarShell({ children }: { children: React.ReactNode }) {
       </div>
 
       {/* Mobile top bar — Material/Catalyst convention: [hamburger] [logo]
-          on the left as a brand cluster, avatar on the right. The full user
-          menu also lives in the drawer footer for users who reach there via
-          the hamburger. */}
-      <header className="flex items-center px-4 lg:hidden">
-        <NavbarItem onClick={() => setSidebarOpen(true)} aria-label="Open navigation">
-          <Bars3Icon data-slot="icon" />
-        </NavbarItem>
-        <Navbar>
-          <Link href="/" className="flex min-w-0 items-center gap-2">
-            <BrandMark className="h-7 w-auto shrink-0 text-text" />
-            <span className="text-sm/5 font-semibold tracking-tight text-text">Warren</span>
-          </Link>
-          <NavbarSpacer />
-          <NavbarSection>
-            {loggedIn && (
-              <Dropdown>
-                <DropdownButton as={AvatarButton} aria-label="User menu">
-                  <Avatar
-                    initials={initials}
-                    className="size-7 bg-zinc-900 text-white dark:bg-white dark:text-zinc-950"
-                  />
-                </DropdownButton>
-                {userMenu}
-              </Dropdown>
-            )}
-          </NavbarSection>
-        </Navbar>
+          on the left as a brand cluster, avatar on the far right. Hamburger
+          and avatar use matching size-9 squares for visual symmetry; the
+          BrandMark + wordmark sit between them at a slightly larger size
+          than the icons so the brand reads as the visual anchor. */}
+      <header className="flex h-14 items-center gap-3 px-3 lg:hidden">
+        <button
+          type="button"
+          onClick={() => setSidebarOpen(true)}
+          aria-label="Open navigation"
+          className="inline-flex size-9 shrink-0 items-center justify-center rounded-lg text-muted transition-colors hover:bg-default hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent dark:hover:bg-white/10 dark:hover:text-white"
+        >
+          <Bars3Icon className="size-5" />
+        </button>
+        <Link href="/" className="flex min-w-0 items-center gap-2 rounded-lg p-1.5 hover:bg-default focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">
+          <BrandMark className="h-8 w-auto shrink-0 text-text" />
+          <span className="text-base/6 font-semibold tracking-tight text-text">Warren</span>
+        </Link>
+        {loggedIn && (
+          <div className="ml-auto flex shrink-0 items-center">
+            <Dropdown>
+              <DropdownButton as={AvatarButton} aria-label="User menu">
+                <Avatar
+                  initials={initials}
+                  className="size-9 bg-zinc-900 text-white dark:bg-white dark:text-zinc-950"
+                />
+              </DropdownButton>
+              {userMenu}
+            </Dropdown>
+          </div>
+        )}
       </header>
 
       {/* Mobile drawer — full Sidebar mirror of the desktop layout: brand
