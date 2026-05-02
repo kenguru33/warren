@@ -5,6 +5,7 @@ import {
   ChartBarIcon,
   Cog6ToothIcon,
   EyeSlashIcon,
+  PencilSquareIcon,
   TrashIcon,
 } from '@heroicons/react/20/solid'
 import type { RoomReference, SensorView } from '@/lib/shared/types'
@@ -12,6 +13,7 @@ import { Badge } from '@/app/components/badge'
 import { Strong, Text } from '@/app/components/text'
 import { useLongPress } from '@/lib/hooks/use-long-press'
 import { ConfirmDialog } from './confirm-dialog'
+import { RenameDialog } from './rename-dialog'
 import { TileMenu, type TileMenuHandle, type TileMenuItem } from './tile-menu'
 
 function activate(handler: () => void) {
@@ -31,6 +33,7 @@ export function ClimateTile({
   onViewHistory,
   onEditSensor,
   onSetTarget,
+  onRenameSensor,
   onRemoveSensor,
   onHideSensor,
 }: {
@@ -41,11 +44,13 @@ export function ClimateTile({
   onViewHistory: (sensor: SensorView) => void
   onEditSensor: (sensorId: number) => void
   onSetTarget?: (variant: 'temperature' | 'humidity') => void
+  onRenameSensor?: (sensorId: number, label: string) => void
   onRemoveSensor: (sensorId: number) => void
   onHideSensor?: (sensorId: number) => void
 }) {
   const [confirmRemove, setConfirmRemove] = useState(false)
   const [confirmHide, setConfirmHide] = useState(false)
+  const [renaming, setRenaming] = useState(false)
 
   const menuRef = useRef<TileMenuHandle>(null)
   const { handlers: pressHandlers, wasLongPressRef } = useLongPress(() => menuRef.current?.open())
@@ -83,6 +88,12 @@ export function ClimateTile({
       label: 'Set target',
       icon: <ChartBarIcon data-slot="icon" />,
       onSelect: () => onSetTarget(variant),
+    }] : []),
+    ...(onRenameSensor ? [{
+      key: 'rename',
+      label: 'Rename',
+      icon: <PencilSquareIcon data-slot="icon" />,
+      onSelect: () => setRenaming(true),
     }] : []),
     ...(isTemp ? [{
       key: 'configure',
@@ -186,6 +197,14 @@ export function ClimateTile({
         tone="default"
         onConfirm={() => { onHideSensor?.(sensor.id); setConfirmHide(false) }}
         onCancel={() => setConfirmHide(false)}
+      />
+      <RenameDialog
+        open={renaming}
+        title={`Rename ${label.toLowerCase()} sensor`}
+        currentName={sensor.label}
+        placeholder={label}
+        onSave={name => onRenameSensor?.(sensor.id, name)}
+        onClose={() => setRenaming(false)}
       />
     </div>
   )

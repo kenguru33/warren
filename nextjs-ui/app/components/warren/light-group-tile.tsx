@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties, type Keyboard
 import {
   PaintBrushIcon,
   PencilSquareIcon,
+  TagIcon,
   TrashIcon,
   UsersIcon,
 } from '@heroicons/react/20/solid'
@@ -13,6 +14,7 @@ import { useTheme } from '@/lib/hooks/use-theme'
 import { Badge } from '@/app/components/badge'
 import { useLongPress } from '@/lib/hooks/use-long-press'
 import { ConfirmDialog } from './confirm-dialog'
+import { RenameDialog } from './rename-dialog'
 import { TileMenu, type TileMenuHandle, type TileMenuItem } from './tile-menu'
 
 export function LightGroupTile({
@@ -21,6 +23,7 @@ export function LightGroupTile({
   onUngroup,
   onOpenDetail,
   onEditMembers,
+  onRenameGroup,
   onSetTheme,
   onToggled,
 }: {
@@ -29,10 +32,12 @@ export function LightGroupTile({
   onUngroup: (groupId: number) => void
   onOpenDetail: (groupId: number) => void
   onEditMembers?: (groupId: number) => void
+  onRenameGroup?: (groupId: number, name: string) => void
   onSetTheme?: (groupId: number) => void
   onToggled: () => void
 }) {
   const [confirmUngroup, setConfirmUngroup] = useState(false)
+  const [renaming, setRenaming] = useState(false)
   const [localOn, setLocalOn] = useState<boolean | null>(null)
   const [localBri, setLocalBri] = useState<number | null>(null)
   const [dragging, setDragging] = useState(false)
@@ -175,6 +180,12 @@ export function LightGroupTile({
       icon: <UsersIcon data-slot="icon" />,
       onSelect: () => onOpenDetail(group.id),
     },
+    ...(onRenameGroup ? [{
+      key: 'rename',
+      label: 'Rename group',
+      icon: <TagIcon data-slot="icon" />,
+      onSelect: () => setRenaming(true),
+    }] : []),
     ...(onSetTheme ? [{
       key: 'theme',
       label: 'Set theme',
@@ -313,6 +324,13 @@ export function LightGroupTile({
         confirmLabel="Ungroup"
         onConfirm={() => { onUngroup(group.id); setConfirmUngroup(false) }}
         onCancel={() => setConfirmUngroup(false)}
+      />
+      <RenameDialog
+        open={renaming}
+        title="Rename light group"
+        currentName={group.name}
+        onSave={name => onRenameGroup?.(group.id, name)}
+        onClose={() => setRenaming(false)}
       />
     </div>
   )

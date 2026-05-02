@@ -98,6 +98,26 @@ export function useRooms() {
     await mutate()
   }, [rooms, mutate])
 
+  const renameSensor = useCallback(async (sensorId: number, label: string) => {
+    await fetch(`/api/sensors/${sensorId}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ label: label.trim() || null }),
+    })
+    await mutate()
+  }, [mutate])
+
+  const renameLightGroup = useCallback(async (groupId: number, name: string) => {
+    await fetch(`/api/light-groups/${groupId}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ name: name.trim() }),
+    })
+    await mutate()
+  }, [mutate])
+
   const hideSensor = useCallback(async (sensorId: number) => {
     // Look up the sensor's deviceId + type so the block API can find it again
     // even after we've detached it from any room.
@@ -128,6 +148,8 @@ export function useRooms() {
     addSensor,
     removeSensor,
     hideSensor,
+    renameSensor,
+    renameLightGroup,
     refresh,
   }
 }

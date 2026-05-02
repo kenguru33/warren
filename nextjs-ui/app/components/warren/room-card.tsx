@@ -45,6 +45,8 @@ export function RoomCard({
   onMasterToggled,
   onOpenGroupDetail,
   onHideSensor,
+  onRenameSensor,
+  onRenameLightGroup,
   onSaveReference,
   lightColorOverrides,
 }: {
@@ -60,6 +62,8 @@ export function RoomCard({
   onMasterToggled: () => void
   onOpenGroupDetail: (groupId: number) => void
   onHideSensor?: (sensorId: number) => void
+  onRenameSensor?: (sensorId: number, label: string) => void
+  onRenameLightGroup?: (groupId: number, name: string) => void
   onSaveReference?: (roomId: number, ref: RoomReference) => void
   /** Per-sensor color picks from EditLightModal — painted on the matching
    *  HueLightTile's bulb-icon background when on. */
@@ -317,6 +321,7 @@ export function RoomCard({
                   onViewHistory={onViewHistory}
                   onEditSensor={onEditSensor}
                   onSetTarget={onSaveReference ? setTargetVariant : undefined}
+                  onRenameSensor={onRenameSensor}
                   onRemoveSensor={onRemoveSensor}
                   onHideSensor={onHideSensor}
                 />
@@ -330,6 +335,7 @@ export function RoomCard({
                   onViewHistory={onViewHistory}
                   onEditSensor={onEditSensor}
                   onSetTarget={onSaveReference ? setTargetVariant : undefined}
+                  onRenameSensor={onRenameSensor}
                   onRemoveSensor={onRemoveSensor}
                   onHideSensor={onHideSensor}
                 />
@@ -341,6 +347,7 @@ export function RoomCard({
                   recentMotion={recentMotion(motionSensor.lastMotion)}
                   motionLabel={motionLabelFor(motionSensor.lastMotion)}
                   onViewHistory={onViewHistory}
+                  onRenameSensor={onRenameSensor}
                   onRemoveSensor={onRemoveSensor}
                   onHideSensor={onHideSensor}
                 />
@@ -356,6 +363,7 @@ export function RoomCard({
                   sensor={cam}
                   recentMotion={recentMotion(cam.lastMotion)}
                   onOpenLive={onOpenLive}
+                  onRenameSensor={onRenameSensor}
                   onRemoveSensor={onRemoveSensor}
                   onHideSensor={onHideSensor}
                 />
@@ -399,6 +407,7 @@ export function RoomCard({
                       onOpenDetail={onOpenGroupDetail}
                       onSetTheme={onOpenGroupDetail}
                       onEditMembers={startEditMembers}
+                      onRenameGroup={onRenameLightGroup}
                       onToggled={onMasterToggled}
                     />
                   ))}
