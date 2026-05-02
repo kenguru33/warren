@@ -32,7 +32,7 @@ import {
   DropdownMenu,
   DropdownSection,
 } from '@/app/components/dropdown'
-import { Avatar } from '@/app/components/avatar'
+import { Avatar, AvatarButton } from '@/app/components/avatar'
 import { Navbar, NavbarItem, NavbarSection, NavbarSpacer } from '@/app/components/navbar'
 import { ColorSchemePicker } from './color-scheme-picker'
 import { ThemeToggle } from './theme-toggle'
@@ -153,19 +153,32 @@ export function SidebarShell({ children }: { children: React.ReactNode }) {
         </Sidebar>
       </div>
 
-      {/* Mobile top bar — hamburger far left, brand mark on the right.
-          The user menu lives in the drawer footer (mirroring desktop). */}
+      {/* Mobile top bar — Material/Catalyst convention: [hamburger] [logo]
+          on the left as a brand cluster, avatar on the right. The full user
+          menu also lives in the drawer footer for users who reach there via
+          the hamburger. */}
       <header className="flex items-center px-4 lg:hidden">
         <NavbarItem onClick={() => setSidebarOpen(true)} aria-label="Open navigation">
           <Bars3Icon data-slot="icon" />
         </NavbarItem>
         <Navbar>
+          <Link href="/" className="flex min-w-0 items-center gap-2">
+            <BrandMark className="size-7 shrink-0 text-text" />
+            <span className="text-sm/5 font-semibold tracking-tight text-text">Warren</span>
+          </Link>
           <NavbarSpacer />
           <NavbarSection>
-            <Link href="/" className="flex min-w-0 items-center gap-2">
-              <BrandMark className="size-7 shrink-0 text-text" />
-              <span className="text-sm/5 font-semibold tracking-tight text-text">Warren</span>
-            </Link>
+            {loggedIn && (
+              <Dropdown>
+                <DropdownButton as={AvatarButton} aria-label="User menu">
+                  <Avatar
+                    initials={initials}
+                    className="size-7 bg-zinc-900 text-white dark:bg-white dark:text-zinc-950"
+                  />
+                </DropdownButton>
+                {userMenu}
+              </Dropdown>
+            )}
           </NavbarSection>
         </Navbar>
       </header>
