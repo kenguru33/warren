@@ -167,10 +167,10 @@ export function SidebarShell({ children }: { children: React.ReactNode }) {
           aria-label="Open navigation"
           className="inline-flex size-9 shrink-0 items-center justify-center rounded-lg text-muted transition-colors hover:bg-default hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent dark:hover:bg-white/10 dark:hover:text-white"
         >
-          <Bars3Icon className="size-5" />
+          <Bars3Icon className="size-6" />
         </button>
         <Link href="/" className="flex min-w-0 items-center gap-2 rounded-lg p-1.5 hover:bg-default focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">
-          <BrandMark className="h-8 w-auto shrink-0 text-text" />
+          <BrandMark className="h-9 w-auto shrink-0 text-text" />
           <span className="text-base/6 font-semibold tracking-tight text-text">Warren</span>
         </Link>
         {loggedIn && (
