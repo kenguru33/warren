@@ -153,16 +153,12 @@ export function SidebarShell({ children }: { children: React.ReactNode }) {
         </Sidebar>
       </div>
 
-      {/* Mobile top bar */}
+      {/* Mobile top bar — hamburger far left, brand mark + user menu on the right */}
       <header className="flex items-center px-4 lg:hidden">
         <NavbarItem onClick={() => setSidebarOpen(true)} aria-label="Open navigation">
           <Bars3Icon data-slot="icon" />
         </NavbarItem>
         <Navbar>
-          <Link href="/" className="flex min-w-0 items-center gap-2">
-            <BrandMark className="size-7 shrink-0 text-text" />
-            <span className="text-sm/5 font-semibold tracking-tight text-text">Warren</span>
-          </Link>
           <NavbarSpacer />
           <NavbarSection>
             {loggedIn && (
@@ -176,6 +172,10 @@ export function SidebarShell({ children }: { children: React.ReactNode }) {
                 {userMenu}
               </Dropdown>
             )}
+            <Link href="/" className="ml-2 flex min-w-0 items-center gap-2">
+              <BrandMark className="size-7 shrink-0 text-text" />
+              <span className="text-sm/5 font-semibold tracking-tight text-text">Warren</span>
+            </Link>
           </NavbarSection>
         </Navbar>
       </header>
