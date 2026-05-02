@@ -220,6 +220,13 @@ export default function DashboardPage() {
         onClose={() => setGroupDetailId(null)}
         onToggled={refresh}
         onEditSensor={handleEditSensor}
+        onClearColorOverrides={(sensorIds) => {
+          setLightColorOverrides(prev => {
+            const next = { ...prev }
+            for (const id of sensorIds) delete next[id]
+            return next
+          })
+        }}
       />
 
       {historySensor && (
