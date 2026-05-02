@@ -176,12 +176,12 @@ export function SidebarShell({ children }: { children: React.ReactNode }) {
         {loggedIn && (
           <div className="ml-auto flex shrink-0 items-center">
             <Dropdown>
-              <DropdownButton as={AvatarButton} aria-label="User menu">
-                <Avatar
-                  initials={initials}
-                  className="size-9 bg-zinc-900 text-white dark:bg-white dark:text-zinc-950"
-                />
-              </DropdownButton>
+              <DropdownButton
+                as={AvatarButton}
+                aria-label="User menu"
+                initials={initials}
+                className="size-9 bg-zinc-900 text-white dark:bg-white dark:text-zinc-950"
+              />
               {userMenu}
             </Dropdown>
           </div>
