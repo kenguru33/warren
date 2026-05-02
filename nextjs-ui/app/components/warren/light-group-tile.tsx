@@ -205,21 +205,22 @@ export function LightGroupTile({
         </span>
       </button>
 
-      <div className="flex flex-col items-center gap-1 w-full min-w-0 text-center">
+      <div className="flex flex-col items-center gap-0.5 w-full min-w-0 text-center">
         <span className="text-sm font-semibold text-text truncate max-w-full" title={group.name}>{group.name}</span>
-        <span className="text-[0.7rem] font-medium text-subtle">{stateLabel} · {group.memberCount}</span>
-        {/* Theme palette signature — small dots showing the bulb colors this
-         *  group cycles through. Same palette the LightThemePicker shows next
-         *  to each theme name, so picking a theme produces a recognizable mark. */}
-        <div className="mt-0.5 flex items-center gap-1" aria-hidden title={theme.label}>
-          {theme.bulbPalette.map(c => (
-            <span
-              key={c}
-              className="size-2 rounded-full ring-1 ring-white/15 shadow-sm"
-              style={{ background: c }}
-            />
-          ))}
-        </div>
+        <span className="inline-flex items-center gap-2 text-[0.7rem] font-medium text-subtle">
+          <span>{stateLabel} · {group.memberCount}</span>
+          {/* Theme palette signature inline with the state line — keeps the tile
+           *  compact while still making the active theme visible at a glance. */}
+          <span className="inline-flex items-center gap-0.5" aria-hidden title={theme.label}>
+            {theme.bulbPalette.map(c => (
+              <span
+                key={c}
+                className="size-1.5 rounded-full ring-1 ring-white/15"
+                style={{ background: c }}
+              />
+            ))}
+          </span>
+        </span>
       </div>
 
       {group.hasBrightnessCapableMember && (
