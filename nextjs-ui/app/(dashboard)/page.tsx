@@ -256,7 +256,6 @@ export default function DashboardPage() {
         groupName={editingLightGroup?.name}
         currentColor={editingLightCurrentColor}
         onClose={() => setEditingLight(null)}
-        onSaved={refresh}
         onColorApplied={(sensorId, hex) => {
           setLightColorOverrides(prev => ({ ...prev, [sensorId]: hex }))
         }}
