@@ -1,6 +1,6 @@
 import { getDb } from '@/lib/server/db'
 import { queryInflux } from '@/lib/server/influxdb'
-import { fetchGroups, fetchMembers } from '@/lib/server/light-groups'
+import { fetchGroups, fetchMembers, maybeCoerceLightTheme } from '@/lib/server/light-groups'
 import type { SensorType } from '@/lib/shared/types'
 
 const VALID_TYPES: SensorType[] = ['temperature', 'humidity', 'camera', 'motion', 'light', 'lightlevel']
@@ -151,7 +151,7 @@ export async function GET() {
       lightOn: s.hue_on === null ? null : s.hue_on === 1,
       lightBrightness: s.hue_bri,
       lightReachable: s.hue_reachable === null ? null : s.hue_reachable === 1,
-      lightTheme: s.hue_theme,
+      lightTheme: s.device_id ? maybeCoerceLightTheme(db, s.device_id, s.hue_theme) : null,
       hueName: s.hue_name,
       groupId: grp?.id ?? null,
       groupName: grp?.name ?? null,

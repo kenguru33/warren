@@ -120,7 +120,11 @@ export function LightGroupDetailModal({
         <Field>
           <Label>Theme</Label>
           <div className="mt-1.5">
-            <LightThemePicker value={localTheme ?? group.theme} onChange={onThemeChange} />
+            <LightThemePicker
+              value={localTheme ?? group.theme}
+              onChange={onThemeChange}
+              hideColors={!group.hasColorCapableMember}
+            />
           </div>
         </Field>
         {themeError && (

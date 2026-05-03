@@ -170,7 +170,7 @@ export function EditLightModal({
           <Field>
             <Label>Theme</Label>
             <div className="mt-1.5">
-              <LightThemePicker value={theme ?? 'slate'} onChange={applyTheme} />
+              <LightThemePicker value={theme ?? 'everyday'} onChange={applyTheme} hideColors />
             </div>
           </Field>
         )}

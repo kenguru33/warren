@@ -52,9 +52,11 @@ function SectionHeading({ children }: { children: React.ReactNode }) {
 export function LightThemePicker({
   value,
   onChange,
+  hideColors = false,
 }: {
   value: LightThemeKey
   onChange: (key: LightThemeKey) => void
+  hideColors?: boolean
 }) {
   const selectedTheme = LIGHT_THEMES[value]
 
@@ -62,8 +64,12 @@ export function LightThemePicker({
     <Listbox value={value} onChange={onChange} aria-label={selectedTheme.label}>
       <SectionHeading>Whites</SectionHeading>
       {WHITE_PRESET_KEYS.map(k => <ThemeOption key={k} theme={LIGHT_THEMES[k]} />)}
-      <SectionHeading>Colors</SectionHeading>
-      {colorKeys.map(k => <ThemeOption key={k} theme={LIGHT_THEMES[k]} />)}
+      {!hideColors && (
+        <>
+          <SectionHeading>Colors</SectionHeading>
+          {colorKeys.map(k => <ThemeOption key={k} theme={LIGHT_THEMES[k]} />)}
+        </>
+      )}
     </Listbox>
   )
 }
