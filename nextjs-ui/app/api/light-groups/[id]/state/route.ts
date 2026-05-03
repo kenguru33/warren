@@ -2,6 +2,7 @@ import type { NextRequest } from 'next/server'
 import { getDb } from '@/lib/server/db'
 import {
   fanOutLightCommand,
+  maybeCoerceGroupTheme,
   validateGroupTheme,
   type FanOutMember,
 } from '@/lib/server/light-groups'
@@ -43,7 +44,10 @@ export async function POST(req: NextRequest, ctx: RouteContext<'/api/light-group
       return Response.json({ statusCode: 409, message: 'group has no controllable lights' }, { status: 409 })
     }
 
-    const theme = resolveLightTheme(themeOverride ?? group.theme)
+    // Coerce a stale color theme on a now-white-only group before reading group.theme
+    // for fan-out paint. Idempotent: a no-op for already-coerced or qualifying groups.
+    const coerced = maybeCoerceGroupTheme(db, group, members)
+    const theme = resolveLightTheme(themeOverride ?? coerced.theme)
     const summary = await fanOutLightCommand(db, members, body, theme)
     return Response.json(summary)
   } catch (err) {

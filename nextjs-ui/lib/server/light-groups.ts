@@ -1,12 +1,14 @@
 import type { Database } from 'better-sqlite3'
-import type { LightGroupState, LightGroupView, MasterState, SensorView } from '@/lib/shared/types'
+import type { LightGroupState, LightGroupView, MasterState, SensorCapabilities, SensorView } from '@/lib/shared/types'
 import {
   isValidLightThemeKey,
   resolveLightTheme,
   paletteColorFor,
   hexToXy,
   whitePresetPayload,
+  WHITE_PRESET_KEYS,
   type LightTheme,
+  type LightThemeKey,
 } from '@/lib/shared/light-themes'
 import { setLightState, HueUnauthorizedError, HueUnreachableError } from './hue/client'
 import { HttpError } from './errors'
@@ -179,6 +181,7 @@ export function buildGroupView(group: GroupRow, members: SensorView[]): LightGro
   const { state, unreachableCount } = computeOnOffState(members)
 
   const briCapable = members.filter(m => m.capabilities?.brightness === true)
+  const colorCapable = members.filter(m => m.capabilities?.color === true)
   const withBri = briCapable.filter(m => typeof m.lightBrightness === 'number')
   const avg = withBri.length
     ? Math.round(withBri.reduce((s, m) => s + (m.lightBrightness ?? 0), 0) / withBri.length)
@@ -194,6 +197,7 @@ export function buildGroupView(group: GroupRow, members: SensorView[]): LightGro
     brightness: avg === null ? null : Math.round((avg / 254) * 100),
     unreachableCount,
     hasBrightnessCapableMember: briCapable.length > 0,
+    hasColorCapableMember: colorCapable.length > 0,
     theme: resolveLightTheme(group.theme).key,
   }
 }
@@ -209,6 +213,66 @@ export function pruneEmptyGroups(db: Database) {
     DELETE FROM light_groups
     WHERE id NOT IN (SELECT DISTINCT group_id FROM light_group_members)
   `).run()
+}
+
+// "Color theme on a context that no longer offers it" coercion. Whites are
+// universally available; color themes (slate, amber, …) are restricted to
+// groups with at least one color-capable member. Anything outside that set
+// gets a one-shot in-place rewrite to 'everyday' on first read.
+const COERCION_TARGET: LightThemeKey = 'everyday'
+
+function isColorThemeKey(key: string | null | undefined): key is LightThemeKey {
+  return typeof key === 'string'
+    && isValidLightThemeKey(key)
+    && !WHITE_PRESET_KEYS.includes(key)
+}
+
+function memberIsColorCapable(m: { capabilities?: SensorCapabilities | string | null }): boolean {
+  const caps = m.capabilities
+  if (!caps) return false
+  if (typeof caps === 'string') {
+    try {
+      const parsed = JSON.parse(caps) as SensorCapabilities
+      return parsed?.color === true
+    } catch {
+      return false
+    }
+  }
+  return caps.color === true
+}
+
+// Group-level coercion. A group's persisted color theme is rewritten to
+// 'everyday' when the group currently has zero color-capable members.
+// Idempotent: once rewritten, the eligibility test fails on the next read.
+// Generic on the group shape so callers that select only `{ id, theme }` work
+// alongside callers passing a full GroupRow.
+export function maybeCoerceGroupTheme<T extends { id: number; theme: string | null }>(
+  db: Database,
+  group: T,
+  members: ReadonlyArray<{ capabilities?: SensorCapabilities | string | null }>,
+): T {
+  if (!isColorThemeKey(group.theme)) return group
+  if (members.some(memberIsColorCapable)) return group
+
+  db.prepare('UPDATE light_groups SET theme = ? WHERE id = ?').run(COERCION_TARGET, group.id)
+  return { ...group, theme: COERCION_TARGET }
+}
+
+// Per-light coercion. Single-light pickers never offer color themes
+// regardless of bulb capabilities, so any persisted color key on a
+// hue_light_state row is rewritten to 'everyday' on first read.
+export function maybeCoerceLightTheme(
+  db: Database,
+  deviceId: string,
+  currentTheme: string | null,
+): LightThemeKey | null {
+  if (currentTheme === null) return null
+  if (!isColorThemeKey(currentTheme)) {
+    return isValidLightThemeKey(currentTheme) ? currentTheme : null
+  }
+  db.prepare('UPDATE hue_light_state SET theme = ?, updated_at = ? WHERE device_id = ?')
+    .run(COERCION_TARGET, Date.now(), deviceId)
+  return COERCION_TARGET
 }
 
 export function assertLightSensorsInRoom(db: Database, roomId: number, sensorIds: number[]) {

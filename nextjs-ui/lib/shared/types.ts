@@ -46,6 +46,7 @@ export interface LightGroupView {
   brightness: number | null
   unreachableCount: number
   hasBrightnessCapableMember: boolean
+  hasColorCapableMember: boolean
   theme: LightThemeKey
 }
 

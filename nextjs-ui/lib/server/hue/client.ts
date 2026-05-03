@@ -139,6 +139,8 @@ const FAKE_LIGHTS: HueLightRaw[] = [
     state: { on: false, bri: 128, reachable: true } },
   { id: '2', name: 'Fake Office', type: 'Dimmable light', modelid: 'LWB010',
     state: { on: true, bri: 200, reachable: true } },
+  { id: '3', name: 'Fake Hallway', type: 'Dimmable light', modelid: 'LWB010',
+    state: { on: false, bri: 100, reachable: true } },
 ]
 
 const FAKE_SENSORS: HueSensorRaw[] = [

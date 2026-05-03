@@ -1,9 +1,14 @@
 import { getDb } from '@/lib/server/db'
 import { queryInflux } from '@/lib/server/influxdb'
-import { fetchGroups, fetchMembers, buildGroupView, buildMasterView } from '@/lib/server/light-groups'
+import {
+  fetchGroups,
+  fetchMembers,
+  buildGroupView,
+  buildMasterView,
+  maybeCoerceGroupTheme,
+  maybeCoerceLightTheme,
+} from '@/lib/server/light-groups'
 import type { RoomWithSensors, SensorView } from '@/lib/shared/types'
-import type { LightThemeKey } from '@/lib/shared/light-themes'
-import { isValidLightThemeKey } from '@/lib/shared/light-themes'
 
 function toMs(t: unknown): number {
   if (typeof t === 'bigint') return Number(t / BigInt(1_000_000))
@@ -122,7 +127,7 @@ export async function GET(): Promise<Response> {
           lightOn: s.hue_on === null ? null : s.hue_on === 1,
           lightBrightness: s.hue_bri,
           lightReachable: s.hue_reachable === null ? null : s.hue_reachable === 1,
-          lightTheme: isValidLightThemeKey(s.hue_theme) ? s.hue_theme as LightThemeKey : null,
+          lightTheme: s.device_id ? maybeCoerceLightTheme(db, s.device_id, s.hue_theme) : null,
           hueName: s.hue_name,
           groupId: grp?.id ?? null,
           groupName: grp?.name ?? null,
@@ -134,7 +139,8 @@ export async function GET(): Promise<Response> {
     const lightGroups = roomGroups.map(g => {
       const memberIds = allMembers.filter(m => m.group_id === g.id).map(m => m.sensor_id)
       const memberSensors = memberIds.map(id => sensorsById.get(id)).filter((s): s is SensorView => !!s)
-      return buildGroupView(g, memberSensors)
+      const coerced = maybeCoerceGroupTheme(db, g, memberSensors)
+      return buildGroupView(coerced, memberSensors)
     })
 
     const lightMaster = buildMasterView(sensorViews.filter(s => s.type === 'light'))
