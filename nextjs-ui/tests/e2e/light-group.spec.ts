@@ -75,7 +75,7 @@ test.describe('light groups (API)', () => {
       await groupTile.click()
 
       // Detail modal opens with the theme picker.
-      await expect(page.getByText(/color theme/i)).toBeVisible()
+      await expect(page.getByText(/^theme$/i)).toBeVisible()
 
       // The Listbox button shows the current theme name ("Slate"). Open it.
       const themeButton = page.getByRole('button', { name: /^slate$/i }).first()

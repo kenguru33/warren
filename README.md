@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  Self-hosted home monitoring system. Track temperature, humidity, motion, and camera feeds from any room — all from a single dashboard running on your own hardware.
+  Self-hosted home monitoring and control. Track temperature, humidity, motion, and camera feeds, and drive Philips Hue lights and physical heater/fan relays — all from a single dashboard running on your own hardware.
 </p>
 
 ---
@@ -13,15 +13,52 @@
 ```
 ESP32 sensors  ──MQTT──▶  Mosquitto  ──▶  Node-RED  ──▶  InfluxDB
                                                               ▲
-                                     Warren UI  ◀────────────┘
-                                  (Nuxt + SQLite)
+Philips Hue Bridge  ──HTTP poller──┐                          │
+ESP32-CAM (MJPEG/HTTP)  ───────────┤                          │
+                                   ▼                          │
+                              Warren UI  ◀──────────────────┘
+                          (Next.js 16 + SQLite)
 ```
 
-**Sensors** are ESP32 microcontrollers that read a DHT22 (temperature + humidity) and publish readings every 5 seconds over MQTT. A second ESP32-CAM variant serves a live MJPEG stream and announces itself to the dashboard over HTTP.
+- **ESP32 sensors** read a DHT22 (temperature + humidity) and publish over MQTT every 5 s. The same firmware drives heater and fan relays based on a target temperature delivered from the backend.
+- **ESP32-CAM** units serve a live MJPEG stream and a JPEG snapshot, and announce themselves to the dashboard on boot.
+- **Philips Hue Bridge** is a first-class integration. The backend pairs with a bridge, polls every 10 s, caches device state in SQLite, and writes Hue motion / light-level readings into the same time-series pipeline as ESP32 sensors.
+- **Mosquitto + Node-RED + InfluxDB 3** run in Docker. Node-RED routes MQTT readings into InfluxDB; the UI reads live and historical data back from InfluxDB via SQL.
+- **The dashboard** is a Next.js 16 web app that stores room/sensor/light configuration in SQLite, exposes a REST API, manages auth via sealed-cookie sessions, and runs a long-lived MQTT subscriber and Hue poller from `instrumentation.ts`.
 
-**Infrastructure** runs in Docker. Mosquitto brokers MQTT traffic, Node-RED routes sensor readings into InfluxDB, and InfluxDB stores all time-series data.
+---
 
-**The dashboard** is a Nuxt 4 web app that reads live and historical data from InfluxDB, stores room/sensor configuration in SQLite, and lets you set temperature targets that trigger physical heater and fan relays on the sensor hardware.
+## Features
+
+- **Rooms.** Group sensors, cameras, and lights by physical room. Each room can have a target temperature and humidity that drives heater/fan control.
+- **Temperature & humidity history.** Click any tile in a room card to open a historical chart drawn from InfluxDB.
+- **Heater and fan control with hysteresis.** Each sensor toggles a heater relay below `target − heaterOnOffset` and a fan relay above `target + fanThreshold`. Per-sensor offsets are tunable from the UI and pushed to the device on its next config-fetch poll — no reflashing.
+- **Live camera streams.** ESP32-CAM tiles open a full-screen MJPEG view; a snapshot updates inline on the room card.
+- **Philips Hue control.** Pair a bridge, then control individual lights, group lights per room, or hit a master on/off across the whole house. Color and brightness are persisted; theme presets paint multiple lights at once.
+- **Light groups.** Combine multiple lights (Hue or otherwise) into one tile. Commands fan out in parallel; partial failures are reported.
+- **Light themes.** A palette of presets (`amber`, `emerald`, `rose`, `indigo`, `teal`, `plum`, `terracotta`, `catppuccin`, `tokyoNight`, `dracula`, `nord`, `gruvbox`, …) maps to per-light colors.
+- **Sensor discovery.** New devices show up automatically — no manual registration. The discovery list merges three sources: InfluxDB readings without an assignment, MQTT/HTTP boot announcements, and previously-assigned sensors that have been removed from a room. Unwanted devices can be blocked.
+- **Offline detection.** Sensors that haven't reported for 30 s are flagged with a red badge on both the sensor card and the room tile, and clear automatically when readings resume.
+- **Six color schemes + dark/light.** Theme picker swaps semantic CSS tokens via a `data-scheme` attribute. Bootstrap script in the layout applies the choice before first paint to avoid FOUC.
+- **PWA.** Installable on mobile (manifest + service worker), with touch-friendly controls (the auto-hide hover affordances stay visible on touch devices).
+- **Authenticated API.** All `/api/*` routes are gated by an `iron-session` cookie except a small allowlist for ESP32 device endpoints.
+
+---
+
+## Tech stack
+
+| Layer | Tech |
+|---|---|
+| Dashboard / API | Next.js 16 (App Router), React 19, TypeScript, Tailwind v4, Tailwind Plus Catalyst, Headless UI, Heroicons, SWR |
+| App state | SQLite via `better-sqlite3` |
+| Time-series | InfluxDB 3 (queried with SQL) |
+| Messaging | Mosquitto MQTT broker, Node-RED ingest pipeline |
+| Auth | `iron-session` sealed cookies |
+| Smart-home | Philips Hue Bridge (HTTPS API v2), 10-second poller in-process |
+| Sensor firmware | ESP32 + PlatformIO + Arduino framework, FreeRTOS tasks, NVS-persisted config, `PubSubClient` MQTT, DHT22 driver |
+| Camera firmware | ESP32-CAM (AI Thinker), `esp32-camera` HTTP server, MJPEG + JPEG endpoints |
+| Infrastructure | Docker Compose for Mosquitto, Node-RED, InfluxDB 3, InfluxDB Explorer; managed by the `warren` CLI |
+| Testing | Playwright E2E in `nextjs-ui/tests/e2e/`, shell-based Docker integration tests in `docker/tests/` |
 
 ---
 
@@ -55,8 +92,9 @@ Running `./docker/warren setup` does the following automatically:
 - Generates a random InfluxDB admin token and writes it to `docker/admin.token`
 - Creates `docker/mosquitto/config/mosquitto.conf` and a hashed password file for MQTT
 - Injects the InfluxDB token and MQTT credentials into `docker/nodered/flows.json`
-- Creates `ui/.env` with all connection strings pre-filled
+- Creates `nextjs-ui/.env` with all connection strings and an `iron-session` sealing password pre-filled
 - Writes `firmware/sensor/include/secrets.h` and `firmware/camera/include/secrets.h` with WiFi, MQTT, and backend URL placeholders
+- Installs and builds the Next.js app
 
 After setup, edit the two `secrets.h` files to add your WiFi credentials and MQTT password before flashing firmware.
 
@@ -69,9 +107,9 @@ After setup, edit the two `secrets.h` files to add your WiFi credentials and MQT
 
 ```bash
 ./docker/warren start          # production mode (pre-built UI)
-./docker/warren start --dev    # development mode (Nuxt dev server with HMR)
+./docker/warren start --dev    # development mode (Next.js dev server with HMR)
 ./docker/warren stop           # graceful shutdown, data preserved
-./docker/warren restart        # stop + start
+./docker/warren restart        # full stop + start
 ./docker/warren restart nodered  # restart a single Docker service
 ```
 
@@ -98,7 +136,7 @@ After setup, edit the two `secrets.h` files to add your WiFi credentials and MQT
 
 ### Rooms and sensors
 
-After logging in, create rooms from the dashboard (e.g. "Living Room", "Bedroom"). Then go to **Sensors** to see all discovered devices and assign them to rooms. Sensors appear automatically once they start publishing data — no manual registration needed.
+After logging in, create rooms from the dashboard (e.g. "Living Room", "Bedroom"). Then go to **Sensors** to see all discovered devices and assign them to rooms. Sensors appear automatically once they start publishing data — no manual registration needed. Unwanted devices can be blocked from the same view.
 
 ### Reference temperature
 
@@ -119,9 +157,13 @@ Click the ⚙ gear icon on any temperature sensor card to open its configuration
 
 Config is delivered to the device on its next poll — no reflashing required. A "Pending device acknowledgement" badge appears until the device confirms receipt.
 
-### Offline detection
+### Lights
 
-A sensor that has not reported for more than 30 seconds is marked **Offline** — the sensor card and room tile both show a red badge and dimmed value. The indicator clears automatically when the sensor resumes reporting.
+The **Lights** page lists every Hue light the bridge knows about, plus any non-Hue lights you've registered. Toggle individual lights, change color or brightness, apply a theme to multiple lights at once, or hit the master switch to turn everything in the house on or off.
+
+### Hue setup
+
+Open **Integrations → Hue**, press the physical button on your bridge, and click **Pair**. The backend stores the application key, syncs the device list, and starts polling. Hue lights and motion/light-level sensors appear in the discovery list alongside ESP32 devices, and Hue sensor readings flow into the same InfluxDB measurement so they share the history pipeline.
 
 ### Camera feeds
 
@@ -130,6 +172,10 @@ ESP32-CAM devices announce themselves on boot. Once discovered and assigned to a
 ### Sensor history
 
 Click any temperature, humidity, or motion tile in a room card to open a historical chart for that sensor.
+
+### Theming
+
+The user menu has a scheme picker (six palettes) and a light/dark toggle. Choices are persisted to `localStorage` and applied before first paint by an inline bootstrap script.
 
 ---
 
@@ -203,11 +249,17 @@ pio run -e esp32cam -t upload
 The Docker infrastructure must already be running (`./docker/warren start --dev` handles this, or start it separately with `docker compose up -d` in `docker/`).
 
 ```bash
-cd ui
+cd nextjs-ui
 npm install
-npm run dev        # http://localhost:3000
-npm run build      # production build
+npm run dev          # http://localhost:3000
+npm run build        # production build
+npm run lint         # ESLint
+npm run test:e2e     # Playwright E2E suite (auto-starts a dev server)
+npm run test:e2e:headed             # …with a visible browser
+npx playwright test tests/e2e/<file>.spec.ts   # run a single spec
 ```
+
+Set `WARREN_BASE_URL=http://localhost:3000` to point Playwright at an already-running dev server instead of letting it spawn one.
 
 ### Run Docker tests
 

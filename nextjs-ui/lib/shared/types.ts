@@ -8,6 +8,8 @@ export interface SensorCapabilities {
   color?: boolean
 }
 
+import type { LightThemeKey } from './light-themes'
+
 export interface SensorView {
   id: number
   roomId: number
@@ -26,12 +28,11 @@ export interface SensorView {
   lightOn?: boolean | null
   lightBrightness?: number | null
   lightReachable?: boolean | null
+  lightTheme?: LightThemeKey | null
   hueName?: string | null
   groupId?: number | null
   groupName?: string | null
 }
-
-import type { LightThemeKey } from './light-themes'
 
 export type LightGroupState = 'all-on' | 'all-off' | 'mixed'
 

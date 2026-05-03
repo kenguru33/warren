@@ -5,6 +5,10 @@
 //      converted to CIE xy chromaticity for the Hue API.
 
 export type LightThemeKey =
+  | 'warmLight'
+  | 'everyday'
+  | 'readingLight'
+  | 'nightlight'
   | 'slate'
   | 'amber'
   | 'emerald'
@@ -18,6 +22,15 @@ export type LightThemeKey =
   | 'dracula'
   | 'nord'
   | 'gruvbox'
+
+// 'palette' is the default; when omitted the theme drives bulb color round-robin
+// from `bulbPalette` (the existing color-theme behaviour). 'white' presets pin a
+// specific Hue mirek (color temperature) AND a brightness target.
+export type BulbOutput =
+  | { kind: 'palette' }
+  | { kind: 'white'; mirek: number; brightness: number }
+
+export const WHITE_PRESET_KEYS: LightThemeKey[] = ['warmLight', 'everyday', 'readingLight', 'nightlight']
 
 export interface LightThemeSurfaceVariant {
   offBorder: string
@@ -35,6 +48,7 @@ export interface LightTheme extends LightThemeSurfaceVariant {
   bulbTint: string
   toggleOnBg: string
   bulbPalette: string[]
+  bulbOutput?: BulbOutput
   light?: LightThemeSurfaceVariant
 }
 
@@ -44,6 +58,90 @@ const MIXED_DEFAULT = 'rgba(168, 85, 247, 0.45)'
 const MIXED_AMBER_OVERRIDE = 'rgba(251, 191, 36, 0.55)'
 
 export const LIGHT_THEMES: Record<LightThemeKey, LightTheme> = {
+  warmLight: {
+    key: 'warmLight',
+    label: 'Warm Light',
+    swatch: '#ffd9a8',
+    offBorder: '#3a2e1f',
+    onBorder: '#d4a373',
+    onGlow: 'rgba(255, 217, 168, 0.45)',
+    onGradientFrom: '#2a2218',
+    onGradientTo: '#151825',
+    bulbTint: 'rgba(255, 217, 168, 0.55)',
+    toggleOnBg: '#a06a37',
+    bulbOutput: { kind: 'white', mirek: 370, brightness: 60 },
+    bulbPalette: ['#ffd9a8', '#ffe6c4', '#fff1de'],
+    light: {
+      offBorder: '#fde4c4',
+      onBorder: '#a06a37',
+      onGlow: 'rgba(160, 106, 55, 0.25)',
+      onGradientFrom: '#fff7ee',
+      onGradientTo: '#ffffff',
+    },
+  },
+  everyday: {
+    key: 'everyday',
+    label: 'Everyday',
+    swatch: '#fff1de',
+    offBorder: '#2c2a26',
+    onBorder: '#cdbfa6',
+    onGlow: 'rgba(255, 241, 222, 0.4)',
+    onGradientFrom: '#262421',
+    onGradientTo: '#151825',
+    bulbTint: 'rgba(255, 241, 222, 0.45)',
+    toggleOnBg: '#857b6a',
+    bulbOutput: { kind: 'white', mirek: 286, brightness: 100 },
+    bulbPalette: ['#fff1de', '#fff8ec', '#ffffff'],
+    light: {
+      offBorder: '#e7dfd0',
+      onBorder: '#857b6a',
+      onGlow: 'rgba(133, 123, 106, 0.18)',
+      onGradientFrom: '#faf7f2',
+      onGradientTo: '#ffffff',
+    },
+  },
+  readingLight: {
+    key: 'readingLight',
+    label: 'Reading Light',
+    swatch: '#dce8ff',
+    offBorder: '#1f2733',
+    onBorder: '#9fb6e0',
+    onGlow: 'rgba(220, 232, 255, 0.45)',
+    onGradientFrom: '#1c2230',
+    onGradientTo: '#151825',
+    bulbTint: 'rgba(220, 232, 255, 0.55)',
+    toggleOnBg: '#5b7bb8',
+    bulbOutput: { kind: 'white', mirek: 222, brightness: 100 },
+    bulbPalette: ['#dce8ff', '#eaf2ff', '#ffffff'],
+    light: {
+      offBorder: '#cfdbef',
+      onBorder: '#5b7bb8',
+      onGlow: 'rgba(91, 123, 184, 0.22)',
+      onGradientFrom: '#eef3fb',
+      onGradientTo: '#ffffff',
+    },
+  },
+  nightlight: {
+    key: 'nightlight',
+    label: 'Nightlight',
+    swatch: '#ffb98a',
+    offBorder: '#241a14',
+    onBorder: '#7a4f30',
+    onGlow: 'rgba(255, 185, 138, 0.18)',
+    onGradientFrom: '#1d1814',
+    onGradientTo: '#151215',
+    bulbTint: 'rgba(255, 185, 138, 0.30)',
+    toggleOnBg: '#5a3820',
+    bulbOutput: { kind: 'white', mirek: 454, brightness: 10 },
+    bulbPalette: ['#ffb98a', '#ffcca8', '#ffe2c8'],
+    light: {
+      offBorder: '#e8d5c2',
+      onBorder: '#7a4f30',
+      onGlow: 'rgba(122, 79, 48, 0.18)',
+      onGradientFrom: '#fbf2e8',
+      onGradientTo: '#ffffff',
+    },
+  },
   slate: {
     key: 'slate',
     label: 'Slate',
@@ -361,4 +459,14 @@ export function hexToXy(hex: string): [number, number] {
 export function paletteColorFor(theme: LightTheme, index: number): string {
   if (theme.bulbPalette.length === 0) return '#ffffff'
   return theme.bulbPalette[index % theme.bulbPalette.length]!
+}
+
+// White-preset themes return their pinned mirek + brightness; palette themes return null.
+export function whitePresetPayload(theme: LightTheme): { mirek: number; brightness: number } | null {
+  return theme.bulbOutput?.kind === 'white' ? theme.bulbOutput : null
+}
+
+// 1 mirek = 1,000,000 / kelvin. Used for picker labels ("2700K · 60%").
+export function kelvinFromMirek(mirek: number): number {
+  return Math.round(1_000_000 / mirek)
 }

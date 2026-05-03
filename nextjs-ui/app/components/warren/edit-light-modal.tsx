@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { CheckIcon } from '@heroicons/react/20/solid'
 import type { SensorView } from '@/lib/shared/types'
+import type { LightThemeKey } from '@/lib/shared/light-themes'
 import { Button } from '@/app/components/button'
 import {
   Dialog,
@@ -10,7 +11,9 @@ import {
   DialogBody,
   DialogTitle,
 } from '@/app/components/dialog'
+import { Field, Label } from '@/app/components/fieldset'
 import { LightColorPicker } from './light-color-picker'
+import { LightThemePicker } from './light-theme-picker'
 
 function PalettePicker({
   paletteColors,
@@ -85,22 +88,27 @@ export function EditLightModal({
   onColorApplied?: (sensorId: number, hex: string) => void
 }) {
   const [color, setColor] = useState<string | null>(null)
+  const [theme, setTheme] = useState<LightThemeKey | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     if (open && sensor) {
       setColor(currentColor ?? null)
+      setTheme(sensor.lightTheme ?? null)
       setError(null)
     }
-  }, [open, sensor?.id, currentColor])
+  }, [open, sensor?.id, currentColor, sensor?.lightTheme])
 
   if (!sensor) return null
 
   const supportsColor = sensor.capabilities?.color === true
+  const supportsColorTemp = sensor.capabilities?.colorTemp === true
+  const themeCapable = supportsColor || supportsColorTemp
   const displayName = sensor.label?.trim() || sensor.hueName?.trim() || `Light #${sensor.id}`
 
   async function applyColor(hex: string) {
     setColor(hex)
+    setTheme(null)  // custom color picks clear the persisted theme
     if (!sensor || !sensor.deviceId) return
     setError(null)
     try {
@@ -122,6 +130,29 @@ export function EditLightModal({
     }
   }
 
+  async function applyTheme(key: LightThemeKey) {
+    if (key === theme) return
+    setTheme(key)
+    if (!sensor || !sensor.deviceId) return
+    setError(null)
+    try {
+      const res = await fetch(`/api/integrations/hue/lights/${encodeURIComponent(sensor.deviceId)}/state`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ on: true, theme: key }),
+      })
+      if (!res.ok) {
+        let payload: { data?: { error?: string }; message?: string } = {}
+        try { payload = await res.json() } catch {}
+        const e = payload as { data?: { error?: string }; message?: string }
+        throw new Error(e.data?.error === 'bridge_unreachable' ? 'Bridge unreachable' : (e.message ?? 'Failed to set theme'))
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to set theme')
+    }
+  }
+
   return (
     <Dialog open={open} onClose={onClose} size="md">
       <div className="flex items-center gap-3">
@@ -135,6 +166,14 @@ export function EditLightModal({
       </div>
 
       <DialogBody className="space-y-5">
+        {themeCapable && (
+          <Field>
+            <Label>Theme</Label>
+            <div className="mt-1.5">
+              <LightThemePicker value={theme ?? 'slate'} onChange={applyTheme} />
+            </div>
+          </Field>
+        )}
         {supportsColor ? (
           paletteColors && paletteColors.length > 0 ? (
             <div>

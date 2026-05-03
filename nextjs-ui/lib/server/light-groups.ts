@@ -5,6 +5,7 @@ import {
   resolveLightTheme,
   paletteColorFor,
   hexToXy,
+  whitePresetPayload,
   type LightTheme,
 } from '@/lib/shared/light-themes'
 import { setLightState, HueUnauthorizedError, HueUnreachableError } from './hue/client'
@@ -40,48 +41,70 @@ export async function fanOutLightCommand(
   body: { on?: boolean; brightness?: number },
   themeForColors?: LightTheme | null,
 ): Promise<FanOutSummary> {
-  const briScaled = body.brightness !== undefined ? Math.round((body.brightness / 100) * 254) : undefined
+  const whitePreset = themeForColors ? whitePresetPayload(themeForColors) : null
+  const palette = themeForColors && !whitePreset && themeForColors.bulbPalette.length > 0 ? themeForColors : null
   const wantsOn = body.on === true
-  const palette = themeForColors && themeForColors.bulbPalette.length > 0 ? themeForColors : null
+  // Only stamp the theme onto each member's per-light row when we're actively painting
+  // (i.e. the caller is turning the lights on with a theme). For brightness-only
+  // adjusts we pass null, so COALESCE preserves any existing per-member theme override.
+  const themeKey = wantsOn ? (themeForColors?.key ?? null) : null
+
+  // Caller-supplied brightness wins. Otherwise, when the caller is turning lights ON
+  // with a white preset, pin the preset's brightness target.
+  const briScaled = body.brightness !== undefined
+    ? Math.round((body.brightness / 100) * 254)
+    : (wantsOn && whitePreset !== null
+        ? Math.round((whitePreset.brightness / 100) * 254)
+        : undefined)
 
   const results: FanOutResult[] = []
   await Promise.all(members.map(async (m, idx) => {
     const caps = m.capabilities ? JSON.parse(m.capabilities) : null
     const supportsBri = !!caps?.brightness
+    const supportsColorTemp = !!caps?.colorTemp
     const supportsColor = !!caps?.color
-    const payload: { on?: boolean; bri?: number; xy?: [number, number] } = {}
+    const payload: { on?: boolean; bri?: number; xy?: [number, number]; ct?: number } = {}
     if (body.on !== undefined) payload.on = body.on
     if (briScaled !== undefined && supportsBri) {
       payload.bri = briScaled
       if (body.on === undefined) payload.on = true
     }
-    if (palette && wantsOn && supportsColor) {
+    if (whitePreset && wantsOn) {
+      if (supportsColorTemp) {
+        payload.ct = whitePreset.mirek
+      } else if (supportsColor) {
+        // Defensive fallback for a color bulb without colorTemp capability flag.
+        payload.xy = hexToXy(themeForColors!.bulbPalette[0] ?? '#ffffff')
+      }
+    } else if (palette && wantsOn && supportsColor) {
       const hex = paletteColorFor(palette, idx)
       payload.xy = hexToXy(hex)
     }
-    if (Object.keys(payload).length === 0) {
-      results.push({ sensorId: m.sensor_id, deviceId: m.device_id, ok: true })
-      return
-    }
+    const willTouchBridge = Object.keys(payload).length > 0
     try {
-      await setLightState(m.ip, m.app_key, m.hue_resource_id, payload)
+      if (willTouchBridge) {
+        await setLightState(m.ip, m.app_key, m.hue_resource_id, payload)
+      }
       results.push({ sensorId: m.sensor_id, deviceId: m.device_id, ok: true })
 
       const now = Date.now()
       db.prepare(`
-        INSERT INTO hue_light_state (device_id, on_state, brightness, reachable, updated_at)
-        VALUES (?, COALESCE(?, 0), ?, 1, ?)
+        INSERT INTO hue_light_state (device_id, on_state, brightness, reachable, theme, updated_at)
+        VALUES (?, COALESCE(?, 0), ?, 1, ?, ?)
         ON CONFLICT(device_id) DO UPDATE SET
           on_state   = COALESCE(?, on_state),
           brightness = COALESCE(?, brightness),
+          theme      = COALESCE(?, theme),
           updated_at = ?
       `).run(
         m.device_id,
         payload.on === undefined ? null : (payload.on ? 1 : 0),
         payload.bri ?? null,
+        themeKey,
         now,
         payload.on === undefined ? null : (payload.on ? 1 : 0),
         payload.bri ?? null,
+        themeKey,
         now,
       )
     } catch (err) {

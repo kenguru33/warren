@@ -18,6 +18,7 @@ export async function GET() {
     SELECT s.id, s.type, s.label, s.device_id, s.stream_url, s.snapshot_url,
            r.id AS room_id, r.name AS room_name,
            hls.on_state AS hue_on, hls.brightness AS hue_bri, hls.reachable AS hue_reachable,
+           hls.theme AS hue_theme,
            hd.capabilities AS hue_capabilities, hd.name AS hue_name
     FROM sensors s
     LEFT JOIN rooms r ON r.id = s.room_id
@@ -29,6 +30,7 @@ export async function GET() {
     stream_url: string | null; snapshot_url: string | null
     room_id: number | null; room_name: string | null
     hue_on: number | null; hue_bri: number | null; hue_reachable: number | null
+    hue_theme: string | null
     hue_capabilities: string | null; hue_name: string | null
   }[]
 
@@ -149,6 +151,7 @@ export async function GET() {
       lightOn: s.hue_on === null ? null : s.hue_on === 1,
       lightBrightness: s.hue_bri,
       lightReachable: s.hue_reachable === null ? null : s.hue_reachable === 1,
+      lightTheme: s.hue_theme,
       hueName: s.hue_name,
       groupId: grp?.id ?? null,
       groupName: grp?.name ?? null,

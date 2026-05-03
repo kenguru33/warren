@@ -118,7 +118,7 @@ export function LightGroupDetailModal({
 
       <div className="mt-4">
         <Field>
-          <Label>Color theme</Label>
+          <Label>Theme</Label>
           <div className="mt-1.5">
             <LightThemePicker value={localTheme ?? group.theme} onChange={onThemeChange} />
           </div>

@@ -185,7 +185,7 @@ export async function setLightState(
   ip: string,
   key: string,
   hueResourceId: string,
-  body: { on?: boolean; bri?: number; xy?: [number, number] },
+  body: { on?: boolean; bri?: number; xy?: [number, number]; ct?: number },
 ): Promise<void> {
   if (FAKE) return
   let res: Response
