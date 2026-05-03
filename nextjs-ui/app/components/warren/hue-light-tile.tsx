@@ -10,6 +10,7 @@ import {
   TrashIcon,
 } from '@heroicons/react/20/solid'
 import type { SensorView } from '@/lib/shared/types'
+import { resolveLightTheme } from '@/lib/shared/light-themes'
 import { Badge } from '@/app/components/badge'
 import { useLongPress } from '@/lib/hooks/use-long-press'
 import { ConfirmDialog } from './confirm-dialog'
@@ -165,6 +166,18 @@ export function HueLightTile({
   const hasBrightness = sensor.capabilities?.brightness === true
   const displayName = sensor.label?.trim() || sensor.hueName?.trim() || 'Light'
 
+  // Bulb-icon background priority: explicit color override (user-picked custom hex
+  // this session) > persisted white-preset tint > default accent-soft chrome.
+  // White-preset tints are near-white and need dark glyph; saturated user-picked
+  // colors stay with white glyph for legibility.
+  const themeTint = (() => {
+    if (!sensor.lightTheme) return null
+    const theme = resolveLightTheme(sensor.lightTheme)
+    return theme.bulbOutput?.kind === 'white' ? theme.bulbPalette[0] ?? null : null
+  })()
+  const bulbBackground = colorOverride ?? themeTint ?? null
+  const bulbGlyphLight = !!colorOverride  // saturated custom color → white glyph
+
   function tap() {
     if (wasLongPressRef.current) return
     if (selectionMode && onToggleSelect) onToggleSelect(sensor.id)
@@ -234,15 +247,15 @@ export function HueLightTile({
         disabled={pending || !reachable || selectionMode}
         title={localOn ? 'Turn off' : 'Turn on'}
         onClick={(e) => { e.stopPropagation(); if (!selectionMode) toggleOn() }}
-        // When on AND the user has picked a color in EditLightModal this
-        // session, paint the bulb background with that color so the tile
-        // reflects the light's actual color choice — same treatment as
-        // LightGroupDetailRow uses for in-group bulbs.
+        // Paint the bulb background to reflect the light's color identity:
+        //   1. colorOverride — user picked a custom hex in EditLightModal this session
+        //   2. themeTint — first near-white tint from a persisted white preset
+        //   3. fallback bg-accent-soft chrome (handled in className)
         style={
-          localOn && reachable && colorOverride
+          localOn && reachable && bulbBackground
             ? {
-                backgroundColor: colorOverride,
-                boxShadow: `0 4px 12px -2px ${colorOverride}80, inset 0 0 0 1px ${colorOverride}`,
+                backgroundColor: bulbBackground,
+                boxShadow: `0 4px 12px -2px ${bulbBackground}80, inset 0 0 0 1px ${bulbBackground}`,
               }
             : undefined
         }
@@ -250,8 +263,8 @@ export function HueLightTile({
           'relative flex size-12 shrink-0 items-center justify-center rounded-2xl text-xl transition-colors',
           'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent',
           localOn && reachable
-            ? colorOverride
-              ? 'text-white'
+            ? bulbBackground
+              ? bulbGlyphLight ? 'text-white' : 'text-zinc-900'
               : 'bg-accent-soft text-accent-strong ring-1 ring-accent/30 dark:bg-accent/15 dark:ring-accent/30'
             : 'bg-surface ring-1 ring-default',
           pending || !reachable ? 'opacity-50 cursor-not-allowed' : '',

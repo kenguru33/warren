@@ -2,6 +2,8 @@ import { getDb } from '@/lib/server/db'
 import { queryInflux } from '@/lib/server/influxdb'
 import { fetchGroups, fetchMembers, buildGroupView, buildMasterView } from '@/lib/server/light-groups'
 import type { RoomWithSensors, SensorView } from '@/lib/shared/types'
+import type { LightThemeKey } from '@/lib/shared/light-themes'
+import { isValidLightThemeKey } from '@/lib/shared/light-themes'
 
 function toMs(t: unknown): number {
   if (typeof t === 'bigint') return Number(t / BigInt(1_000_000))
@@ -16,6 +18,7 @@ export async function GET(): Promise<Response> {
   const sensors = db.prepare(`
     SELECT s.id, s.room_id, s.type, s.device_id, s.label, s.stream_url, s.snapshot_url,
            hls.on_state AS hue_on, hls.brightness AS hue_bri, hls.reachable AS hue_reachable,
+           hls.theme AS hue_theme,
            hd.capabilities AS hue_capabilities, hd.name AS hue_name
     FROM sensors s
     LEFT JOIN hue_light_state hls ON hls.device_id = s.device_id
@@ -25,6 +28,7 @@ export async function GET(): Promise<Response> {
     id: number; room_id: number; type: string; device_id: string | null
     label: string | null; stream_url: string | null; snapshot_url: string | null
     hue_on: number | null; hue_bri: number | null; hue_reachable: number | null
+    hue_theme: string | null
     hue_capabilities: string | null; hue_name: string | null
   }[]
 
@@ -118,6 +122,7 @@ export async function GET(): Promise<Response> {
           lightOn: s.hue_on === null ? null : s.hue_on === 1,
           lightBrightness: s.hue_bri,
           lightReachable: s.hue_reachable === null ? null : s.hue_reachable === 1,
+          lightTheme: isValidLightThemeKey(s.hue_theme) ? s.hue_theme as LightThemeKey : null,
           hueName: s.hue_name,
           groupId: grp?.id ?? null,
           groupName: grp?.name ?? null,

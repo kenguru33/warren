@@ -6,6 +6,7 @@ import {
   resolveLightTheme,
   paletteColorFor,
   hexToXy,
+  whitePresetPayload,
 } from '@/lib/shared/light-themes'
 
 export async function POST(req: NextRequest, ctx: RouteContext<'/api/integrations/hue/lights/[id]/state'>) {
@@ -38,15 +39,31 @@ export async function POST(req: NextRequest, ctx: RouteContext<'/api/integration
 
   if (!device) return Response.json({ statusCode: 404, message: 'light not found' }, { status: 404 })
 
-  const caps = device.capabilities ? JSON.parse(device.capabilities) as { color?: boolean } : null
+  const caps = device.capabilities
+    ? JSON.parse(device.capabilities) as { color?: boolean; colorTemp?: boolean; brightness?: boolean }
+    : null
   const supportsColor = !!caps?.color
+  const supportsColorTemp = !!caps?.colorTemp
+  const supportsBrightness = !!caps?.brightness
 
-  const huePayload: { on?: boolean; bri?: number; xy?: [number, number] } = {}
+  const huePayload: { on?: boolean; bri?: number; xy?: [number, number]; ct?: number } = {}
   if (body.on !== undefined) huePayload.on = body.on
   if (body.brightness !== undefined) huePayload.bri = Math.round((body.brightness / 100) * 254)
-  if (body.theme !== undefined && supportsColor) {
+  if (body.theme !== undefined) {
     const theme = resolveLightTheme(body.theme)
-    if (theme.bulbPalette.length > 0) {
+    const whitePreset = whitePresetPayload(theme)
+    if (whitePreset) {
+      if (supportsColorTemp) {
+        huePayload.ct = whitePreset.mirek
+      } else if (supportsColor) {
+        huePayload.xy = hexToXy(theme.bulbPalette[0] ?? '#ffffff')
+      }
+      // Pin preset brightness — caller-supplied brightness wins.
+      if (supportsBrightness && body.brightness === undefined) {
+        huePayload.bri = Math.round((whitePreset.brightness / 100) * 254)
+      }
+      if (body.on === undefined) huePayload.on = true
+    } else if (supportsColor && theme.bulbPalette.length > 0) {
       huePayload.xy = hexToXy(paletteColorFor(theme, 0))
       if (body.on === undefined) huePayload.on = true
     }
@@ -70,22 +87,49 @@ export async function POST(req: NextRequest, ctx: RouteContext<'/api/integration
 
   const now = Date.now()
   const cachedOn = huePayload.on === undefined ? null : (huePayload.on ? 1 : 0)
-  db.prepare(`
-    INSERT INTO hue_light_state (device_id, on_state, brightness, reachable, updated_at)
-    VALUES (?, COALESCE(?, 0), ?, 1, ?)
-    ON CONFLICT(device_id) DO UPDATE SET
-      on_state   = COALESCE(?, on_state),
-      brightness = COALESCE(?, brightness),
-      updated_at = ?
-  `).run(
-    deviceId,
-    cachedOn,
-    huePayload.bri ?? null,
-    now,
-    cachedOn,
-    huePayload.bri ?? null,
-    now,
-  )
+  // Theme persistence:
+  //   - request supplied a theme → write it (sticky tile chrome)
+  //   - request supplied a custom color → clear the theme (custom hex contradicts a preset)
+  //   - otherwise → leave whatever was there
+  let themeUpdate: { mode: 'set'; value: string } | { mode: 'clear' } | { mode: 'keep' }
+  if (body.theme !== undefined) themeUpdate = { mode: 'set', value: body.theme }
+  else if (body.color !== undefined) themeUpdate = { mode: 'clear' }
+  else themeUpdate = { mode: 'keep' }
+
+  if (themeUpdate.mode === 'clear') {
+    // Force theme = NULL on update; on insert, NULL is the default.
+    db.prepare(`
+      INSERT INTO hue_light_state (device_id, on_state, brightness, reachable, theme, updated_at)
+      VALUES (?, COALESCE(?, 0), ?, 1, NULL, ?)
+      ON CONFLICT(device_id) DO UPDATE SET
+        on_state   = COALESCE(?, on_state),
+        brightness = COALESCE(?, brightness),
+        theme      = NULL,
+        updated_at = ?
+    `).run(deviceId, cachedOn, huePayload.bri ?? null, now, cachedOn, huePayload.bri ?? null, now)
+  } else {
+    // 'set' binds the theme key; 'keep' binds null and COALESCE preserves it.
+    const themeBind = themeUpdate.mode === 'set' ? themeUpdate.value : null
+    db.prepare(`
+      INSERT INTO hue_light_state (device_id, on_state, brightness, reachable, theme, updated_at)
+      VALUES (?, COALESCE(?, 0), ?, 1, ?, ?)
+      ON CONFLICT(device_id) DO UPDATE SET
+        on_state   = COALESCE(?, on_state),
+        brightness = COALESCE(?, brightness),
+        theme      = COALESCE(?, theme),
+        updated_at = ?
+    `).run(
+      deviceId,
+      cachedOn,
+      huePayload.bri ?? null,
+      themeBind,
+      now,
+      cachedOn,
+      huePayload.bri ?? null,
+      themeBind,
+      now,
+    )
+  }
 
   return Response.json({ ok: true })
 }

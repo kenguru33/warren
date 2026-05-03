@@ -171,6 +171,11 @@ export function initDb() {
     db.exec('ALTER TABLE light_groups ADD COLUMN theme TEXT')
   }
 
+  const hlsCols = db.pragma('table_info(hue_light_state)') as { name: string }[]
+  if (!hlsCols.some(c => c.name === 'theme')) {
+    db.exec('ALTER TABLE hue_light_state ADD COLUMN theme TEXT')
+  }
+
   const roomIdCol = columns.find(c => c.name === 'room_id')
   if (roomIdCol?.notnull) {
     db.pragma('foreign_keys = OFF')
