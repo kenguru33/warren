@@ -79,7 +79,7 @@ git clone https://github.com/your-org/warren.git && cd warren
 ./docker/warren start   # starts infrastructure + dashboard
 ```
 
-Open **http://localhost:3000** and log in with the credentials printed at the end of `setup`.
+Open **https://&lt;your-lan-ip&gt;** (printed at the end of `setup`) and log in with the credentials you set during setup. On first visit, install the local CA from `http://<your-lan-ip>/ca.crt` so the dashboard validates without browser warnings.
 
 ---
 
@@ -123,7 +123,13 @@ After setup, edit the two `secrets.h` files to add your WiFi credentials and MQT
 
 ## Accessing Warren on your LAN
 
-A Caddy reverse proxy in front of the dashboard terminates TLS so every device on your LAN reaches Warren over HTTPS. **TLS only at the edge** — internal traffic between Caddy ↔ Next.js, Mosquitto ↔ Node-RED, etc. stays plaintext on the host loopback / Docker bridge network.
+A Caddy reverse proxy in front of the dashboard terminates TLS so every device on your LAN reaches Warren over HTTPS. **TLS at the edge AND on the wire** — every LAN-reachable port speaks TLS:
+
+- `:443` — Caddy serves the dashboard over HTTPS.
+- `:8883` — Mosquitto's MQTTS listener for ESP32 sensors.
+- `:80` — plaintext, but only used for the one-time `/ca.crt` download and a 308 redirect to HTTPS.
+
+Plaintext is confined to the Docker bridge network (Caddy ↔ UI container, UI ↔ Mosquitto/InfluxDB, Node-RED) and host loopback (`127.0.0.1`-only operator ports for InfluxDB / Node-RED / InfluxDB Explorer).
 
 ### Two TLS modes
 
@@ -146,7 +152,7 @@ Add a custom hostname? [y/N]: n
 URLs to bookmark:
 - `https://<your-host-ip>` — the LAN IP setup detected. Always works, no resolution dance.
 - `https://<your-hostname>` — only if you opted in to a custom hostname. **Resolution is your problem**: you make the name point at the LAN IP via your router's DNS, a `/etc/hosts` entry on each device, an Avahi alias, or whatever fits your network. The cert will validate either way (it covers both).
-- `http://localhost:3000` — direct host access in `--dev` mode.
+- `http://localhost:3000` — direct host access in `--dev` mode (host loopback only, never the LAN).
 
 > **Why is the hostname optional, not auto-detected?** Earlier iterations auto-published `<hostname>.local` via Avahi. That falls over with multiple hosts sharing a kernel hostname (Avahi auto-renames to `<hostname>-2.local`), with hosts that don't run Avahi, and with Docker Desktop / rootless setups where mDNS broadcasts can't reach the LAN. The LAN IP always works; a custom hostname is offered for users who want a prettier URL and have their own resolution story. If your DHCP IP changes, re-run `warren setup --force` to reissue the cert.
 
@@ -200,27 +206,29 @@ sudo firewall-cmd --reload
 
 ### Dev mode
 
-- `warren start --dev` skips the proxy entirely; you keep using `http://localhost:3000` direct.
+- `warren start --dev` runs `next dev` as a host process at `http://localhost:3000` — no Caddy, no UI container. Plaintext is OK in dev because it's never on the LAN. The Mosquitto and InfluxDB host ports are bound to `127.0.0.1`, so the dev process reaches them via loopback exactly like the prod container reaches them via the bridge network.
 - `warren start --dev --proxy` brings Caddy up in front of `next dev` for LAN HTTPS testing. HMR's WebSocket requires the CA installed in your dev browser.
+- **Production needs rootful Docker.** The `ui` Compose service publishes its DNS name on the bridge network so Caddy can reach it without a host port. Rootless Docker breaks `host.docker.internal` reverse-proxy behaviour for `--dev --proxy`; use rootful for any production-shaped run.
 
-### Known LAN-security gaps (separate follow-up specs)
+### Known LAN-security gaps (separate follow-up spec)
 
-These are real but out of scope for the edge-HTTPS feature; flagging here so you know:
+The remaining gap after this iteration:
 
-- ESP32 sensors send their MQTT password to `mosquitto:1883` in the clear — anyone on the LAN sniffing can capture it. Fix: MQTTS in firmware (separate spec).
-- The three device-facing endpoints (`/api/sensors/announce`, `/api/sensors/config/{id}`, `/api/sensors/{id}/reading`) have no per-device authentication — anyone on the LAN can spoof readings. Fix: per-device shared-secret HMAC (separate spec).
-- Mosquitto, InfluxDB, Node-RED and InfluxDB Explorer publish their host ports on `0.0.0.0` (LAN-reachable) instead of just the Docker bridge. Anyone on the LAN can reach `:8086`, `:1880`, `:8888` directly, bypassing Caddy. Fix: bind to `127.0.0.1` only, or remove the host port mappings (separate spec).
+- The three device-facing endpoints (`/api/sensors/announce`, `/api/sensors/config/{id}`, `/api/sensors/{id}/reading`) accept any LAN client over HTTPS. Per-device authentication is still missing — a malicious device on the LAN could spoof readings. Fix: per-device shared-secret HMAC (separate spec).
 
 ---
 
 ## Services
 
-| Service | URL | Purpose |
-|---|---|---|
-| Warren dashboard | http://localhost:3000 | Main UI |
-| InfluxDB Explorer | http://localhost:8888 | Query and browse time-series data |
-| Node-RED | http://localhost:1880 | MQTT → InfluxDB pipeline (internal) |
-| Mosquitto MQTT | localhost:1883 | Broker for sensor readings (auth required) |
+| Service | URL | Reachable from | Purpose |
+|---|---|---|---|
+| Warren dashboard | https://&lt;lan-ip&gt; | LAN (TLS) | Main UI, served by Caddy |
+| Warren dashboard (dev) | http://localhost:3000 | host loopback | `warren start --dev` only |
+| Mosquitto MQTTS | mqtts://&lt;lan-ip&gt;:8883 | LAN (TLS) | Broker for ESP32 sensors |
+| Mosquitto plaintext | mqtt://localhost:1883 | host loopback | UI container + dev-mode UI |
+| InfluxDB | http://localhost:8086 | host loopback | SQL queries (operator / dev) |
+| InfluxDB Explorer | http://localhost:8888 | host loopback | Time-series browser |
+| Node-RED | http://localhost:1880 | host loopback | MQTT → InfluxDB pipeline editor |
 
 ---
 
@@ -294,12 +302,15 @@ The sensor firmware runs three FreeRTOS tasks:
 
 **Configuration persistence:** config is stored in ESP32 NVS flash (namespace `cfg`) so the device runs with its last-known settings across reboots, even without network.
 
+**TLS:** the firmware uses MQTTS (`:8883`) and HTTPS for the config fetch, both with `setInsecure()` — sensors trust whatever cert the broker / Caddy presents. The LAN itself is the trust boundary; this avoids having to install the local CA on every microcontroller.
+
 #### Build and flash
 
 ```bash
 cd firmware/sensor
 cp include/secrets.h.example include/secrets.h
-# Fill in SECRET_SSID, SECRET_PASS, MQTT_SERVER, MQTT_USER, MQTT_PASS, BACKEND_URL
+# Fill in SECRET_SSID, SECRET_PASS, MQTT_SERVER, MQTT_PORT, MQTT_USER,
+# MQTT_PASS, BACKEND_URL (https://<lan-ip>)
 
 pio run -e esp-wrover-kit -t upload
 pio device monitor -b 115200
@@ -325,7 +336,7 @@ On boot, the camera POSTs its stream and snapshot URLs to `/api/sensors/announce
 ```bash
 cd firmware/camera
 cp include/secrets.h.example include/secrets.h
-# Fill in SECRET_SSID, SECRET_PASS, BACKEND_URL (e.g. http://192.168.1.x:3000)
+# Fill in SECRET_SSID, SECRET_PASS, BACKEND_URL (https://<lan-ip>)
 
 pio run -e esp32cam -t upload
 ```

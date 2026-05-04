@@ -28,6 +28,50 @@ assert_output_contains "$running" "influxdb3-explorer" "influxdb3-explorer runni
 assert_output_contains "$running" "nodered"         "nodered running"
 assert_output_contains "$running" "mosquitto"       "mosquitto running"
 
+# Operator-only services must be bound to host loopback only — never on
+# the LAN. mosquitto:8883 stays LAN-reachable for ESP32 sensors.
+inspect_ports() {
+    docker inspect --format \
+        '{{range $p, $b := .NetworkSettings.Ports}}{{range $b}}{{$p}}={{.HostIp}} {{end}}{{end}}' \
+        "$1" 2>/dev/null || true
+}
+
+assert_loopback_only() {
+    local svc="$1"
+    local ports
+    ports="$(inspect_ports "$svc")"
+    local non_loopback
+    non_loopback="$(echo "$ports" | tr ' ' '\n' \
+        | grep -vE '^$|=(127\.0\.0\.1|::1)$' || true)"
+    if [[ -z "$non_loopback" ]]; then
+        echo "  PASS: $svc bound to loopback only ($ports)"
+        ((passed++))
+    else
+        echo "  FAIL: $svc has non-loopback host bindings: $non_loopback" >&2
+        ((failed++))
+    fi
+}
+
+assert_loopback_only "influxdb3"
+assert_loopback_only "node-red"
+assert_loopback_only "influxdb3-explorer"
+
+mq_ports="$(inspect_ports mosquitto)"
+if echo "$mq_ports" | grep -q '1883/tcp=127.0.0.1'; then
+    echo "  PASS: mosquitto :1883 bound to 127.0.0.1"
+    ((passed++))
+else
+    echo "  FAIL: mosquitto :1883 not bound to 127.0.0.1: $mq_ports" >&2
+    ((failed++))
+fi
+if echo "$mq_ports" | grep -qE '8883/tcp=(0\.0\.0\.0|::)'; then
+    echo "  PASS: mosquitto :8883 bound to all interfaces (LAN-reachable for sensors)"
+    ((passed++))
+else
+    echo "  FAIL: mosquitto :8883 missing/loopback-only — sensors can't connect: $mq_ports" >&2
+    ((failed++))
+fi
+
 # Stop the stack
 (cd "$DOCKER_DIR" && docker compose stop)
 

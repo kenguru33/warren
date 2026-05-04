@@ -242,12 +242,17 @@ preflight_ports() {
 }
 
 # Picks the docker-compose profiles for a given mode. Echoes
-# `--profile X` ready to splat onto the compose command.
+# `--profile X [--profile Y]` ready to splat onto the compose command.
+#
+# - prod      : caddy edge proxy + ui container
+# - dev-proxy : caddy edge proxy in front of host-side `next dev`
+# - dev       : neither — UI runs as a host process, infrastructure only
 compose_profiles() {
-    local mode="$1"   # mode: prod | dev | dev-proxy
+    local mode="$1"
     case "$mode" in
-        prod|dev-proxy) echo "--profile prod" ;;
-        dev)            echo "" ;;  # no profile — caddy is excluded
+        prod)       echo "--profile prod --profile ui" ;;
+        dev-proxy)  echo "--profile prod" ;;
+        dev)        echo "" ;;
     esac
 }
 
@@ -369,19 +374,18 @@ cmd_setup() {
         echo "    Tip: reserve this IP on your router (DHCP reservation) so it doesn't change."
     fi
 
-    # Rootless Docker can't reach a host process on host.docker.internal:host-gateway
-    # reliably (rootlesskit gateway != host loopback). Use the LAN IP instead.
-    if is_rootless_docker && [[ -n "$WARREN_LAN_IP" ]]; then
-        WARREN_UPSTREAM="${WARREN_LAN_IP}:3000"
-    else
-        WARREN_UPSTREAM="host.docker.internal:3000"
-    fi
+    # Production: the UI runs as a Compose service on the bridge network,
+    # so Caddy reaches it via Docker DNS. `warren start --dev --proxy`
+    # overrides this via shell env at runtime to point at the host-side
+    # next dev server (host.docker.internal:3000).
+    WARREN_UPSTREAM="ui:3000"
 
     BACKEND_HOST="${BACKEND_HOST#http://}"
     BACKEND_HOST="${BACKEND_HOST#https://}"
     BACKEND_HOST="${BACKEND_HOST%%/*}"
     MQTT_SERVER="${BACKEND_HOST%%:*}"
-    BACKEND_URL="http://${MQTT_SERVER}:3000"
+    # ESP32 firmware reaches the API over HTTPS via Caddy on :443.
+    BACKEND_URL="https://${MQTT_SERVER}"
 
     _rand() { openssl rand -base64 48 | tr -d '\n/+=' | cut -c1-"$1" 2>/dev/null \
               || LC_ALL=C tr -dc 'A-Za-z0-9' < /dev/urandom | head -c"$1"; }
@@ -410,12 +414,30 @@ EOF
     cat > "$MQTT_CONF" <<'EOF'
 per_listener_settings true
 
+# Plaintext listener — bridge-network access (UI container) plus host
+# loopback (dev-mode UI on the host). Not LAN-reachable: docker-compose
+# binds the host port to 127.0.0.1 only.
 listener 1883 0.0.0.0
 listener_allow_anonymous false
 password_file /mosquitto/config/passwordfile
 
+# Anonymous internal listener used by Node-RED on the Docker bridge
+# network. Not exposed on any host port.
 listener 1884 0.0.0.0
 listener_allow_anonymous true
+
+# MQTTS listener — LAN-reachable for ESP32 sensors. Reuses the same
+# self-signed leaf cert Caddy serves (covers the host's LAN IP).
+# require_certificate=false: clients only validate the broker's cert,
+# they don't present one of their own.
+listener 8883 0.0.0.0
+listener_allow_anonymous false
+password_file /mosquitto/config/passwordfile
+cafile   /mosquitto/certs/ca.crt
+certfile /mosquitto/certs/server.crt
+keyfile  /mosquitto/certs/server.key
+require_certificate false
+tls_version tlsv1.2
 EOF
 
     cat > "$SENSOR_SECRETS" <<EOF
@@ -423,6 +445,7 @@ EOF
 #define SECRET_PASS     "${WIFI_PASS}"
 
 #define MQTT_SERVER     "${MQTT_SERVER}"
+#define MQTT_PORT       8883
 #define MQTT_USER       "admin"
 #define MQTT_PASS       "${MQTT_PASS}"
 
@@ -437,12 +460,16 @@ EOF
 #define BACKEND_URL  "${BACKEND_URL}"
 EOF
 
+    # ui/.env values are correct for the dev-mode host process, where
+    # the UI reaches mosquitto and InfluxDB via 127.0.0.1-bound host
+    # ports. In production the UI runs in a container; docker-compose
+    # overrides INFLUXDB_URL and MQTT_URL with bridge-network values.
     cat > "$UI_ENV" <<EOF
 INFLUXDB_URL=${INFLUXDB_URL}
 INFLUXDB_TOKEN=${INFLUXDB_TOKEN}
 INFLUXDB_DATABASE=${INFLUXDB_DATABASE}
 
-MQTT_URL=mqtt://${MQTT_SERVER}:1883
+MQTT_URL=mqtt://localhost:1883
 MQTT_USER=admin
 MQTT_PASS=${MQTT_PASS}
 
@@ -526,12 +553,10 @@ PYEOF
         bootstrap_local_ca
     fi
 
-    echo -e "${BOLD}Installing UI dependencies…${NC}"
+    # Install host node_modules so `warren start --dev` works out of the
+    # box. The production container builds its own deps inside the image.
+    echo -e "${BOLD}Installing UI dependencies (for dev mode)…${NC}"
     (cd "$UI_DIR" && npm install)
-
-    echo ""
-    echo -e "${BOLD}Building UI…${NC}"
-    (cd "$UI_DIR" && npm run build)
 
     echo ""
     info "Setup complete."
@@ -627,8 +652,12 @@ bootstrap_local_ca() {
 
     rm -f "$srv_csr" "$DOCKER_DIR/tls/ca.srl"
 
-    chmod 0600 "$ca_key" "$srv_key"
-    chmod 0644 "$ca_crt" "$srv_crt"
+    chmod 0600 "$ca_key"
+    # server.key is mounted into the mosquitto container as well, where
+    # the mosquitto user (uid 1883) needs to read it. 0644 is acceptable
+    # because docker/tls/ is local-fs-only and our threat model trusts
+    # local root.
+    chmod 0644 "$ca_crt" "$srv_crt" "$srv_key"
 
     cp "$ca_crt" "$CA_CERT_SITE"
     chmod 0644 "$CA_CERT_SITE"
@@ -695,7 +724,7 @@ cmd_start() {
         local pid
         pid="$(cat "$PID_FILE")"
         if kill -0 "$pid" 2>/dev/null; then
-            warn "UI already running (PID $pid). Run 'warren stop' first."
+            warn "UI dev server already running (PID $pid). Run 'warren stop' first."
             exit 1
         else
             rm -f "$PID_FILE"
@@ -716,9 +745,19 @@ cmd_start() {
         preflight_ports    || exit 1
     fi
 
+    # In --dev --proxy, the UI is a host process — Caddy must reverse-proxy
+    # to the host gateway, not the (absent) ui container. Override the
+    # WARREN_UPSTREAM written to docker/.env via shell env precedence.
+    local compose_env=()
+    if [[ "$mode" == "dev-proxy" ]]; then
+        compose_env=("WARREN_UPSTREAM=host.docker.internal:3000")
+    fi
+
     echo -e "${BOLD}Starting infrastructure…${NC}"
+    # `--build` rebuilds the ui image when nextjs-ui sources change. No-op
+    # in dev / dev-proxy where the ui profile isn't active.
     # shellcheck disable=SC2086
-    (cd "$DOCKER_DIR" && docker compose $profiles up -d)
+    (cd "$DOCKER_DIR" && env "${compose_env[@]}" docker compose $profiles up -d --build)
 
     echo ""
     echo -e "${BOLD}Service status:${NC}"
@@ -748,10 +787,9 @@ cmd_start() {
         echo ""
         (cd "$UI_DIR" && npm run dev)
     else
-        echo -e "${BOLD}Starting UI…${NC}"
-        (cd "$UI_DIR" && set -a && source "$UI_ENV" && set +a && exec npx next start) &
-        echo $! > "$PID_FILE"
-        info "UI started (PID $(cat "$PID_FILE"))"
+        # UI runs as the `warren-ui` Compose service (started above by
+        # `docker compose --profile ui up`). Nothing else to start here.
+        info "UI container: warren-ui"
         echo ""
         echo -e "Run ${BOLD}warren stop${NC} to shut everything down."
     fi
@@ -774,41 +812,16 @@ cmd_stop() {
     echo -e "${BOLD}Warren — Stop${NC}"
     echo ""
 
-    local tracked_pid=""
-
-    # Stop PID-file managed process (production mode)
-    if [[ -f "$PID_FILE" ]]; then
-        tracked_pid="$(cat "$PID_FILE")"
-        if kill -0 "$tracked_pid" 2>/dev/null; then
-            echo "Stopping UI (PID $tracked_pid)…"
-            kill "$tracked_pid"
-            wait "$tracked_pid" 2>/dev/null || true
-        else
-            warn "UI process (PID $tracked_pid) from PID file not found — already stopped."
-        fi
-        rm -f "$PID_FILE"
-    fi
-
-    # Scan for any Nuxt processes not tracked by the PID file (dev or prod)
-    local orphans=()
-    while IFS= read -r pid; do
-        [[ -z "$pid" || "$pid" == "$tracked_pid" || "$pid" == "$$" ]] && continue
-        kill -0 "$pid" 2>/dev/null && orphans+=("$pid")
-    done < <(pgrep -f "$UI_DIR" 2>/dev/null || true)
-
-    for pid in "${orphans[@]}"; do
-        echo "Stopping UI process (PID $pid)…"
-        kill "$pid" || true
-    done
-
-    if [[ -z "$tracked_pid" && ${#orphans[@]} -eq 0 ]]; then
-        echo "No UI process found — already stopped."
-    fi
+    # Production runs the UI as a Compose service; dev runs `next dev` as
+    # a foreground host process the user already exited with Ctrl+C. The
+    # PID file is a leftover from the old prod-as-host-process flow; clean
+    # it up if present, but don't try to track foreground dev processes.
+    [[ -f "$PID_FILE" ]] && rm -f "$PID_FILE"
 
     echo "Stopping infrastructure…"
-    # Pass the prod profile so the caddy service is included even when
-    # no profile is currently active in the shell.
-    (cd "$DOCKER_DIR" && docker compose --profile prod stop) 2>/dev/null \
+    # Pass both profiles so the caddy + ui services are included even
+    # when no profile is currently active in the shell.
+    (cd "$DOCKER_DIR" && docker compose --profile prod --profile ui stop) 2>/dev/null \
         || (cd "$DOCKER_DIR" && docker compose stop)
     echo ""
     info "Done."
@@ -867,7 +880,7 @@ cmd_clear() {
     echo -e "${RED}This will permanently delete all data, secrets, and tokens.${NC}"
     echo ""
     echo "The following will be removed:"
-    echo "  Docker volumes:  node_red_data, influxdb3_data, caddy_data, caddy_config"
+    echo "  Docker volumes:  node_red_data, influxdb3_data, caddy_data, caddy_config, warren_ui_data"
     echo "  docker/admin.token"
     echo "  docker/mosquitto/config/passwordfile"
     echo "  docker/mosquitto/config/mosquitto.conf  (reset to anonymous template)"
@@ -900,7 +913,7 @@ cmd_clear() {
     fi
 
     echo "Stopping infrastructure and removing volumes…"
-    (cd "$DOCKER_DIR" && docker compose --profile prod down -v) \
+    (cd "$DOCKER_DIR" && docker compose --profile prod --profile ui down -v) \
         || (cd "$DOCKER_DIR" && docker compose down -v)
     echo ""
 

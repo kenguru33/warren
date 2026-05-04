@@ -12,10 +12,10 @@ echo "--- test_clear ---"
 
 INFLUXDB_TOKEN_FILE="$DOCKER_DIR/admin.token"
 MQTT_PASSWORDFILE="$DOCKER_DIR/mosquitto/config/passwordfile"
-UI_ENV="$REPO_ROOT/ui/.env"
+UI_ENV="$REPO_ROOT/nextjs-ui/.env"
 SENSOR_SECRETS="$REPO_ROOT/firmware/sensor/include/secrets.h"
 CAMERA_SECRETS="$REPO_ROOT/firmware/camera/include/secrets.h"
-SQLITE_DATA_DIR="$REPO_ROOT/ui/.data"
+SQLITE_DATA_DIR="$REPO_ROOT/nextjs-ui/.data"
 COMPOSE_ENV="$DOCKER_DIR/.env"
 CADDY_FILE="$DOCKER_DIR/caddy/Caddyfile"
 CA_CERT_HOST="$DOCKER_DIR/tls/ca.crt"
@@ -31,10 +31,10 @@ printf 'YES\n' | "$WARREN" clear
 
 assert_no_file "$INFLUXDB_TOKEN_FILE"  "docker/admin.token deleted"
 assert_no_file "$MQTT_PASSWORDFILE"    "docker/mosquitto/config/passwordfile deleted"
-assert_no_file "$UI_ENV"               "ui/.env deleted"
+assert_no_file "$UI_ENV"               "nextjs-ui/.env deleted"
 assert_no_file "$SENSOR_SECRETS"       "firmware/sensor/include/secrets.h deleted"
 assert_no_file "$CAMERA_SECRETS"       "firmware/camera/include/secrets.h deleted"
-assert_no_dir  "$SQLITE_DATA_DIR"      "ui/.data/ deleted"
+assert_no_dir  "$SQLITE_DATA_DIR"      "nextjs-ui/.data/ deleted"
 
 # Named volumes must be gone
 volumes="$(docker volume ls --format '{{.Name}}')"
@@ -57,6 +57,13 @@ if echo "$volumes" | grep -qE '(^|_)caddy_data$'; then
     ((failed++))
 else
     echo "  PASS: caddy_data volume removed"
+    ((passed++))
+fi
+if echo "$volumes" | grep -qE '(^|_)warren_ui_data$'; then
+    echo "  FAIL: warren_ui_data volume still exists after clear" >&2
+    ((failed++))
+else
+    echo "  PASS: warren_ui_data volume removed"
     ((passed++))
 fi
 

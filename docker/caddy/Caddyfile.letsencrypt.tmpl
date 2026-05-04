@@ -16,22 +16,11 @@
 # `caddy validate` against caddy:2.10-alpine will fail with
 # "module not registered: dns.providers.<provider>" — that's expected.
 
-# Plaintext :80 — passes device endpoints through, 308-redirects everything
-# else to HTTPS. No /ca.crt route here — the cert is publicly trusted.
+# Plaintext :80 — redirects everything to HTTPS. The cert is publicly
+# trusted, so no /ca.crt route is needed. ESP32 firmware reaches the API
+# over HTTPS now.
 :80 {
-	@device_static path /api/sensors/announce /api/sensors/config/*
-	handle @device_static {
-		reverse_proxy {$WARREN_UPSTREAM}
-	}
-
-	@device_reading path_regexp ^/api/sensors/[^/]+/reading$
-	handle @device_reading {
-		reverse_proxy {$WARREN_UPSTREAM}
-	}
-
-	handle {
-		redir https://{$WARREN_DOMAIN}{uri} 308
-	}
+	redir https://{$WARREN_DOMAIN}{uri} 308
 }
 
 # HTTPS :443 — main user surface. Caddy obtains a Let's Encrypt cert via

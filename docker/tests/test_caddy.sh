@@ -45,19 +45,17 @@ else
     ((failed++))
 fi
 
-# Device endpoints stay plaintext (must NOT 308 — should reach Next.js).
-# Next.js will return 4xx for empty/invalid bodies; the assertion is that
-# Caddy didn't redirect us to HTTPS.
+# Device endpoints now redirect to HTTPS too — firmware speaks TLS.
 for path in /api/sensors/announce /api/sensors/config/test-device /api/sensors/test-device/reading; do
     status="$(curl -s -o /dev/null -w '%{http_code}' \
         -X POST -H 'Content-Type: application/json' -d '{}' \
         "http://localhost${path}" 2>/dev/null || echo 000)"
     if [[ "$status" =~ ^30[178]$ ]]; then
-        echo "  FAIL: device endpoint $path got redirected to HTTPS ($status)" >&2
-        ((failed++))
-    else
-        echo "  PASS: device endpoint $path stays plaintext (status $status)"
+        echo "  PASS: device endpoint $path redirected to HTTPS (status $status)"
         ((passed++))
+    else
+        echo "  FAIL: device endpoint $path expected 30x redirect, got $status" >&2
+        ((failed++))
     fi
 done
 

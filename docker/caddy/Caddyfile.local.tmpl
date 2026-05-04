@@ -13,8 +13,9 @@
 	auto_https disable_redirects
 }
 
-# Plaintext :80 — serves the CA cert, passes device endpoints through, and
-# 308-redirects everything else to HTTPS.
+# Plaintext :80 — only used to serve the CA download (chicken-and-egg:
+# clients need it before they can validate HTTPS) and to redirect the rest
+# of the surface to HTTPS. ESP32 firmware reaches the API over HTTPS now.
 :80 {
 	# Public CA download. Plaintext on purpose: chicken-and-egg — clients
 	# need this file before they can trust HTTPS.
@@ -23,20 +24,6 @@
 		file_server
 		header Content-Type application/x-x509-ca-cert
 		header Content-Disposition "attachment; filename=warren-ca.crt"
-	}
-
-	# Device-facing endpoints from nextjs-ui/proxy.ts PUBLIC lists. ESP32
-	# firmware does not speak TLS, so these stay plaintext. Caddy AND-
-	# combines different matcher types within a single named matcher,
-	# so the static and regex paths live in separate handlers.
-	@device_static path /api/sensors/announce /api/sensors/config/*
-	handle @device_static {
-		reverse_proxy {$WARREN_UPSTREAM}
-	}
-
-	@device_reading path_regexp ^/api/sensors/[^/]+/reading$
-	handle @device_reading {
-		reverse_proxy {$WARREN_UPSTREAM}
 	}
 
 	# Everything else: redirect to HTTPS on whatever hostname/IP the
