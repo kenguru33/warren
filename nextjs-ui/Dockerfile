@@ -31,9 +31,13 @@ ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3000
 ENV WARREN_DATA_DIR=/data
 
-# Non-root runtime user.
+# Non-root runtime user. Create /data with the right owner BEFORE
+# declaring the VOLUME so a fresh named volume inherits correct
+# perms — otherwise SQLite hits SQLITE_CANTOPEN on first boot.
 RUN addgroup --system --gid 1001 warren \
- && adduser --system --uid 1001 --ingroup warren warren
+ && adduser --system --uid 1001 --ingroup warren warren \
+ && mkdir -p /data \
+ && chown warren:warren /data
 
 COPY --from=builder --chown=warren:warren /app/package.json /app/package.json
 COPY --from=builder --chown=warren:warren /app/.next /app/.next

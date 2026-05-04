@@ -783,9 +783,15 @@ cmd_start() {
     fi
 
     if $dev; then
-        echo -e "${BOLD}Starting UI in dev mode (Ctrl+C to stop UI; run 'warren stop' to also stop infrastructure)…${NC}"
+        # Bind the dev server to loopback by default so it's never on the
+        # LAN (matches the prod policy: HTTPS-only on the LAN). Switch to
+        # all-interfaces in --dev --proxy because Caddy reaches the host
+        # via host-gateway, which can't see 127.0.0.1-bound listeners.
+        local dev_host="127.0.0.1"
+        $proxy && dev_host="0.0.0.0"
+        echo -e "${BOLD}Starting UI in dev mode (host=${dev_host}; Ctrl+C to stop UI; run 'warren stop' to also stop infrastructure)…${NC}"
         echo ""
-        (cd "$UI_DIR" && npm run dev)
+        (cd "$UI_DIR" && npm run dev -- -H "$dev_host")
     else
         # UI runs as the `warren-ui` Compose service (started above by
         # `docker compose --profile ui up`). Nothing else to start here.

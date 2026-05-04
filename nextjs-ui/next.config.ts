@@ -9,14 +9,14 @@ const nextConfig: NextConfig = {
   // Next 16 blocks dev assets (including the HMR WebSocket) from origins
   // other than the hostname the dev server was bound to. Warren runs on a
   // home LAN so the dashboard is typically accessed from a different
-  // machine than the one running `next dev`. Set WARREN_DEV_ORIGINS in the
-  // environment to a comma-separated list of hostnames to allow (e.g.
-  // `WARREN_DEV_ORIGINS=192.168.80.60,warren.local`). The wildcard suffix
-  // pattern `*.local` covers mDNS resolution; specific IPs need to be
-  // listed explicitly because Next's matcher only supports subdomain
-  // wildcards, not arbitrary IP-octet wildcards.
+  // machine than the one running `next dev`. The host's LAN IP and
+  // optional custom hostname (both written to .env by `warren setup`) are
+  // allowlisted automatically; WARREN_DEV_ORIGINS extends the list with
+  // anything else (comma-separated). `*.local` covers mDNS resolution.
   allowedDevOrigins: [
     "*.local",
+    ...[process.env.WARREN_LAN_IP, process.env.WARREN_HOSTNAME]
+      .filter((v): v is string => typeof v === "string" && v.length > 0),
     ...(process.env.WARREN_DEV_ORIGINS ?? "")
       .split(",")
       .map(s => s.trim())
