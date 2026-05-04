@@ -42,13 +42,14 @@ function insertRows(
 }
 
 function syncSqliteSequence(db: Database.Database) {
-  const upsert = db.prepare(`
-    INSERT INTO sqlite_sequence (name, seq) VALUES (?, ?)
-    ON CONFLICT(name) DO UPDATE SET seq = excluded.seq
-  `)
+  // sqlite_sequence is an SQLite-internal table with no UNIQUE constraint on
+  // `name`, so ON CONFLICT(name) is rejected. UPDATE-or-INSERT instead.
+  const update = db.prepare('UPDATE sqlite_sequence SET seq = ? WHERE name = ?')
+  const insert = db.prepare('INSERT INTO sqlite_sequence (name, seq) VALUES (?, ?)')
   for (const t of AUTOINCREMENT_TABLES) {
     const row = db.prepare(`SELECT COALESCE(MAX(id), 0) AS m FROM "${t}"`).get() as { m: number }
-    upsert.run(t, row.m)
+    const result = update.run(row.m, t)
+    if (result.changes === 0) insert.run(t, row.m)
   }
 }
 
