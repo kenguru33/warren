@@ -88,7 +88,9 @@ export function LightGroupTile({
   }
 
   async function toggleMaster() {
-    const next = displayState !== 'all-on'
+    // Mixed renders as "on" (isOn includes mixed). Tapping always inverts the
+    // rendered position: on/mixed → off, off → on.
+    const next = !isOn
     setLocalOn(next)
     setPending(true)
     setError(null)
