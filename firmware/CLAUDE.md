@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Two independent PlatformIO/Arduino projects for ESP32 microcontrollers:
 - **sensor/** — reads DHT22 temperature/humidity, publishes via MQTT, controls fan/heater relays
-- **camera/** — AI Thinker ESP32-CAM: serves MJPEG stream (`/stream`) and JPEG snapshot (`/capture`) over HTTP, announces itself to the Nuxt backend on boot
+- **camera/** — AI Thinker ESP32-CAM: serves MJPEG stream (`/stream`) and JPEG snapshot (`/capture`) over HTTP, announces itself to the Next.js backend on boot
 
 ## Build & Flash
 
@@ -28,14 +28,14 @@ pio device monitor -b 115200
 
 `camera/src/main.cpp` starts a single HTTP server on port 80 with two URI handlers:
 
-- **`/stream`** — MJPEG multipart stream (`multipart/x-mixed-replace; boundary=frame`), consumed by the Nuxt `<img :src="streamUrl" />` in `LiveStreamModal.vue`
-- **`/capture`** — single JPEG snapshot, shown in `CameraCard.vue`
+- **`/stream`** — MJPEG multipart stream (`multipart/x-mixed-replace; boundary=frame`), consumed by `<img src={streamUrl} />` in `nextjs-ui/app/components/warren/live-stream-modal.tsx`
+- **`/capture`** — single JPEG snapshot, shown in `nextjs-ui/app/components/warren/camera-tile.tsx`
 
-On boot, after WiFi connects, `announceToBackend()` POSTs to `BACKEND_URL/api/sensors/announce` with the device's IP-based stream/snapshot URLs and a MAC-derived `deviceId`. The Nuxt backend stores these in SQLite and they appear in the "Add Sensor" modal under discovered cameras.
+On boot, after WiFi connects, `announceToBackend()` POSTs to `BACKEND_URL/api/sensors/announce` with the device's IP-based stream/snapshot URLs and a MAC-derived `deviceId`. The Next.js backend writes these to the `sensor_announcements` table in SQLite and they surface in the **Sensors** discovery list alongside ESP32 climate sensors and Hue devices.
 
 **GPIO 4** is the onboard flash LED (initialized LOW/off) — do not repurpose it for other output.
 
-**Secrets:** copy `camera/include/secrets.h.example` → `camera/include/secrets.h` and set `SECRET_SSID`, `SECRET_PASS`, and `BACKEND_URL` (e.g. `http://192.168.1.100:3000`).
+**Secrets:** copy `camera/include/secrets.h.example` → `camera/include/secrets.h` and set `SECRET_SSID`, `SECRET_PASS`, and `BACKEND_URL` (e.g. `https://192.168.1.100` — Caddy fronts the dashboard at :443; the firmware uses `setInsecure()` so the LAN-only self-signed cert is accepted without bundling the local CA).
 
 ## Simulation (Wokwi)
 
@@ -46,18 +46,23 @@ Both projects have Wokwi schematics and use `Wokwi-GUEST` WiFi by default in the
 
 ## IoT Backend Stack
 
+Use the `warren` CLI rather than raw `docker compose` — it generates the secrets, Caddy cert, and Mosquitto password file the firmware connects with.
+
 ```bash
 cd ../docker
-docker compose up -d
+./warren setup    # first time only
+./warren start
 ```
 
-| Service     | URL / Port         |
-|-------------|-------------------|
-| InfluxDB    | localhost:8086    |
-| InfluxDB UI | localhost:8888    |
-| Mosquitto   | localhost:1883    |
-| Node-RED    | localhost:1880    |
-| Grafana     | localhost:3000    |
+| Service             | LAN address                  | Loopback address      |
+|---------------------|------------------------------|-----------------------|
+| Warren dashboard    | https://&lt;lan-ip&gt;       | http://localhost:3000 (`--dev`) |
+| Mosquitto MQTTS     | mqtts://&lt;lan-ip&gt;:8883  | mqtt://localhost:1883 |
+| InfluxDB 3          | —                            | http://localhost:8086 |
+| InfluxDB Explorer   | —                            | http://localhost:8888 |
+| Node-RED            | —                            | http://localhost:1880 |
+
+Operator-only ports are bound to `127.0.0.1`. Devices speak TLS only: HTTPS for the dashboard via Caddy and MQTTS for the broker. The plaintext `:1883` listener stays inside the Docker bridge network (UI container ↔ broker) and host loopback (dev mode).
 
 ## Sensor Architecture
 
@@ -65,7 +70,7 @@ docker compose up -d
 
 - **`taskReadSensor`** (core 1, priority 1) — polls DHT22 at `config.pollInterval` (default 5 s), pushes valid readings into a `QueueHandle_t`
 - **`taskMQTT`** (core 0, priority 1) — drains the queue, publishes to `warren/sensors/{deviceId}/temperature` and `warren/sensors/{deviceId}/humidity`, handles reconnection, then applies relay control directly from the published reading
-- **`taskFetchConfig`** (core 0, priority 1) — polls `BACKEND_URL/api/sensors/config/{deviceId}` at `config.configFetchInterval` (default 60 s), updates the shared `SensorConfig` struct and persists changes to NVS
+- **`taskFetchConfig`** (core 0, priority 1) — polls `BACKEND_URL/api/sensors/config/{deviceId}` at `config.configFetchInterval` (default 60 s) over HTTPS with `setInsecure()`, updates the shared `SensorConfig` struct and persists changes to NVS. The endpoint is on the `proxy.ts` allowlist so device polls don't need a session cookie.
 
 `loop()` is intentionally empty; all work is done in tasks.
 
@@ -80,7 +85,7 @@ docker compose up -d
 
 ## Secrets
 
-Copy `sensor/include/secrets.h.example` to `sensor/include/secrets.h` and fill in `SECRET_SSID`, `SECRET_PASS`, `MQTT_SERVER`, `MQTT_USER`, `MQTT_PASS`, `BACKEND_URL`. The file is gitignored.
+Copy `sensor/include/secrets.h.example` to `sensor/include/secrets.h` and fill in `SECRET_SSID`, `SECRET_PASS`, `MQTT_SERVER` (Warren host LAN IP), `MQTT_PORT` (8883 for MQTTS), `MQTT_USER`, `MQTT_PASS`, and `BACKEND_URL` (e.g. `https://192.168.1.100`). `MQTT_PASS` is generated by `warren setup` and written into `nextjs-ui/.env` and `docker/mosquitto/config/`; copy it from there. The file is gitignored.
 
 ## Dependencies (sensor)
 
