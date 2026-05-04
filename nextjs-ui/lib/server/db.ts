@@ -39,6 +39,9 @@ export function getDb(): Database.Database {
   return _db
 }
 
+// Schema changes that alter any table shape (column add/remove/rename, type
+// change, CHECK constraint change) must bump SNAPSHOT_SCHEMA_VERSION in
+// lib/shared/backup.ts so the restore engine refuses incompatible snapshots.
 export function initDb() {
   const db = getDb()
   db.exec(`
