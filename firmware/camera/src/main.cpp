@@ -2,6 +2,7 @@
 #include "esp_camera.h"
 #include "esp_http_server.h"
 #include <WiFi.h>
+#include <WiFiClientSecure.h>
 #include <HTTPClient.h>
 #include "secrets.h"
 #include "wifi_connect.h"
@@ -165,8 +166,12 @@ static void announceToBackend() {
   Serial.printf("  Snapshot URL:%s\n", snapUrl.c_str());
   Serial.printf("  Backend:     %s\n", BACKEND_URL);
 
+  // BACKEND_URL is https:// (Caddy edge). Skip cert validation — same
+  // posture as the sensor firmware. The LAN is the trust boundary.
+  WiFiClientSecure secure;
+  secure.setInsecure();
   HTTPClient http;
-  http.begin(String(BACKEND_URL) + "/api/sensors/announce");
+  http.begin(secure, String(BACKEND_URL) + "/api/sensors/announce");
   http.addHeader("Content-Type", "application/json");
   int code = http.POST(payload);
   Serial.printf("  Response:    HTTP %d\n", code);

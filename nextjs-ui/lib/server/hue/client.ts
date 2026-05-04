@@ -212,6 +212,40 @@ export async function setLightState(
   }
 }
 
+// Hue v1 group-action: PUT /api/{key}/groups/{groupId}/action. Group "0" is
+// special and always exists — it's the implicit "all lights paired to this
+// bridge" group, and the bridge sends a single Zigbee group broadcast rather
+// than N unicasts. Much more reliable for master-switch-style "all on/off"
+// commands than fanning N parallel /lights/{id}/state PUTs.
+export async function setGroupState(
+  ip: string,
+  key: string,
+  groupId: string,
+  body: { on?: boolean; bri?: number; xy?: [number, number]; ct?: number },
+): Promise<void> {
+  if (FAKE) return
+  let res: Response
+  try {
+    res = await fetch(`http://${ip}/api/${key}/groups/${groupId}/action`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(5000),
+    })
+  } catch (e) {
+    throw new HueUnreachableError(String((e as Error).message ?? e))
+  }
+  if (!res.ok) throw new HueUnreachableError(`HTTP ${res.status}`)
+  const data = await res.json() as unknown[]
+  if (isUnauthorized(data)) throw new HueUnauthorizedError()
+  for (const item of data) {
+    if (item && typeof item === 'object' && 'error' in item) {
+      const err = (item as HueErrorWrapper).error
+      throw new HueUnreachableError(err.description)
+    }
+  }
+}
+
 export function mapHueSensorType(hueType: string): 'temperature' | 'motion' | 'lightlevel' | 'daylight' | null {
   switch (hueType) {
     case 'ZLLTemperature':

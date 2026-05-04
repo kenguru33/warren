@@ -21,15 +21,16 @@ export function MasterLightToggle({
   variant?: 'compact' | 'wide'
   onToggle: (nextOn: boolean) => void
 }) {
-  const nextOn = master.state !== 'all-on'
   const isOn = master.state === 'all-on'
   const isMixed = master.state === 'mixed'
   const stateLabel = master.state === 'all-on' ? 'All on' : isMixed ? 'Mixed' : 'All off'
 
-  // Catalyst Switch is binary (on/off). Mixed state is rendered as "checked" with
-  // an adjacent <Badge color="amber">Mixed</Badge> indicator; the toggle's intent
-  // is always to flip-to-all-on, matching the legacy behavior.
+  // Catalyst Switch is binary; mixed renders as "checked" with an adjacent
+  // <Badge color="amber">Mixed</Badge>. Tapping always inverts the rendered
+  // position: on/mixed → all off, off → all on. That matches user expectation
+  // ("if it looks on, turning it off should turn everything off").
   const checked = master.state === 'all-on' || isMixed
+  const nextOn = !checked
   const ariaLabel = nextOn ? 'Turn all lights on' : 'Turn all lights off'
 
   if (variant === 'wide') {

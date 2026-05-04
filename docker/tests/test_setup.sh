@@ -23,8 +23,10 @@ if [[ -f "$INFLUXDB_TOKEN_FILE" ]]; then
     return 0 2>/dev/null || exit 0
 fi
 
-# Run setup with synthetic answers piped via stdin
-printf 'test-ssid\ntest-wifi-pass\ntest-ui-pass\n127.0.0.1\n' \
+# Run setup with synthetic answers piped via stdin.
+# Order: WIFI_SSID, WIFI_PASS, UI_PASS, BACKEND_HOST,
+#        Let's-Encrypt? (n = local-CA mode), Custom-hostname? (n = IP only).
+printf 'test-ssid\ntest-wifi-pass\ntest-ui-pass\n127.0.0.1\nn\nn\n' \
     | "$WARREN" setup
 
 assert_file "$INFLUXDB_TOKEN_FILE"     "docker/admin.token"
@@ -34,6 +36,38 @@ assert_file "$NODERED_FLOWS"           "docker/nodered/flows.json"
 assert_file "$UI_ENV"                  "ui/.env"
 assert_file "$SENSOR_SECRETS"          "firmware/sensor/include/secrets.h"
 assert_file "$CAMERA_SECRETS"          "firmware/camera/include/secrets.h"
+
+# mosquitto.conf must enable the MQTTS listener on 8883.
+if grep -q '^listener 8883' "$MQTT_CONF" 2>/dev/null; then
+    echo "  PASS: mosquitto.conf has MQTTS listener on 8883"
+    ((passed++))
+else
+    echo "  FAIL: mosquitto.conf missing 'listener 8883'" >&2
+    ((failed++))
+fi
+
+# secrets.h must point firmware at MQTTS + HTTPS.
+if grep -q '^#define MQTT_PORT' "$SENSOR_SECRETS" 2>/dev/null; then
+    echo "  PASS: sensor secrets.h defines MQTT_PORT"
+    ((passed++))
+else
+    echo "  FAIL: sensor secrets.h missing MQTT_PORT" >&2
+    ((failed++))
+fi
+if grep -q '^#define BACKEND_URL.*"https://' "$SENSOR_SECRETS" 2>/dev/null; then
+    echo "  PASS: sensor secrets.h BACKEND_URL is https://"
+    ((passed++))
+else
+    echo "  FAIL: sensor secrets.h BACKEND_URL not https" >&2
+    ((failed++))
+fi
+if grep -q '^#define BACKEND_URL.*"https://' "$CAMERA_SECRETS" 2>/dev/null; then
+    echo "  PASS: camera secrets.h BACKEND_URL is https://"
+    ((passed++))
+else
+    echo "  FAIL: camera secrets.h BACKEND_URL not https" >&2
+    ((failed++))
+fi
 
 # Capture token for idempotency check
 original_token="$(cat "$INFLUXDB_TOKEN_FILE")"

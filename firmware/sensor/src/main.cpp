@@ -1,5 +1,6 @@
 #include <Arduino.h>
   #include <WiFi.h>
+  #include <WiFiClientSecure.h>
   #include <HTTPClient.h>
   #include <PubSubClient.h>
   #include <ArduinoJson.h>
@@ -17,7 +18,12 @@
   const char* mqtt_server = MQTT_SERVER;
   const char* mqtt_user = MQTT_USER;
   const char* mqtt_password = MQTT_PASS;
-  const uint16_t mqtt_port = 1883;
+  // Defaults to 8883 (MQTTS) when secrets.h omits MQTT_PORT — kept as a
+  // fallback so a stale secrets.h still compiles.
+  #ifndef MQTT_PORT
+  #define MQTT_PORT 8883
+  #endif
+  const uint16_t mqtt_port = MQTT_PORT;
 
   // -------------------- Pins --------------------
   const int DHT_PIN = 21;
@@ -25,8 +31,11 @@
   const int HEATER_PIN = 4;
 
   // -------------------- Objects --------------------
+  // The broker uses Warren's local-CA self-signed leaf cert. Sensors skip
+  // cert validation (`setInsecure()`) so we don't have to install the CA
+  // on every device — the LAN itself is the trust boundary.
   DHTesp dhtSensor;
-  WiFiClient espClient;
+  WiFiClientSecure espClient;
   PubSubClient client(espClient);
   Preferences prefs;
 
@@ -168,9 +177,13 @@
   void fetchConfig() {
     if (WiFi.status() != WL_CONNECTED) return;
 
+    // BACKEND_URL is https:// (Caddy edge). Reuse the same insecure-TLS
+    // posture as the MQTT client so we don't need a CA on each device.
+    WiFiClientSecure secure;
+    secure.setInsecure();
     HTTPClient http;
     String url = String(BACKEND_URL) + "/api/sensors/config/" + deviceId;
-    http.begin(url);
+    http.begin(secure, url);
     int code = http.GET();
 
     if (code != 200) {
@@ -330,6 +343,11 @@
     pinMode(HEATER_PIN, OUTPUT);
 
     WiFi.mode(WIFI_STA);
+
+    // Trust the broker's self-signed cert without validation. The LAN is
+    // the trust boundary; we only want TLS so the password isn't sent in
+    // clear text. Same posture as the camera firmware's HTTPS calls.
+    espClient.setInsecure();
 
     client.setServer(mqtt_server, mqtt_port);
     client.setCallback(mqttCallback);

@@ -1,5 +1,5 @@
 import { getDb } from '@/lib/server/db'
-import { buildMasterView, fanOutLightCommand, type FanOutMember } from '@/lib/server/light-groups'
+import { buildMasterView, masterFanOut, type FanOutMember } from '@/lib/server/light-groups'
 import type { SensorView } from '@/lib/shared/types'
 
 export async function GET() {
@@ -48,5 +48,5 @@ export async function POST(req: Request) {
     return Response.json({ statusCode: 409, message: 'no controllable lights' }, { status: 409 })
   }
 
-  return Response.json(await fanOutLightCommand(db, members, { on: body.on }))
+  return Response.json(await masterFanOut(db, members, { on: body.on }))
 }

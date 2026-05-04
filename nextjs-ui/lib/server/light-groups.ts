@@ -10,7 +10,7 @@ import {
   type LightTheme,
   type LightThemeKey,
 } from '@/lib/shared/light-themes'
-import { setLightState, HueUnauthorizedError, HueUnreachableError } from './hue/client'
+import { setLightState, setGroupState, HueUnauthorizedError, HueUnreachableError } from './hue/client'
 import { HttpError } from './errors'
 
 export interface FanOutMember {
@@ -37,6 +37,54 @@ export interface FanOutSummary {
   results: FanOutResult[]
 }
 
+// Hue v1 bridges throttle hard once you exceed ~10 cmd/sec on /lights and drop
+// or 503 the rest. Fanning N parallel PUTs at once is what causes "the master
+// switch missed two bulbs" — so cap in-flight requests and retry transient
+// failures. HueUnauthorizedError is terminal (wrong app key) and not retried.
+const HUE_FANOUT_CONCURRENCY = 3
+const HUE_FANOUT_RETRIES = 2
+
+async function setLightStateRetrying(
+  ip: string,
+  key: string,
+  hueResourceId: string,
+  payload: { on?: boolean; bri?: number; xy?: [number, number]; ct?: number },
+): Promise<void> {
+  let lastErr: unknown
+  for (let attempt = 0; attempt <= HUE_FANOUT_RETRIES; attempt++) {
+    try {
+      await setLightState(ip, key, hueResourceId, payload)
+      return
+    } catch (err) {
+      if (err instanceof HueUnauthorizedError) throw err
+      lastErr = err
+      if (attempt < HUE_FANOUT_RETRIES) {
+        await new Promise(r => setTimeout(r, 150 * (attempt + 1)))
+      }
+    }
+  }
+  throw lastErr
+}
+
+async function pAll<T>(
+  items: T[],
+  concurrency: number,
+  fn: (item: T, idx: number) => Promise<void>,
+): Promise<void> {
+  let cursor = 0
+  const workers = Array.from(
+    { length: Math.min(concurrency, items.length) },
+    async () => {
+      while (true) {
+        const idx = cursor++
+        if (idx >= items.length) return
+        await fn(items[idx], idx)
+      }
+    },
+  )
+  await Promise.all(workers)
+}
+
 export async function fanOutLightCommand(
   db: Database,
   members: FanOutMember[],
@@ -60,7 +108,7 @@ export async function fanOutLightCommand(
         : undefined)
 
   const results: FanOutResult[] = []
-  await Promise.all(members.map(async (m, idx) => {
+  await pAll(members, HUE_FANOUT_CONCURRENCY, async (m, idx) => {
     const caps = m.capabilities ? JSON.parse(m.capabilities) : null
     const supportsBri = !!caps?.brightness
     const supportsColorTemp = !!caps?.colorTemp
@@ -85,7 +133,7 @@ export async function fanOutLightCommand(
     const willTouchBridge = Object.keys(payload).length > 0
     try {
       if (willTouchBridge) {
-        await setLightState(m.ip, m.app_key, m.hue_resource_id, payload)
+        await setLightStateRetrying(m.ip, m.app_key, m.hue_resource_id, payload)
       }
       results.push({ sensorId: m.sensor_id, deviceId: m.device_id, ok: true })
 
@@ -114,6 +162,67 @@ export async function fanOutLightCommand(
       if (err instanceof HueUnauthorizedError) code = 'unauthorized'
       else if (err instanceof HueUnreachableError) code = 'unreachable'
       results.push({ sensorId: m.sensor_id, deviceId: m.device_id, ok: false, error: code })
+    }
+  })
+
+  const okCount = results.filter(r => r.ok).length
+  return {
+    ok: okCount > 0,
+    total: results.length,
+    successCount: okCount,
+    failureCount: results.length - okCount,
+    results,
+  }
+}
+
+// Master-switch fan-out. Sends a single PUT to the bridge's group 0 ("all
+// lights paired to this bridge") per bridge, which the bridge delivers as a
+// Zigbee group broadcast — far more reliable than N parallel per-light PUTs
+// against the bridge's rate limiter. Falls back to per-light fan-out (with
+// retries) when the group action fails for a bridge. Members are partitioned
+// by bridge so multi-bridge setups still get one broadcast each.
+export async function masterFanOut(
+  db: Database,
+  members: FanOutMember[],
+  body: { on: boolean },
+): Promise<FanOutSummary> {
+  if (members.length === 0) {
+    return { ok: false, total: 0, successCount: 0, failureCount: 0, results: [] }
+  }
+
+  const byBridge = new Map<string, FanOutMember[]>()
+  for (const m of members) {
+    const bridgeKey = `${m.ip} ${m.app_key}`
+    let arr = byBridge.get(bridgeKey)
+    if (!arr) { arr = []; byBridge.set(bridgeKey, arr) }
+    arr.push(m)
+  }
+
+  const cacheStmt = db.prepare(`
+    INSERT INTO hue_light_state (device_id, on_state, brightness, reachable, theme, updated_at)
+    VALUES (?, ?, NULL, 1, NULL, ?)
+    ON CONFLICT(device_id) DO UPDATE SET
+      on_state   = ?,
+      updated_at = ?
+  `)
+
+  const results: FanOutResult[] = []
+  await Promise.all([...byBridge.values()].map(async (group) => {
+    const sample = group[0]
+    try {
+      await setGroupState(sample.ip, sample.app_key, '0', { on: body.on })
+      const onValue = body.on ? 1 : 0
+      const now = Date.now()
+      for (const m of group) {
+        cacheStmt.run(m.device_id, onValue, now, onValue, now)
+        results.push({ sensorId: m.sensor_id, deviceId: m.device_id, ok: true })
+      }
+    } catch {
+      // Bridge group action failed — fall back to per-light retry path for
+      // this bridge's members so a partial-bridge outage still gets best-effort
+      // delivery to every reachable light.
+      const fallback = await fanOutLightCommand(db, group, body)
+      results.push(...fallback.results)
     }
   }))
 

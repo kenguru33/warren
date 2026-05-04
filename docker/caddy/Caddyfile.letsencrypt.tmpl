@@ -1,0 +1,33 @@
+# Warren reverse proxy — Let's Encrypt mode (DNS-01 challenge).
+# Caddy obtains a publicly-trusted leaf cert via the configured DNS
+# provider's API. No per-device CA install needed.
+#
+# Variables ({$VAR}) are resolved by Caddy at config load from the
+# container's environment (populated by docker compose from docker/.env).
+#
+# WARREN_DOMAIN        — public domain you own (e.g. warren.bernt.dev)
+# WARREN_ACME_EMAIL    — contact email for ACME registration
+# WARREN_DNS_PROVIDER  — caddy-dns provider name (default: cloudflare)
+# WARREN_DNS_TOKEN     — API token for the DNS provider
+# WARREN_UPSTREAM      — host:port that Caddy proxies to (Next.js UI)
+#
+# This file ONLY validates inside the custom warren-caddy image built by
+# `warren setup` (the stock caddy image lacks the DNS provider plugin).
+# `caddy validate` against caddy:2.10-alpine will fail with
+# "module not registered: dns.providers.<provider>" — that's expected.
+
+# Plaintext :80 — redirects everything to HTTPS. The cert is publicly
+# trusted, so no /ca.crt route is needed. ESP32 firmware reaches the API
+# over HTTPS now.
+:80 {
+	redir https://{$WARREN_DOMAIN}{uri} 308
+}
+
+# HTTPS :443 — main user surface. Caddy obtains a Let's Encrypt cert via
+# the configured DNS provider's API.
+{$WARREN_DOMAIN} {
+	tls {$WARREN_ACME_EMAIL} {
+		dns {$WARREN_DNS_PROVIDER} {$WARREN_DNS_TOKEN}
+	}
+	reverse_proxy {$WARREN_UPSTREAM}
+}

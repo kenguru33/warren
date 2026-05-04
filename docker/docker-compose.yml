@@ -2,8 +2,10 @@ services:
   influxdb3:
     image: influxdb:3-core
     container_name: influxdb3
+    # Loopback-only on the host. Operator access via SSH tunnel or `docker exec`.
+    # The UI container reaches it on the bridge network at influxdb3:8086.
     ports:
-      - "8086:8086"
+      - "127.0.0.1:8086:8086"
     volumes:
       - influxdb3_data:/.data
       - ./admin.token:/admin.token:ro
@@ -17,8 +19,8 @@ services:
     image: influxdata/influxdb3-ui:1.6.2
     container_name: influxdb3-explorer
     ports:
-      - "8888:80"
-      - "8889:8888"
+      - "127.0.0.1:8888:80"
+      - "127.0.0.1:8889:8888"
     depends_on:
       - influxdb3
     command: --mode=admin
@@ -27,9 +29,7 @@ services:
     image: nodered/node-red:latest
     container_name: node-red
     ports:
-      - "1880:1880"
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+      - "127.0.0.1:1880:1880"
     volumes:
       - node_red_data:/data
       - ./nodered/flows.json:/data/flows.json
@@ -40,11 +40,76 @@ services:
   mosquitto:
     image: eclipse-mosquitto:2
     container_name: mosquitto
+    # Plaintext :1883 stays loopback-only so the dev-mode host UI can reach
+    # it without traversing the LAN. The UI container talks to mosquitto:1883
+    # over the bridge network (no host port involved).
+    # MQTTS :8883 is the LAN-reachable listener for ESP32 sensors.
     ports:
-      - "1883:1883"
+      - "127.0.0.1:1883:1883"
+      - "8883:8883"
     volumes:
       - ./mosquitto/config:/mosquitto/config
+      - ./tls:/mosquitto/certs:ro
+
+  ui:
+    # Production Next.js dashboard. Runs in this profile only — `warren start
+    # --dev` uses a host-side `next dev` instead. No host port mapping; Caddy
+    # reaches it on the bridge network at ui:3000.
+    build:
+      context: ../nextjs-ui
+      dockerfile: Dockerfile
+    image: warren-ui:latest
+    container_name: warren-ui
+    restart: unless-stopped
+    profiles: ["ui"]
+    env_file:
+      - ../nextjs-ui/.env
+    environment:
+      # Override host-side values from .env so the container resolves
+      # services on the bridge network.
+      INFLUXDB_URL: http://influxdb3:8086
+      MQTT_URL: mqtt://mosquitto:1883
+      WARREN_DATA_DIR: /data
+      NODE_ENV: production
+    volumes:
+      - warren_ui_data:/data
+    depends_on:
+      - influxdb3
+      - mosquitto
+
+  caddy:
+    # Local-CA mode uses the stock image (default). Let's Encrypt mode
+    # uses a custom image built by `warren setup` with the chosen
+    # caddy-dns provider plugin baked in (warren-caddy:latest).
+    image: ${CADDY_IMAGE:-caddy:2.10-alpine}
+    container_name: caddy
+    restart: unless-stopped
+    profiles: ["prod"]
+    ports:
+      - "80:80"
+      - "443:443"
+    extra_hosts:
+      # Used only by `warren start --dev --proxy`, where Caddy reverse-
+      # proxies to the host-side Next.js dev server.
+      - "host.docker.internal:host-gateway"
+    environment:
+      WARREN_TLS_MODE: ${WARREN_TLS_MODE:-local}
+      WARREN_HOSTNAME: ${WARREN_HOSTNAME:-warren.local}
+      WARREN_DOMAIN: ${WARREN_DOMAIN:-}
+      WARREN_ACME_EMAIL: ${WARREN_ACME_EMAIL:-}
+      WARREN_DNS_PROVIDER: ${WARREN_DNS_PROVIDER:-}
+      WARREN_DNS_TOKEN: ${WARREN_DNS_TOKEN:-}
+      WARREN_UPSTREAM: ${WARREN_UPSTREAM:-ui:3000}
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./caddy/site:/srv:ro
+      - ./tls:/etc/caddy/tls:ro
+      - caddy_data:/data
+      - caddy_config:/config
 
 volumes:
   node_red_data:
   influxdb3_data:
+  caddy_data:
+  caddy_config:
+  warren_ui_data:
