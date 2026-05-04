@@ -129,17 +129,19 @@ A Caddy reverse proxy in front of the dashboard terminates TLS so every device o
 
 `warren setup` asks once which one you want:
 
-**1. Local CA (default)** — Caddy issues a self-signed leaf cert from a built-in local CA. Fully offline. Each device installs the CA once.
+**1. Local CA (default)** — `warren setup` generates a self-signed CA + leaf cert with your host's LAN IP as a SubjectAltName. Fully offline; no DNS / mDNS / hostname publishing involved. Each device installs the CA once.
 
 ```
 Use a public domain with Let's Encrypt for an officially-trusted cert? [y/N]: n
-  → Cert hostname: fedora.local   # your host's existing Bonjour/Avahi name
+  → Local CA. Dashboard URL: https://192.168.80.60
+    Tip: reserve this IP on your router (DHCP reservation) so it doesn't change.
 ```
 
-URLs to bookmark:
-- `https://<your-host>.local` — your host's existing mDNS name (works on macOS/iOS via Bonjour, Linux via Avahi, Windows 10+ natively).
-- `https://<your-host-ip>` — your LAN IP (cert warning until CA is installed).
+URL to bookmark:
+- `https://<your-host-ip>` — the LAN IP setup detected (works on every OS, no resolution dance, no Avahi/Bonjour dependency).
 - `http://localhost:3000` — direct host access in `--dev` mode.
+
+> **Why an IP, not a hostname?** Earlier iterations relied on the host's `<hostname>.local` mDNS name. That falls over when your network has multiple hosts with the same hostname (Avahi auto-renames to `<hostname>-2.local`), when the host doesn't run Avahi, or when running inside Docker Desktop/rootless setups where mDNS broadcasts can't reach the LAN. Using the LAN IP directly sidesteps all of that. The cost is a less-pretty URL — bookmark it once. If your DHCP IP changes, re-run `warren setup --force` to reissue the cert.
 
 **2. Let's Encrypt (opt-in)** — publicly-trusted cert via the DNS-01 challenge. No per-device install needed.
 

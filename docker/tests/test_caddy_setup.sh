@@ -35,12 +35,28 @@ assert_file "$CA_CERT_SITE"  "docker/caddy/site/ca.crt copy for /ca.crt route"
 mode="$(grep -m1 '^WARREN_TLS_MODE=' "$COMPOSE_ENV" 2>/dev/null | cut -d= -f2-)"
 assert_eq "$mode" "local" "WARREN_TLS_MODE=local in docker/.env"
 
-# Caddyfile must be the local-CA template (uses tls internal)
-if grep -q 'tls internal' "$CADDY_FILE" 2>/dev/null; then
-    echo "  PASS: Caddyfile contains 'tls internal' (local-CA mode)"
+# Caddyfile must be the local-CA template (uses static cert files we generated)
+if grep -q '/etc/caddy/tls/server.crt' "$CADDY_FILE" 2>/dev/null; then
+    echo "  PASS: Caddyfile points at /etc/caddy/tls/server.crt (local-CA mode)"
     ((passed++))
 else
-    echo "  FAIL: Caddyfile does not contain 'tls internal'" >&2
+    echo "  FAIL: Caddyfile does not reference the static server cert" >&2
+    ((failed++))
+fi
+
+# Server cert was generated and includes the LAN IP as a SAN
+SRV_CRT="$DOCKER_DIR/tls/server.crt"
+SRV_KEY="$DOCKER_DIR/tls/server.key"
+assert_file "$SRV_CRT" "docker/tls/server.crt"
+assert_file "$SRV_KEY" "docker/tls/server.key"
+
+lan_ip="$(grep -m1 '^WARREN_LAN_IP=' "$COMPOSE_ENV" 2>/dev/null | cut -d= -f2-)"
+if [[ -n "$lan_ip" ]] && openssl x509 -in "$SRV_CRT" -noout -ext subjectAltName 2>/dev/null \
+        | grep -qF "IP Address:${lan_ip}"; then
+    echo "  PASS: server cert has SAN IP:${lan_ip}"
+    ((passed++))
+else
+    echo "  FAIL: server cert missing SAN IP:${lan_ip}" >&2
     ((failed++))
 fi
 

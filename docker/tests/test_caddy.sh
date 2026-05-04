@@ -61,16 +61,15 @@ for path in /api/sensors/announce /api/sensors/config/test-device /api/sensors/t
     fi
 done
 
-# HTTPS handshake validates against the extracted CA.
-hostname="$(grep -m1 '^WARREN_HOSTNAME=' "$DOCKER_DIR/.env" 2>/dev/null | cut -d= -f2-)"
-[[ -z "$hostname" ]] && hostname="warren.local"
-if [[ -f "$CA_CERT" ]]; then
+# HTTPS handshake validates against the local CA. Use the LAN IP from
+# docker/.env as the URL (no hostname involved in local-CA mode).
+lan_ip="$(grep -m1 '^WARREN_LAN_IP=' "$DOCKER_DIR/.env" 2>/dev/null | cut -d= -f2-)"
+if [[ -f "$CA_CERT" && -n "$lan_ip" ]]; then
     status="$(curl -s -o /dev/null -w '%{http_code}' \
         --cacert "$CA_CERT" \
-        --resolve "${hostname}:443:127.0.0.1" \
-        "https://${hostname}/login" 2>/dev/null || echo 000)"
+        "https://${lan_ip}/login" 2>/dev/null || echo 000)"
     if [[ "$status" =~ ^[23] ]]; then
-        echo "  PASS: HTTPS to ${hostname}/login validates against docker/tls/ca.crt (status $status)"
+        echo "  PASS: HTTPS to ${lan_ip}/login validates against docker/tls/ca.crt (status $status)"
         ((passed++))
     else
         echo "  FAIL: HTTPS validation against ca.crt failed (status $status)" >&2

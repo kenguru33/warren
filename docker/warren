@@ -326,17 +326,19 @@ cmd_setup() {
     prompt        BACKEND_HOST "Backend host  (IP or hostname, e.g. 192.168.1.100 or warren.local)"
 
     # ── TLS mode for the Caddy edge proxy ─────────────────────────────────
-    local WARREN_OS WARREN_LAN_IP WARREN_HOSTNAME WARREN_TLS_MODE WARREN_UPSTREAM
+    local WARREN_OS WARREN_LAN_IP WARREN_TLS_MODE WARREN_UPSTREAM
     local WARREN_DOMAIN="" WARREN_ACME_EMAIL="" WARREN_DNS_PROVIDER="" WARREN_DNS_TOKEN=""
     local WARREN_DNS_PLUGIN=""
     WARREN_OS="$(detect_os)"
     WARREN_LAN_IP="$(detect_lan_ip "$WARREN_OS")"
-    WARREN_HOSTNAME="$(detect_bonjour_hostname "$WARREN_OS")"
-    [[ -z "$WARREN_HOSTNAME" ]] && WARREN_HOSTNAME="warren.local"
+    if [[ -z "$WARREN_LAN_IP" ]]; then
+        err "Could not detect a LAN IPv4 address for this host. Aborting."
+        exit 1
+    fi
 
     echo ""
     echo "Warren can serve HTTPS over your LAN with either:"
-    echo "  (default) Caddy's local CA — fully offline; install the cert on each device once"
+    echo "  (default) Self-signed local CA — URL is https://${WARREN_LAN_IP}; install the cert on each device once"
     echo "  (opt-in)  Let's Encrypt via DNS-01 — needs a domain you own and a DNS API token"
     echo ""
     if prompt_yn "Use a public domain with Let's Encrypt for an officially-trusted cert?" "n"; then
@@ -345,12 +347,11 @@ cmd_setup() {
         prompt        WARREN_ACME_EMAIL   "ACME contact email"
         prompt_with_default WARREN_DNS_PROVIDER "DNS provider" "cloudflare"
         prompt_secret WARREN_DNS_TOKEN    "DNS provider API token"
-        # Caddy DNS plugin module path — defaults to the chosen provider's
-        # official caddy-dns module; advanced users can override via env.
         WARREN_DNS_PLUGIN="${WARREN_CADDY_DNS_PLUGIN:-github.com/caddy-dns/${WARREN_DNS_PROVIDER}}"
     else
         WARREN_TLS_MODE=local
-        echo -e "  → Local CA. Cert hostname: ${BOLD}${WARREN_HOSTNAME}${NC}"
+        echo -e "  → Local CA. Dashboard URL: ${BOLD}https://${WARREN_LAN_IP}${NC}"
+        echo "    Tip: reserve this IP on your router (DHCP reservation) so it doesn't change."
     fi
 
     # Rootless Docker can't reach a host process on host.docker.internal:host-gateway
@@ -435,7 +436,6 @@ WARREN_AUTH_PASSWORD=${UI_PASS}
 WARREN_SESSION_PASSWORD=${SESSION_PASS}
 
 WARREN_TLS_MODE=${WARREN_TLS_MODE}
-WARREN_HOSTNAME=${WARREN_HOSTNAME}
 WARREN_DOMAIN=${WARREN_DOMAIN}
 WARREN_LAN_IP=${WARREN_LAN_IP}
 EOF
@@ -444,7 +444,6 @@ EOF
     # (caddy.environment + caddy.image) at parse time.
     cat > "$COMPOSE_ENV" <<EOF
 WARREN_TLS_MODE=${WARREN_TLS_MODE}
-WARREN_HOSTNAME=${WARREN_HOSTNAME}
 WARREN_DOMAIN=${WARREN_DOMAIN}
 WARREN_ACME_EMAIL=${WARREN_ACME_EMAIL}
 WARREN_DNS_PROVIDER=${WARREN_DNS_PROVIDER}
@@ -507,7 +506,7 @@ PYEOF
     if [[ "$WARREN_TLS_MODE" == "letsencrypt" ]]; then
         bootstrap_caddy_le_image
     else
-        bootstrap_caddy_local_ca
+        bootstrap_local_ca
     fi
 
     echo -e "${BOLD}Installing UI dependencies…${NC}"
@@ -525,11 +524,10 @@ PYEOF
         echo "  Dashboard:   https://${WARREN_DOMAIN}"
         echo "  No per-device cert install needed — Let's Encrypt is publicly trusted."
     else
-        echo "  Dashboard:   https://${WARREN_HOSTNAME}"
-        [[ -n "$WARREN_LAN_IP" ]] && echo "               https://${WARREN_LAN_IP}  (cert warning until CA is installed)"
+        echo "  Dashboard:   https://${WARREN_LAN_IP}"
         echo ""
         echo -e "${BOLD}Trust the Warren CA on each device${NC} (one-time):"
-        [[ -n "$WARREN_LAN_IP" ]] && echo "  Open in the device's browser:  http://${WARREN_LAN_IP}/ca.crt"
+        echo "  Open in the device's browser:  http://${WARREN_LAN_IP}/ca.crt"
         echo "  Or copy the file:              docker/tls/ca.crt"
     fi
     echo ""
@@ -540,51 +538,71 @@ PYEOF
     echo ""
 }
 
-# ── Caddy bootstrap (called from cmd_setup) ──────────────────────────────────
+# ── TLS bootstrap (called from cmd_setup) ───────────────────────────────────
 
-# Local CA: boot Caddy briefly, force a TLS handshake so it materializes
-# /data/caddy/pki/authorities/local/root.crt, then docker-cp it out to
-# docker/tls/ca.crt and docker/caddy/site/ca.crt (served at /ca.crt).
-bootstrap_caddy_local_ca() {
-    echo -e "${BOLD}Bootstrapping Caddy local CA…${NC}"
+# Local CA mode: generate a self-signed CA + leaf cert with the LAN IP as a
+# SubjectAltName. Files end up at:
+#   docker/tls/ca.crt, ca.key       — the local CA (10y validity)
+#   docker/tls/server.crt, server.key — the leaf cert Caddy serves (395d)
+#   docker/caddy/site/ca.crt        — public copy served at /ca.crt for trust install
+#
+# Avoids Caddy's "bare IPs in site blocks are listener bindings, not virtual-host
+# matchers" gotcha — Caddy serves a single static cert for any SNI on :443.
+bootstrap_local_ca() {
+    echo -e "${BOLD}Generating local CA + leaf cert for ${WARREN_LAN_IP}…${NC}"
+    command -v openssl >/dev/null 2>&1 || { err "openssl is required"; exit 1; }
 
-    preflight_ports || exit 1
+    local ca_key="$DOCKER_DIR/tls/ca.key"
+    local ca_crt="$CA_CERT_HOST"
+    local srv_key="$DOCKER_DIR/tls/server.key"
+    local srv_crt="$DOCKER_DIR/tls/server.crt"
+    local srv_csr="$DOCKER_DIR/tls/server.csr"
 
-    if [[ -f "$CA_CERT_HOST" ]] && openssl x509 -in "$CA_CERT_HOST" -noout >/dev/null 2>&1 && ! $force; then
-        info "  Existing CA cert at docker/tls/ca.crt — reusing."
-        cp "$CA_CERT_HOST" "$CA_CERT_SITE"
+    if ! $force \
+       && [[ -f "$ca_crt" && -f "$ca_key" && -f "$srv_crt" && -f "$srv_key" ]] \
+       && openssl x509 -in "$srv_crt" -noout -checkend 2592000 >/dev/null 2>&1 \
+       && openssl x509 -in "$srv_crt" -noout -ext subjectAltName 2>/dev/null \
+            | grep -qF "IP Address:${WARREN_LAN_IP}"; then
+        info "  Existing cert covers ${WARREN_LAN_IP} and is valid >30d — reusing."
+        cp "$ca_crt" "$CA_CERT_SITE"
+        chmod 0644 "$CA_CERT_SITE"
         return 0
     fi
 
-    (cd "$DOCKER_DIR" && docker compose --profile prod up -d caddy) >/dev/null
+    # Wipe any old material so $force regeneration is clean.
+    rm -f "$ca_key" "$ca_crt" "$srv_key" "$srv_crt" "$srv_csr"
 
-    # Force a self-handshake so Caddy materializes the CA root.
-    sleep 1
-    docker exec caddy sh -c \
-        'wget -q --no-check-certificate https://localhost/ -O /dev/null 2>&1 || true'
+    # CA: 10-year self-signed.
+    openssl req -x509 -nodes -newkey rsa:2048 -days 3650 \
+        -keyout "$ca_key" -out "$ca_crt" \
+        -subj "/CN=Warren Local CA" \
+        -addext "basicConstraints=critical,CA:TRUE" \
+        -addext "keyUsage=critical,keyCertSign,cRLSign" 2>/dev/null
 
-    local ca_path="/data/caddy/pki/authorities/local/root.crt"
-    local deadline=$(( $(date +%s) + 15 ))
-    while (( $(date +%s) < deadline )); do
-        docker exec caddy sh -c "test -f $ca_path" 2>/dev/null && break
-        sleep 0.5
-    done
+    # Leaf: 395-day, signed by CA, IP SAN.
+    openssl req -nodes -newkey rsa:2048 \
+        -keyout "$srv_key" -out "$srv_csr" \
+        -subj "/CN=warren@${WARREN_LAN_IP}" 2>/dev/null
 
-    if ! docker exec caddy sh -c "test -f $ca_path" 2>/dev/null; then
-        err "Caddy did not generate a local CA. Logs:"
-        docker compose -f "$DOCKER_DIR/docker-compose.yml" logs --tail 30 caddy >&2
-        (cd "$DOCKER_DIR" && docker compose --profile prod stop caddy) >/dev/null
-        exit 1
-    fi
+    openssl x509 -req -in "$srv_csr" \
+        -CA "$ca_crt" -CAkey "$ca_key" -CAcreateserial \
+        -days 395 -out "$srv_crt" \
+        -extfile <(printf '%s\n' \
+            "basicConstraints=critical,CA:FALSE" \
+            "keyUsage=critical,digitalSignature,keyEncipherment" \
+            "extendedKeyUsage=serverAuth" \
+            "subjectAltName=IP:${WARREN_LAN_IP}") 2>/dev/null
 
-    docker cp "caddy:$ca_path" "$CA_CERT_HOST"
-    chmod 0644 "$CA_CERT_HOST"
-    cp "$CA_CERT_HOST" "$CA_CERT_SITE"
+    rm -f "$srv_csr" "$DOCKER_DIR/tls/ca.srl"
+
+    chmod 0600 "$ca_key" "$srv_key"
+    chmod 0644 "$ca_crt" "$srv_crt"
+
+    cp "$ca_crt" "$CA_CERT_SITE"
     chmod 0644 "$CA_CERT_SITE"
 
-    (cd "$DOCKER_DIR" && docker compose --profile prod stop caddy) >/dev/null
-
-    info "  CA cert written to docker/tls/ca.crt"
+    info "  CA + leaf written to docker/tls/"
+    info "  Cert SAN: IP:${WARREN_LAN_IP}, valid 395 days"
     echo ""
 }
 
@@ -678,16 +696,15 @@ cmd_start() {
 
     # Surface the LAN URL once Caddy is up.
     if [[ "$mode" != "dev" ]]; then
-        local _mode _hostname _domain _lan_ip
+        local _mode _domain _lan_ip
         _mode="$(grep -m1 '^WARREN_TLS_MODE=' "$UI_ENV" 2>/dev/null | cut -d= -f2-)"
-        _hostname="$(grep -m1 '^WARREN_HOSTNAME=' "$UI_ENV" 2>/dev/null | cut -d= -f2-)"
         _domain="$(grep -m1 '^WARREN_DOMAIN=' "$UI_ENV" 2>/dev/null | cut -d= -f2-)"
         _lan_ip="$(grep -m1 '^WARREN_LAN_IP=' "$UI_ENV" 2>/dev/null | cut -d= -f2-)"
         if [[ "$_mode" == "letsencrypt" && -n "$_domain" ]]; then
             info "LAN access:  https://${_domain}"
         else
-            [[ -n "$_hostname" ]] && info "LAN access:  https://${_hostname}"
-            [[ -n "$_lan_ip"  ]] && echo "             http://${_lan_ip}/ca.crt   (install on each device once)"
+            [[ -n "$_lan_ip" ]] && info "LAN access:  https://${_lan_ip}"
+            [[ -n "$_lan_ip" ]] && echo "             http://${_lan_ip}/ca.crt   (install on each device once)"
         fi
         echo ""
     fi
@@ -824,7 +841,7 @@ cmd_clear() {
     echo "  docker/.env                             (compose env)"
     echo "  docker/caddy/Caddyfile                  (rendered from a template)"
     echo "  docker/caddy/site/ca.crt"
-    echo "  docker/tls/ca.crt                       (Caddy CA — clients must re-trust)"
+    echo "  docker/tls/{ca,server}.{crt,key}        (local CA + leaf — clients must re-trust)"
     echo "  nextjs-ui/.env"
     echo "  nextjs-ui/.data/                        (SQLite database)"
     echo "  firmware/sensor/include/secrets.h"
@@ -856,7 +873,9 @@ cmd_clear() {
     echo "Removing secrets, tokens, and data…"
     rm -f "$INFLUXDB_TOKEN_FILE" "$MQTT_PASSWORDFILE" "$UI_ENV"
     rm -f "$SENSOR_SECRETS" "$CAMERA_SECRETS"
-    rm -f "$COMPOSE_ENV" "$CADDY_FILE" "$CA_CERT_HOST" "$CA_CERT_SITE"
+    rm -f "$COMPOSE_ENV" "$CADDY_FILE" "$CA_CERT_HOST" "$CA_CERT_SITE" \
+          "$DOCKER_DIR/tls/ca.key" "$DOCKER_DIR/tls/server.crt" "$DOCKER_DIR/tls/server.key" \
+          "$DOCKER_DIR/tls/ca.srl"
     rm -rf "$SQLITE_DATA_DIR"
 
     cat > "$MQTT_CONF" <<'EOF'
