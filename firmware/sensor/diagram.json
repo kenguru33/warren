@@ -26,6 +26,13 @@
       "top": 176.75,
       "left": 182.4,
       "attrs": { "value": "220" }
+    },
+    {
+      "type": "wokwi-resistor",
+      "id": "r3",
+      "top": 205.55,
+      "left": -76.8,
+      "attrs": { "value": "1000" }
     }
   ],
   "connections": [
@@ -36,10 +43,12 @@
     [ "esp:GND.3", "led1:C", "black", [ "h33.64", "v76.8", "h86.4" ] ],
     [ "dht1:VCC", "esp:3V3", "red", [ "v48", "h96", "v-144" ] ],
     [ "dht1:GND", "esp:GND.1", "black", [ "v0" ] ],
-    [ "dht1:SDA", "esp:21", "green", [ "v124.8", "h288.1", "v-172.8", "h-9.6" ] ],
     [ "esp:GND.3", "led2:C", "black", [ "h33.64", "v172.8" ] ],
     [ "esp:19", "r2:1", "green", [ "h62.44", "v86.4" ] ],
-    [ "r2:2", "led2:A", "green", [ "v0", "h27.6", "v57.6" ] ]
+    [ "r2:2", "led2:A", "green", [ "v0", "h27.6", "v57.6" ] ],
+    [ "esp:GND.1", "r3:2", "black", [ "h0" ] ],
+    [ "dht1:SDA", "r3:1", "green", [ "v9.6", "h0.1" ] ],
+    [ "r3:1", "esp:21", "green", [ "v67.2", "h211.2", "v-182.4" ] ]
   ],
   "dependencies": {}
 }
