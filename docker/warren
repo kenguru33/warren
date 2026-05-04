@@ -129,12 +129,39 @@ detect_lan_ip() {
 # Linux, MacBook.local on macOS). Used as the primary HTTPS hostname so
 # we don't have to publish a custom name ourselves — every modern OS
 # already advertises its own .local.
+#
+# On Linux: prefer Avahi's actual published name. If another device on
+# the LAN already claims `<hostname>.local`, Avahi auto-renames itself
+# to `<hostname>-2.local` (and so on). Querying Avahi directly catches
+# this; using `hostname -s` blindly would issue a cert for a name nobody
+# actually publishes.
 detect_bonjour_hostname() {
-    local os="$1" name=""
+    local os="$1" name="" lan_ip
     case "$os" in
-        macos)   name="$(scutil --get LocalHostName 2>/dev/null || true)"; [[ -n "$name" ]] && echo "${name}.local" ;;
-        linux)   name="$(hostname -s 2>/dev/null || true)";                [[ -n "$name" ]] && echo "${name}.local" ;;
-        windows) name="$(hostname 2>/dev/null | tr '[:upper:]' '[:lower:]')"; [[ -n "$name" ]] && echo "${name}.local" ;;
+        macos)
+            name="$(scutil --get LocalHostName 2>/dev/null || true)"
+            [[ -n "$name" ]] && echo "${name}.local"
+            ;;
+        linux)
+            # Try Avahi reverse-resolve from the LAN IP first — that's the
+            # name Avahi is *actually* advertising on the network.
+            if command -v avahi-resolve-address >/dev/null 2>&1; then
+                lan_ip="$(detect_lan_ip linux)"
+                if [[ -n "$lan_ip" ]]; then
+                    name="$(timeout 2 avahi-resolve-address "$lan_ip" 2>/dev/null \
+                        | awk '{print $2}')"
+                fi
+            fi
+            # Fall back to <kernel-hostname>.local if Avahi isn't running
+            # or can't answer.
+            [[ -z "$name" ]] && name="$(hostname -s 2>/dev/null || true).local"
+            [[ "$name" == ".local" ]] && name=""
+            [[ -n "$name" ]] && echo "$name"
+            ;;
+        windows)
+            name="$(hostname 2>/dev/null | tr '[:upper:]' '[:lower:]')"
+            [[ -n "$name" ]] && echo "${name}.local"
+            ;;
     esac
 }
 
