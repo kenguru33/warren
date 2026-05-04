@@ -129,19 +129,26 @@ A Caddy reverse proxy in front of the dashboard terminates TLS so every device o
 
 `warren setup` asks once which one you want:
 
-**1. Local CA (default)** — `warren setup` generates a self-signed CA + leaf cert with your host's LAN IP as a SubjectAltName. Fully offline; no DNS / mDNS / hostname publishing involved. Each device installs the CA once.
+**1. Local CA (default)** — `warren setup` generates a self-signed CA + leaf cert with your host's LAN IP as a SubjectAltName. Fully offline; no DNS / mDNS lookup machinery involved by default. Each device installs the CA once.
 
 ```
 Use a public domain with Let's Encrypt for an officially-trusted cert? [y/N]: n
+
+Optional: add a custom hostname to the cert (e.g. warren.lan, warren.local,
+dashboard.home). The cert will cover both the IP and the name. You're
+responsible for making the name resolve on each device — via your router's
+DNS, /etc/hosts, mDNS, etc. Leave empty to use the IP only.
+Add a custom hostname? [y/N]: n
   → Local CA. Dashboard URL: https://192.168.80.60
     Tip: reserve this IP on your router (DHCP reservation) so it doesn't change.
 ```
 
-URL to bookmark:
-- `https://<your-host-ip>` — the LAN IP setup detected (works on every OS, no resolution dance, no Avahi/Bonjour dependency).
+URLs to bookmark:
+- `https://<your-host-ip>` — the LAN IP setup detected. Always works, no resolution dance.
+- `https://<your-hostname>` — only if you opted in to a custom hostname. **Resolution is your problem**: you make the name point at the LAN IP via your router's DNS, a `/etc/hosts` entry on each device, an Avahi alias, or whatever fits your network. The cert will validate either way (it covers both).
 - `http://localhost:3000` — direct host access in `--dev` mode.
 
-> **Why an IP, not a hostname?** Earlier iterations relied on the host's `<hostname>.local` mDNS name. That falls over when your network has multiple hosts with the same hostname (Avahi auto-renames to `<hostname>-2.local`), when the host doesn't run Avahi, or when running inside Docker Desktop/rootless setups where mDNS broadcasts can't reach the LAN. Using the LAN IP directly sidesteps all of that. The cost is a less-pretty URL — bookmark it once. If your DHCP IP changes, re-run `warren setup --force` to reissue the cert.
+> **Why is the hostname optional, not auto-detected?** Earlier iterations auto-published `<hostname>.local` via Avahi. That falls over with multiple hosts sharing a kernel hostname (Avahi auto-renames to `<hostname>-2.local`), with hosts that don't run Avahi, and with Docker Desktop / rootless setups where mDNS broadcasts can't reach the LAN. The LAN IP always works; a custom hostname is offered for users who want a prettier URL and have their own resolution story. If your DHCP IP changes, re-run `warren setup --force` to reissue the cert.
 
 **2. Let's Encrypt (opt-in)** — publicly-trusted cert via the DNS-01 challenge. No per-device install needed.
 

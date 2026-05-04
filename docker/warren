@@ -327,6 +327,7 @@ cmd_setup() {
 
     # ── TLS mode for the Caddy edge proxy ─────────────────────────────────
     local WARREN_OS WARREN_LAN_IP WARREN_TLS_MODE WARREN_UPSTREAM
+    local WARREN_HOSTNAME=""  # optional; only set in local mode if user opts in
     local WARREN_DOMAIN="" WARREN_ACME_EMAIL="" WARREN_DNS_PROVIDER="" WARREN_DNS_TOKEN=""
     local WARREN_DNS_PLUGIN=""
     WARREN_OS="$(detect_os)"
@@ -350,7 +351,21 @@ cmd_setup() {
         WARREN_DNS_PLUGIN="${WARREN_CADDY_DNS_PLUGIN:-github.com/caddy-dns/${WARREN_DNS_PROVIDER}}"
     else
         WARREN_TLS_MODE=local
+        echo ""
+        echo "Optional: add a custom hostname to the cert (e.g. warren.lan, warren.local,"
+        echo "dashboard.home). The cert will cover both the IP and the name. You're"
+        echo "responsible for making the name resolve on each device — via your router's"
+        echo "DNS, /etc/hosts, mDNS, etc. Leave empty to use the IP only."
+        if prompt_yn "Add a custom hostname?" "n"; then
+            prompt WARREN_HOSTNAME "Hostname"
+            # Strip protocol/path the user might paste in.
+            WARREN_HOSTNAME="${WARREN_HOSTNAME#http://}"
+            WARREN_HOSTNAME="${WARREN_HOSTNAME#https://}"
+            WARREN_HOSTNAME="${WARREN_HOSTNAME%%/*}"
+        fi
+        echo ""
         echo -e "  → Local CA. Dashboard URL: ${BOLD}https://${WARREN_LAN_IP}${NC}"
+        [[ -n "$WARREN_HOSTNAME" ]] && echo -e "                              ${BOLD}https://${WARREN_HOSTNAME}${NC} (you handle resolution)"
         echo "    Tip: reserve this IP on your router (DHCP reservation) so it doesn't change."
     fi
 
@@ -436,6 +451,7 @@ WARREN_AUTH_PASSWORD=${UI_PASS}
 WARREN_SESSION_PASSWORD=${SESSION_PASS}
 
 WARREN_TLS_MODE=${WARREN_TLS_MODE}
+WARREN_HOSTNAME=${WARREN_HOSTNAME}
 WARREN_DOMAIN=${WARREN_DOMAIN}
 WARREN_LAN_IP=${WARREN_LAN_IP}
 EOF
@@ -444,6 +460,7 @@ EOF
     # (caddy.environment + caddy.image) at parse time.
     cat > "$COMPOSE_ENV" <<EOF
 WARREN_TLS_MODE=${WARREN_TLS_MODE}
+WARREN_HOSTNAME=${WARREN_HOSTNAME}
 WARREN_DOMAIN=${WARREN_DOMAIN}
 WARREN_ACME_EMAIL=${WARREN_ACME_EMAIL}
 WARREN_DNS_PROVIDER=${WARREN_DNS_PROVIDER}
@@ -525,6 +542,9 @@ PYEOF
         echo "  No per-device cert install needed — Let's Encrypt is publicly trusted."
     else
         echo "  Dashboard:   https://${WARREN_LAN_IP}"
+        if [[ -n "$WARREN_HOSTNAME" ]]; then
+            echo "               https://${WARREN_HOSTNAME}  (works once the name resolves on your devices)"
+        fi
         echo ""
         echo -e "${BOLD}Trust the Warren CA on each device${NC} (one-time):"
         echo "  Open in the device's browser:  http://${WARREN_LAN_IP}/ca.crt"
@@ -558,15 +578,27 @@ bootstrap_local_ca() {
     local srv_crt="$DOCKER_DIR/tls/server.crt"
     local srv_csr="$DOCKER_DIR/tls/server.csr"
 
+    # Build the SAN list: always include the LAN IP, plus the optional hostname.
+    local san="IP:${WARREN_LAN_IP}"
+    [[ -n "${WARREN_HOSTNAME:-}" ]] && san="${san},DNS:${WARREN_HOSTNAME}"
+
+    # Reuse cert when it covers everything we need and isn't expiring soon.
     if ! $force \
        && [[ -f "$ca_crt" && -f "$ca_key" && -f "$srv_crt" && -f "$srv_key" ]] \
-       && openssl x509 -in "$srv_crt" -noout -checkend 2592000 >/dev/null 2>&1 \
-       && openssl x509 -in "$srv_crt" -noout -ext subjectAltName 2>/dev/null \
-            | grep -qF "IP Address:${WARREN_LAN_IP}"; then
-        info "  Existing cert covers ${WARREN_LAN_IP} and is valid >30d — reusing."
-        cp "$ca_crt" "$CA_CERT_SITE"
-        chmod 0644 "$CA_CERT_SITE"
-        return 0
+       && openssl x509 -in "$srv_crt" -noout -checkend 2592000 >/dev/null 2>&1; then
+        local sans_in_cert
+        sans_in_cert="$(openssl x509 -in "$srv_crt" -noout -ext subjectAltName 2>/dev/null || true)"
+        local fresh=true
+        grep -qF "IP Address:${WARREN_LAN_IP}" <<<"$sans_in_cert" || fresh=false
+        if [[ -n "${WARREN_HOSTNAME:-}" ]]; then
+            grep -qF "DNS:${WARREN_HOSTNAME}" <<<"$sans_in_cert" || fresh=false
+        fi
+        if $fresh; then
+            info "  Existing cert covers ${san} and is valid >30d — reusing."
+            cp "$ca_crt" "$CA_CERT_SITE"
+            chmod 0644 "$CA_CERT_SITE"
+            return 0
+        fi
     fi
 
     # Wipe any old material so $force regeneration is clean.
@@ -579,7 +611,7 @@ bootstrap_local_ca() {
         -addext "basicConstraints=critical,CA:TRUE" \
         -addext "keyUsage=critical,keyCertSign,cRLSign" 2>/dev/null
 
-    # Leaf: 395-day, signed by CA, IP SAN.
+    # Leaf: 395-day, signed by CA, IP + optional DNS SAN.
     openssl req -nodes -newkey rsa:2048 \
         -keyout "$srv_key" -out "$srv_csr" \
         -subj "/CN=warren@${WARREN_LAN_IP}" 2>/dev/null
@@ -591,7 +623,7 @@ bootstrap_local_ca() {
             "basicConstraints=critical,CA:FALSE" \
             "keyUsage=critical,digitalSignature,keyEncipherment" \
             "extendedKeyUsage=serverAuth" \
-            "subjectAltName=IP:${WARREN_LAN_IP}") 2>/dev/null
+            "subjectAltName=${san}") 2>/dev/null
 
     rm -f "$srv_csr" "$DOCKER_DIR/tls/ca.srl"
 
@@ -602,7 +634,7 @@ bootstrap_local_ca() {
     chmod 0644 "$CA_CERT_SITE"
 
     info "  CA + leaf written to docker/tls/"
-    info "  Cert SAN: IP:${WARREN_LAN_IP}, valid 395 days"
+    info "  Cert SAN: ${san}, valid 395 days"
     echo ""
 }
 
@@ -696,15 +728,17 @@ cmd_start() {
 
     # Surface the LAN URL once Caddy is up.
     if [[ "$mode" != "dev" ]]; then
-        local _mode _domain _lan_ip
+        local _mode _domain _lan_ip _hostname
         _mode="$(grep -m1 '^WARREN_TLS_MODE=' "$UI_ENV" 2>/dev/null | cut -d= -f2-)"
         _domain="$(grep -m1 '^WARREN_DOMAIN=' "$UI_ENV" 2>/dev/null | cut -d= -f2-)"
         _lan_ip="$(grep -m1 '^WARREN_LAN_IP=' "$UI_ENV" 2>/dev/null | cut -d= -f2-)"
+        _hostname="$(grep -m1 '^WARREN_HOSTNAME=' "$UI_ENV" 2>/dev/null | cut -d= -f2-)"
         if [[ "$_mode" == "letsencrypt" && -n "$_domain" ]]; then
             info "LAN access:  https://${_domain}"
         else
-            [[ -n "$_lan_ip" ]] && info "LAN access:  https://${_lan_ip}"
-            [[ -n "$_lan_ip" ]] && echo "             http://${_lan_ip}/ca.crt   (install on each device once)"
+            [[ -n "$_lan_ip"   ]] && info "LAN access:  https://${_lan_ip}"
+            [[ -n "$_hostname" ]] && echo "             https://${_hostname}"
+            [[ -n "$_lan_ip"   ]] && echo "             http://${_lan_ip}/ca.crt   (install on each device once)"
         fi
         echo ""
     fi
