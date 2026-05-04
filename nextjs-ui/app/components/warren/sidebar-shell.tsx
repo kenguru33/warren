@@ -9,6 +9,7 @@ import {
   CpuChipIcon,
   LightBulbIcon,
   Squares2X2Icon,
+  Cog6ToothIcon,
   ChevronUpIcon,
   UserIcon,
 } from '@heroicons/react/20/solid'
@@ -47,6 +48,7 @@ const navLinks = [
   { to: '/sensors', label: 'Sensors', icon: CpuChipIcon },
   { to: '/lights', label: 'Lights', icon: LightBulbIcon },
   { to: '/integrations/hue', label: 'Hue Bridge', icon: Squares2X2Icon },
+  { to: '/settings', label: 'Settings', icon: Cog6ToothIcon },
 ]
 
 function BrandMark({ className }: { className?: string }) {
