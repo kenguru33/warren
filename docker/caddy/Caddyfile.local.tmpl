@@ -1,0 +1,52 @@
+# Warren reverse proxy — local-CA mode.
+# Caddy issues a self-signed leaf cert from its built-in local CA.
+# Each LAN device installs the CA once via http://<host>/ca.crt.
+#
+# Variables ({$VAR}) are resolved by Caddy at config load from the
+# container's environment (populated by docker compose from docker/.env).
+#
+# WARREN_HOSTNAME  — the host's existing Bonjour/Avahi name (e.g. fedora.local)
+# WARREN_UPSTREAM  — host:port that Caddy proxies to (Next.js UI)
+
+{
+	auto_https disable_redirects
+}
+
+# Plaintext :80 — serves the CA cert, passes device endpoints through, and
+# 308-redirects everything else to HTTPS.
+:80 {
+	# Public CA download. Plaintext on purpose: chicken-and-egg — clients
+	# need this file before they can trust HTTPS.
+	handle /ca.crt {
+		root * /srv
+		file_server
+		header Content-Type application/x-x509-ca-cert
+		header Content-Disposition "attachment; filename=warren-ca.crt"
+	}
+
+	# Device-facing endpoints from nextjs-ui/proxy.ts PUBLIC lists. ESP32
+	# firmware does not speak TLS, so these stay plaintext. Caddy AND-
+	# combines different matcher types within a single named matcher,
+	# so the static and regex paths live in separate handlers.
+	@device_static path /api/sensors/announce /api/sensors/config/*
+	handle @device_static {
+		reverse_proxy {$WARREN_UPSTREAM}
+	}
+
+	@device_reading path_regexp ^/api/sensors/[^/]+/reading$
+	handle @device_reading {
+		reverse_proxy {$WARREN_UPSTREAM}
+	}
+
+	# Everything else: redirect to HTTPS on the canonical hostname.
+	handle {
+		redir https://{$WARREN_HOSTNAME}{uri} 308
+	}
+}
+
+# HTTPS :443 — main user surface. Caddy issues a leaf cert from its
+# internal CA covering WARREN_HOSTNAME.
+{$WARREN_HOSTNAME} {
+	tls internal
+	reverse_proxy {$WARREN_UPSTREAM}
+}

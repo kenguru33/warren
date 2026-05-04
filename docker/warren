@@ -17,6 +17,15 @@ UI_ENV="$UI_DIR/.env"
 SQLITE_DATA_DIR="$UI_DIR/.data"
 SENSOR_SECRETS="$FIRMWARE_DIR/sensor/include/secrets.h"
 CAMERA_SECRETS="$FIRMWARE_DIR/camera/include/secrets.h"
+COMPOSE_ENV="$DOCKER_DIR/.env"
+CADDY_DIR="$DOCKER_DIR/caddy"
+CADDY_FILE="$CADDY_DIR/Caddyfile"
+CADDY_TMPL_LOCAL="$CADDY_DIR/Caddyfile.local.tmpl"
+CADDY_TMPL_LE="$CADDY_DIR/Caddyfile.letsencrypt.tmpl"
+CADDY_SITE_DIR="$CADDY_DIR/site"
+CADDY_LE_IMAGE="warren-caddy:latest"
+CA_CERT_HOST="$DOCKER_DIR/tls/ca.crt"
+CA_CERT_SITE="$CADDY_SITE_DIR/ca.crt"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -60,16 +69,176 @@ prompt_secret() {
     printf -v "$var" '%s' "$val"
 }
 
+# Optional prompt with default and a $force-aware existing-value path.
+# Usage: prompt_with_default VAR "Question" "default" [existing-value]
+prompt_with_default() {
+    local var="$1" msg="$2" default="$3" existing="${4:-}" val=""
+    if [[ -n "$existing" ]] && ! ${force:-false}; then
+        printf -v "$var" '%s' "$existing"
+        return
+    fi
+    local label="${default:-(required)}"
+    IFS= read -r -p "$msg [$label]: " val || true
+    [[ -z "$val" ]] && val="$default"
+    printf -v "$var" '%s' "$val"
+}
+
+prompt_yn() {
+    local msg="$1" default="${2:-n}" answer=""
+    local label
+    [[ "$default" =~ ^[Yy]$ ]] && label="Y/n" || label="y/N"
+    IFS= read -r -p "$msg [$label]: " answer || true
+    [[ -z "$answer" ]] && answer="$default"
+    [[ "$answer" =~ ^[Yy] ]]
+}
+
+# ── platform / network detection ─────────────────────────────────────────────
+
+detect_os() {
+    case "$(uname -s)" in
+        Linux*)               echo "linux" ;;
+        Darwin*)              echo "macos" ;;
+        MINGW*|MSYS*|CYGWIN*) echo "windows" ;;
+        *)                    echo "unknown" ;;
+    esac
+}
+
+detect_lan_ip() {
+    local os="$1" ip=""
+    case "$os" in
+        linux)
+            ip="$(ip route get 1.1.1.1 2>/dev/null \
+                | awk '{ for (i=1;i<=NF;i++) if ($i=="src") { print $(i+1); exit } }')"
+            [[ -z "$ip" ]] && ip="$(hostname -I 2>/dev/null | awk '{print $1}')"
+            ;;
+        macos)
+            for iface in en0 en1 en2; do
+                ip="$(ipconfig getifaddr "$iface" 2>/dev/null || true)"
+                [[ -n "$ip" ]] && break
+            done
+            ;;
+        windows)
+            ip="$(ipconfig 2>/dev/null \
+                | awk -F': ' '/IPv4 Address/ {gsub(/\r/,""); print $2; exit}')"
+            ;;
+    esac
+    echo "$ip"
+}
+
+# Reads the host's existing Bonjour-published name (e.g. fedora.local on
+# Linux, MacBook.local on macOS). Used as the primary HTTPS hostname so
+# we don't have to publish a custom name ourselves — every modern OS
+# already advertises its own .local.
+detect_bonjour_hostname() {
+    local os="$1" name=""
+    case "$os" in
+        macos)   name="$(scutil --get LocalHostName 2>/dev/null || true)"; [[ -n "$name" ]] && echo "${name}.local" ;;
+        linux)   name="$(hostname -s 2>/dev/null || true)";                [[ -n "$name" ]] && echo "${name}.local" ;;
+        windows) name="$(hostname 2>/dev/null | tr '[:upper:]' '[:lower:]')"; [[ -n "$name" ]] && echo "${name}.local" ;;
+    esac
+}
+
+is_rootless_docker() {
+    docker info --format '{{.SecurityOptions}}' 2>/dev/null | grep -q rootless
+}
+
+# ── pre-flight checks for the Caddy edge ─────────────────────────────────────
+
+# Rootless Docker can't bind ports < 1024 unless the host's
+# net.ipv4.ip_unprivileged_port_start is lowered. Surface this with the
+# fix command instead of letting compose fail with a cryptic error.
+preflight_sysctl() {
+    [[ "$(detect_os)" != "linux" ]] && return 0
+    is_rootless_docker || return 0
+
+    local boundary
+    boundary="$(sysctl -n net.ipv4.ip_unprivileged_port_start 2>/dev/null || echo 1024)"
+    if (( boundary > 80 )); then
+        err "Rootless Docker can't bind to privileged ports (current ip_unprivileged_port_start=$boundary)."
+        err "Fix once with:"
+        err "  echo 'net.ipv4.ip_unprivileged_port_start=80' | sudo tee /etc/sysctl.d/99-warren.conf"
+        err "  sudo sysctl --load /etc/sysctl.d/99-warren.conf"
+        return 1
+    fi
+}
+
+# On Fedora the default firewalld zone (FedoraWorkstation) blocks 80/443.
+# Detect and ask the user to open them — refuse to continue if blocked.
+preflight_firewalld() {
+    [[ "$(detect_os)" != "linux" ]] && return 0
+    command -v firewall-cmd >/dev/null 2>&1 || return 0
+    firewall-cmd --state 2>/dev/null | grep -q running || return 0
+
+    local zone services
+    zone="$(firewall-cmd --get-default-zone 2>/dev/null || echo "")"
+    [[ -z "$zone" ]] && return 0
+    services="$(firewall-cmd --zone="$zone" --list-services 2>/dev/null || echo "")"
+
+    local missing=()
+    grep -qw http  <<<"$services" || missing+=("http")
+    grep -qw https <<<"$services" || missing+=("https")
+    if [[ ${#missing[@]} -gt 0 ]]; then
+        err "firewalld zone '$zone' does not allow: ${missing[*]}"
+        err "Open them with:"
+        err "  sudo firewall-cmd --permanent --zone=$zone $(printf -- '--add-service=%s ' "${missing[@]}")"
+        err "  sudo firewall-cmd --reload"
+        return 1
+    fi
+}
+
+# Refuse to start if :80 or :443 are already bound by another process.
+preflight_ports() {
+    local ports=(80 443) bound=()
+    if command -v ss >/dev/null 2>&1; then
+        for p in "${ports[@]}"; do
+            ss -ltn 2>/dev/null | awk '{print $4}' | grep -qE ":$p\$" && bound+=("$p")
+        done
+    elif command -v lsof >/dev/null 2>&1; then
+        for p in "${ports[@]}"; do
+            lsof -nP -iTCP:"$p" -sTCP:LISTEN 2>/dev/null | grep -q LISTEN && bound+=("$p")
+        done
+    else
+        warn "Neither 'ss' nor 'lsof' available — skipping port pre-flight"
+        return 0
+    fi
+    [[ ${#bound[@]} -eq 0 ]] && return 0
+
+    for p in "${bound[@]}"; do
+        local holder=""
+        if command -v lsof >/dev/null 2>&1; then
+            holder="$(lsof -nP -iTCP:"$p" -sTCP:LISTEN 2>/dev/null | awk 'NR==2 {print $1" (pid "$2")"}')"
+        fi
+        err "Port $p is already in use${holder:+ by $holder}."
+    done
+    err "Free ports 80 and 443, then retry. Running Warren behind another reverse proxy is not supported in this iteration."
+    return 1
+}
+
+# Picks the docker-compose profiles for a given mode. Echoes
+# `--profile X` ready to splat onto the compose command.
+compose_profiles() {
+    local mode="$1"   # mode: prod | dev | dev-proxy
+    case "$mode" in
+        prod|dev-proxy) echo "--profile prod" ;;
+        dev)            echo "" ;;  # no profile — caddy is excluded
+    esac
+}
+
 usage() {
     printf '%s\n' \
         "Usage: warren <command> [options]" \
         "" \
         "Commands:" \
-        "  setup           First-time init: generate credentials, install deps, build UI" \
-        "  start [--dev]   Start infrastructure + UI (--dev for Next.js dev server)" \
-        "  stop            Gracefully stop infrastructure and UI" \
-        "  restart [svc]   Restart stack, or a single named Docker service" \
-        "  clear           Stop everything, delete all data, secrets, and tokens" \
+        "  setup [--force]" \
+        "                       First-time init: credentials, TLS bootstrap, UI build" \
+        "  start [--dev] [--proxy]" \
+        "                       Start infrastructure + UI" \
+        "                       (default: production with Caddy HTTPS proxy;" \
+        "                        --dev: dev server on localhost:3000;" \
+        "                        --dev --proxy: dev server behind Caddy)" \
+        "  stop                 Gracefully stop infrastructure and UI" \
+        "  restart [svc]        Restart stack, or a single named Docker service" \
+        "  clear                Stop everything, delete all data, secrets, and tokens" \
         "" \
         "Run 'warren <command> --help' for command-specific options."
     exit "${1:-0}"
@@ -85,6 +254,10 @@ cmd_setup() {
             "Generates credentials and config files for all Warren components." \
             "Run once after a fresh clone, or after 'warren clear'." \
             "" \
+            "Includes TLS setup for the Caddy edge proxy. By default uses Caddy's" \
+            "built-in local CA (each LAN device installs the cert once). Opt into" \
+            "Let's Encrypt by answering yes to the public-domain prompt." \
+            "" \
             "Options:" \
             "  --force   Overwrite existing credentials without prompting"
         exit 0
@@ -94,6 +267,10 @@ cmd_setup() {
     [[ "${1:-}" == "--force" ]] && force=true
 
     check_deps
+
+    # Pre-flight host config required for Caddy's :80/:443 binding.
+    preflight_sysctl   || exit 1
+    preflight_firewalld || exit 1
 
     echo -e "${BOLD}Warren — Setup${NC}"
     echo ""
@@ -120,6 +297,42 @@ cmd_setup() {
     prompt_secret WIFI_PASS    "WiFi secret"
     prompt_secret UI_PASS      "UI login password"
     prompt        BACKEND_HOST "Backend host  (IP or hostname, e.g. 192.168.1.100 or warren.local)"
+
+    # ── TLS mode for the Caddy edge proxy ─────────────────────────────────
+    local WARREN_OS WARREN_LAN_IP WARREN_HOSTNAME WARREN_TLS_MODE WARREN_UPSTREAM
+    local WARREN_DOMAIN="" WARREN_ACME_EMAIL="" WARREN_DNS_PROVIDER="" WARREN_DNS_TOKEN=""
+    local WARREN_DNS_PLUGIN=""
+    WARREN_OS="$(detect_os)"
+    WARREN_LAN_IP="$(detect_lan_ip "$WARREN_OS")"
+    WARREN_HOSTNAME="$(detect_bonjour_hostname "$WARREN_OS")"
+    [[ -z "$WARREN_HOSTNAME" ]] && WARREN_HOSTNAME="warren.local"
+
+    echo ""
+    echo "Warren can serve HTTPS over your LAN with either:"
+    echo "  (default) Caddy's local CA — fully offline; install the cert on each device once"
+    echo "  (opt-in)  Let's Encrypt via DNS-01 — needs a domain you own and a DNS API token"
+    echo ""
+    if prompt_yn "Use a public domain with Let's Encrypt for an officially-trusted cert?" "n"; then
+        WARREN_TLS_MODE=letsencrypt
+        prompt        WARREN_DOMAIN       "Domain (e.g. warren.example.com)"
+        prompt        WARREN_ACME_EMAIL   "ACME contact email"
+        prompt_with_default WARREN_DNS_PROVIDER "DNS provider" "cloudflare"
+        prompt_secret WARREN_DNS_TOKEN    "DNS provider API token"
+        # Caddy DNS plugin module path — defaults to the chosen provider's
+        # official caddy-dns module; advanced users can override via env.
+        WARREN_DNS_PLUGIN="${WARREN_CADDY_DNS_PLUGIN:-github.com/caddy-dns/${WARREN_DNS_PROVIDER}}"
+    else
+        WARREN_TLS_MODE=local
+        echo -e "  → Local CA. Cert hostname: ${BOLD}${WARREN_HOSTNAME}${NC}"
+    fi
+
+    # Rootless Docker can't reach a host process on host.docker.internal:host-gateway
+    # reliably (rootlesskit gateway != host loopback). Use the LAN IP instead.
+    if is_rootless_docker && [[ -n "$WARREN_LAN_IP" ]]; then
+        WARREN_UPSTREAM="${WARREN_LAN_IP}:3000"
+    else
+        WARREN_UPSTREAM="host.docker.internal:3000"
+    fi
 
     BACKEND_HOST="${BACKEND_HOST#http://}"
     BACKEND_HOST="${BACKEND_HOST#https://}"
@@ -193,7 +406,36 @@ MQTT_PASS=${MQTT_PASS}
 WARREN_AUTH_USERNAME=admin
 WARREN_AUTH_PASSWORD=${UI_PASS}
 WARREN_SESSION_PASSWORD=${SESSION_PASS}
+
+WARREN_TLS_MODE=${WARREN_TLS_MODE}
+WARREN_HOSTNAME=${WARREN_HOSTNAME}
+WARREN_DOMAIN=${WARREN_DOMAIN}
+WARREN_LAN_IP=${WARREN_LAN_IP}
 EOF
+
+    # docker/.env — compose substitutes these into docker-compose.yml
+    # (caddy.environment + caddy.image) at parse time.
+    cat > "$COMPOSE_ENV" <<EOF
+WARREN_TLS_MODE=${WARREN_TLS_MODE}
+WARREN_HOSTNAME=${WARREN_HOSTNAME}
+WARREN_DOMAIN=${WARREN_DOMAIN}
+WARREN_ACME_EMAIL=${WARREN_ACME_EMAIL}
+WARREN_DNS_PROVIDER=${WARREN_DNS_PROVIDER}
+WARREN_DNS_TOKEN=${WARREN_DNS_TOKEN}
+WARREN_LAN_IP=${WARREN_LAN_IP}
+WARREN_UPSTREAM=${WARREN_UPSTREAM}
+EOF
+    if [[ "$WARREN_TLS_MODE" == "letsencrypt" ]]; then
+        echo "CADDY_IMAGE=${CADDY_LE_IMAGE}" >> "$COMPOSE_ENV"
+    fi
+    chmod 0600 "$COMPOSE_ENV"
+
+    # Stage the right Caddyfile from the committed templates.
+    if [[ "$WARREN_TLS_MODE" == "letsencrypt" ]]; then
+        cp "$CADDY_TMPL_LE" "$CADDY_FILE"
+    else
+        cp "$CADDY_TMPL_LOCAL" "$CADDY_FILE"
+    fi
 
     if [[ ! -f "$NODERED_FLOWS" ]]; then
         if [[ ! -f "$NODERED_FLOWS_TEMPLATE" ]]; then
@@ -227,10 +469,19 @@ PYEOF
     echo "  docker/mosquitto/config/passwordfile"
     echo "  docker/mosquitto/config/mosquitto.conf"
     echo "  docker/nodered/flows.json"
-    echo "  ui/.env"
+    echo "  docker/.env (compose env)"
+    echo "  docker/caddy/Caddyfile"
+    echo "  nextjs-ui/.env"
     echo "  firmware/sensor/include/secrets.h"
     echo "  firmware/camera/include/secrets.h"
     echo ""
+
+    # ── TLS bootstrap ───────────────────────────────────────────────────
+    if [[ "$WARREN_TLS_MODE" == "letsencrypt" ]]; then
+        bootstrap_caddy_le_image
+    else
+        bootstrap_caddy_local_ca
+    fi
 
     echo -e "${BOLD}Installing UI dependencies…${NC}"
     (cd "$UI_DIR" && npm install)
@@ -242,10 +493,84 @@ PYEOF
     echo ""
     info "Setup complete."
     echo ""
+    echo -e "${BOLD}Access from your LAN${NC}"
+    if [[ "$WARREN_TLS_MODE" == "letsencrypt" ]]; then
+        echo "  Dashboard:   https://${WARREN_DOMAIN}"
+        echo "  No per-device cert install needed — Let's Encrypt is publicly trusted."
+    else
+        echo "  Dashboard:   https://${WARREN_HOSTNAME}"
+        [[ -n "$WARREN_LAN_IP" ]] && echo "               https://${WARREN_LAN_IP}  (cert warning until CA is installed)"
+        echo ""
+        echo -e "${BOLD}Trust the Warren CA on each device${NC} (one-time):"
+        [[ -n "$WARREN_LAN_IP" ]] && echo "  Open in the device's browser:  http://${WARREN_LAN_IP}/ca.crt"
+        echo "  Or copy the file:              docker/tls/ca.crt"
+    fi
+    echo ""
     echo -e "${BOLD}Next steps${NC}"
     echo "  Flash sensor:   cd firmware/sensor && pio run -e esp-wrover-kit -t upload"
     echo "  Flash camera:   cd firmware/camera && pio run -e esp32cam    -t upload"
     echo "  Start Warren:   warren start"
+    echo ""
+}
+
+# ── Caddy bootstrap (called from cmd_setup) ──────────────────────────────────
+
+# Local CA: boot Caddy briefly, force a TLS handshake so it materializes
+# /data/caddy/pki/authorities/local/root.crt, then docker-cp it out to
+# docker/tls/ca.crt and docker/caddy/site/ca.crt (served at /ca.crt).
+bootstrap_caddy_local_ca() {
+    echo -e "${BOLD}Bootstrapping Caddy local CA…${NC}"
+
+    preflight_ports || exit 1
+
+    if [[ -f "$CA_CERT_HOST" ]] && openssl x509 -in "$CA_CERT_HOST" -noout >/dev/null 2>&1 && ! $force; then
+        info "  Existing CA cert at docker/tls/ca.crt — reusing."
+        cp "$CA_CERT_HOST" "$CA_CERT_SITE"
+        return 0
+    fi
+
+    (cd "$DOCKER_DIR" && docker compose --profile prod up -d caddy) >/dev/null
+
+    # Force a self-handshake so Caddy materializes the CA root.
+    sleep 1
+    docker exec caddy sh -c \
+        'wget -q --no-check-certificate https://localhost/ -O /dev/null 2>&1 || true'
+
+    local ca_path="/data/caddy/pki/authorities/local/root.crt"
+    local deadline=$(( $(date +%s) + 15 ))
+    while (( $(date +%s) < deadline )); do
+        docker exec caddy sh -c "test -f $ca_path" 2>/dev/null && break
+        sleep 0.5
+    done
+
+    if ! docker exec caddy sh -c "test -f $ca_path" 2>/dev/null; then
+        err "Caddy did not generate a local CA. Logs:"
+        docker compose -f "$DOCKER_DIR/docker-compose.yml" logs --tail 30 caddy >&2
+        (cd "$DOCKER_DIR" && docker compose --profile prod stop caddy) >/dev/null
+        exit 1
+    fi
+
+    docker cp "caddy:$ca_path" "$CA_CERT_HOST"
+    chmod 0644 "$CA_CERT_HOST"
+    cp "$CA_CERT_HOST" "$CA_CERT_SITE"
+    chmod 0644 "$CA_CERT_SITE"
+
+    (cd "$DOCKER_DIR" && docker compose --profile prod stop caddy) >/dev/null
+
+    info "  CA cert written to docker/tls/ca.crt"
+    echo ""
+}
+
+# Let's Encrypt mode: build a custom Caddy image with the chosen
+# caddy-dns provider plugin compiled in. No CA bootstrap needed —
+# the cert is publicly trusted.
+bootstrap_caddy_le_image() {
+    echo -e "${BOLD}Building custom Caddy image with ${WARREN_DNS_PLUGIN}…${NC}"
+    docker build \
+        --build-arg "CADDY_DNS_PLUGIN=${WARREN_DNS_PLUGIN}" \
+        -t "$CADDY_LE_IMAGE" \
+        "$CADDY_DIR"
+    info "  Built ${CADDY_LE_IMAGE}"
     echo ""
 }
 
@@ -254,17 +579,26 @@ PYEOF
 cmd_start() {
     if [[ "${1:-}" == "--help" ]]; then
         printf '%s\n' \
-            "Usage: warren start [--dev]" \
+            "Usage: warren start [--dev] [--proxy]" \
             "" \
-            "Starts the Docker infrastructure (Mosquitto, Node-RED, InfluxDB) and the UI." \
-            "" \
-            "Options:" \
-            "  --dev   Run the Next.js dev server instead of the built production server"
+            "Modes:" \
+            "  (default)         Production: built UI on host + Caddy HTTPS proxy" \
+            "                    on :80/:443 in front of it." \
+            "  --dev             Next.js dev server on http://localhost:3000 — no proxy." \
+            "  --dev --proxy     Dev server PLUS Caddy in front, for testing LAN HTTPS in" \
+            "                    dev. Requires the Warren CA installed in your dev browser" \
+            "                    so HMR's WebSocket can reach you over TLS."
         exit 0
     fi
 
-    local dev=false
-    [[ "${1:-}" == "--dev" ]] && dev=true
+    local dev=false proxy=false
+    for arg in "$@"; do
+        case "$arg" in
+            --dev)   dev=true ;;
+            --proxy) proxy=true ;;
+            *) err "Unknown option: $arg"; exit 1 ;;
+        esac
+    done
 
     check_deps
 
@@ -291,13 +625,45 @@ cmd_start() {
         fi
     fi
 
+    # Mode resolution and profile dispatch.
+    local mode="prod"
+    if $dev && $proxy; then mode="dev-proxy"
+    elif $dev;        then mode="dev"
+    fi
+    local profiles
+    profiles="$(compose_profiles "$mode")"
+
+    if [[ "$mode" != "dev" ]]; then
+        preflight_sysctl   || exit 1
+        preflight_firewalld || exit 1
+        preflight_ports    || exit 1
+    fi
+
     echo -e "${BOLD}Starting infrastructure…${NC}"
-    (cd "$DOCKER_DIR" && docker compose up -d)
+    # shellcheck disable=SC2086
+    (cd "$DOCKER_DIR" && docker compose $profiles up -d)
 
     echo ""
     echo -e "${BOLD}Service status:${NC}"
-    (cd "$DOCKER_DIR" && docker compose ps)
+    # shellcheck disable=SC2086
+    (cd "$DOCKER_DIR" && docker compose $profiles ps)
     echo ""
+
+    # Surface the LAN URL once Caddy is up.
+    if [[ "$mode" != "dev" ]]; then
+        local _mode _hostname _domain _lan_ip
+        _mode="$(grep -m1 '^WARREN_TLS_MODE=' "$UI_ENV" 2>/dev/null | cut -d= -f2-)"
+        _hostname="$(grep -m1 '^WARREN_HOSTNAME=' "$UI_ENV" 2>/dev/null | cut -d= -f2-)"
+        _domain="$(grep -m1 '^WARREN_DOMAIN=' "$UI_ENV" 2>/dev/null | cut -d= -f2-)"
+        _lan_ip="$(grep -m1 '^WARREN_LAN_IP=' "$UI_ENV" 2>/dev/null | cut -d= -f2-)"
+        if [[ "$_mode" == "letsencrypt" && -n "$_domain" ]]; then
+            info "LAN access:  https://${_domain}"
+        else
+            [[ -n "$_hostname" ]] && info "LAN access:  https://${_hostname}"
+            [[ -n "$_lan_ip"  ]] && echo "             http://${_lan_ip}/ca.crt   (install on each device once)"
+        fi
+        echo ""
+    fi
 
     if $dev; then
         echo -e "${BOLD}Starting UI in dev mode (Ctrl+C to stop UI; run 'warren stop' to also stop infrastructure)…${NC}"
@@ -362,7 +728,10 @@ cmd_stop() {
     fi
 
     echo "Stopping infrastructure…"
-    (cd "$DOCKER_DIR" && docker compose stop)
+    # Pass the prod profile so the caddy service is included even when
+    # no profile is currently active in the shell.
+    (cd "$DOCKER_DIR" && docker compose --profile prod stop) 2>/dev/null \
+        || (cd "$DOCKER_DIR" && docker compose stop)
     echo ""
     info "Done."
 }
@@ -420,11 +789,15 @@ cmd_clear() {
     echo -e "${RED}This will permanently delete all data, secrets, and tokens.${NC}"
     echo ""
     echo "The following will be removed:"
-    echo "  Docker volumes:  node_red_data, influxdb3_data (all time-series data)"
+    echo "  Docker volumes:  node_red_data, influxdb3_data, caddy_data, caddy_config"
     echo "  docker/admin.token"
     echo "  docker/mosquitto/config/passwordfile"
     echo "  docker/mosquitto/config/mosquitto.conf  (reset to anonymous template)"
     echo "  docker/nodered/flows.json               (reset to git-tracked default)"
+    echo "  docker/.env                             (compose env)"
+    echo "  docker/caddy/Caddyfile                  (rendered from a template)"
+    echo "  docker/caddy/site/ca.crt"
+    echo "  docker/tls/ca.crt                       (Caddy CA — clients must re-trust)"
     echo "  nextjs-ui/.env"
     echo "  nextjs-ui/.data/                        (SQLite database)"
     echo "  firmware/sensor/include/secrets.h"
@@ -449,12 +822,14 @@ cmd_clear() {
     fi
 
     echo "Stopping infrastructure and removing volumes…"
-    (cd "$DOCKER_DIR" && docker compose down -v)
+    (cd "$DOCKER_DIR" && docker compose --profile prod down -v) \
+        || (cd "$DOCKER_DIR" && docker compose down -v)
     echo ""
 
     echo "Removing secrets, tokens, and data…"
     rm -f "$INFLUXDB_TOKEN_FILE" "$MQTT_PASSWORDFILE" "$UI_ENV"
     rm -f "$SENSOR_SECRETS" "$CAMERA_SECRETS"
+    rm -f "$COMPOSE_ENV" "$CADDY_FILE" "$CA_CERT_HOST" "$CA_CERT_SITE"
     rm -rf "$SQLITE_DATA_DIR"
 
     cat > "$MQTT_CONF" <<'EOF'

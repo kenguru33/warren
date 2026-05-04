@@ -16,6 +16,10 @@ UI_ENV="$REPO_ROOT/ui/.env"
 SENSOR_SECRETS="$REPO_ROOT/firmware/sensor/include/secrets.h"
 CAMERA_SECRETS="$REPO_ROOT/firmware/camera/include/secrets.h"
 SQLITE_DATA_DIR="$REPO_ROOT/ui/.data"
+COMPOSE_ENV="$DOCKER_DIR/.env"
+CADDY_FILE="$DOCKER_DIR/caddy/Caddyfile"
+CA_CERT_HOST="$DOCKER_DIR/tls/ca.crt"
+CA_CERT_SITE="$DOCKER_DIR/caddy/site/ca.crt"
 
 if [[ ! -f "$INFLUXDB_TOKEN_FILE" ]]; then
     echo "  SKIP: docker/admin.token not found — run 'warren setup' first"
@@ -48,6 +52,18 @@ else
     echo "  PASS: influxdb3_data volume removed"
     ((passed++))
 fi
+if echo "$volumes" | grep -qE '(^|_)caddy_data$'; then
+    echo "  FAIL: caddy_data volume still exists after clear" >&2
+    ((failed++))
+else
+    echo "  PASS: caddy_data volume removed"
+    ((passed++))
+fi
+
+assert_no_file "$COMPOSE_ENV"   "docker/.env deleted"
+assert_no_file "$CADDY_FILE"    "docker/caddy/Caddyfile deleted"
+assert_no_file "$CA_CERT_HOST"  "docker/tls/ca.crt deleted"
+assert_no_file "$CA_CERT_SITE"  "docker/caddy/site/ca.crt deleted"
 
 # No running containers
 running="$(cd "$DOCKER_DIR" && docker compose ps --services --filter status=running)"

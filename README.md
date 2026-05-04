@@ -121,6 +121,89 @@ After setup, edit the two `secrets.h` files to add your WiFi credentials and MQT
 
 ---
 
+## Accessing Warren on your LAN
+
+A Caddy reverse proxy in front of the dashboard terminates TLS so every device on your LAN reaches Warren over HTTPS. **TLS only at the edge** — internal traffic between Caddy ↔ Next.js, Mosquitto ↔ Node-RED, etc. stays plaintext on the host loopback / Docker bridge network.
+
+### Two TLS modes
+
+`warren setup` asks once which one you want:
+
+**1. Local CA (default)** — Caddy issues a self-signed leaf cert from a built-in local CA. Fully offline. Each device installs the CA once.
+
+```
+Use a public domain with Let's Encrypt for an officially-trusted cert? [y/N]: n
+  → Cert hostname: fedora.local   # your host's existing Bonjour/Avahi name
+```
+
+URLs to bookmark:
+- `https://<your-host>.local` — your host's existing mDNS name (works on macOS/iOS via Bonjour, Linux via Avahi, Windows 10+ natively).
+- `https://<your-host-ip>` — your LAN IP (cert warning until CA is installed).
+- `http://localhost:3000` — direct host access in `--dev` mode.
+
+**2. Let's Encrypt (opt-in)** — publicly-trusted cert via the DNS-01 challenge. No per-device install needed.
+
+```
+Use a public domain with Let's Encrypt? [y/N]: y
+  Domain (e.g. warren.example.com): warren.bernt.dev
+  ACME contact email: bernt@example.com
+  DNS provider [cloudflare]: cloudflare
+  DNS provider API token: ********
+```
+
+Requires:
+- A public domain you own.
+- A DNS provider with API access (default supported: Cloudflare; override with `WARREN_CADDY_DNS_PLUGIN=github.com/caddy-dns/<provider>` for Route53, DigitalOcean, etc.).
+- An A record for the domain pointing at your *private* LAN IP — public DNS resolves it, but only on-LAN clients can connect. The cert is still trusted everywhere because Let's Encrypt cares about DNS control, not IP reachability.
+
+### Trust the local CA (one-time per device, local-CA mode only)
+
+Open **`http://<your-host-ip>/ca.crt`** in the device's browser to download the trust certificate, then:
+
+| Platform | Steps |
+|---|---|
+| **iOS / iPadOS** | Settings → General → VPN & Device Management → Install profile, then Settings → General → About → Certificate Trust Settings → enable Warren CA |
+| **Android** | Settings → Security → Encryption & credentials → Install from storage → CA certificate |
+| **macOS** | Double-click → Keychain Access → File → Import Items → set "Always Trust" |
+| **Windows** | Double-click → Install Certificate → Local Machine → "Trusted Root Certification Authorities" |
+| **Linux (Firefox)** | Preferences → Privacy & Security → Certificates → Import |
+| **Linux (Chrome)** | `chrome://settings/certificates` → Authorities → Import |
+
+The cert file also lives at `docker/tls/ca.crt` for power users.
+
+### Host prerequisites
+
+Before `warren setup`, make sure these are in place — `setup` pre-flights both and refuses to continue with actionable errors if they're missing:
+
+**Rootless Docker** (modern Fedora / Ubuntu default): allow rootless processes to bind privileged ports.
+
+```bash
+echo 'net.ipv4.ip_unprivileged_port_start=80' | sudo tee /etc/sysctl.d/99-warren.conf
+sudo sysctl --load /etc/sysctl.d/99-warren.conf
+```
+
+**Fedora / RHEL firewalld**: open ports 80 and 443 in your default zone.
+
+```bash
+sudo firewall-cmd --permanent --zone=FedoraWorkstation --add-service=http --add-service=https
+sudo firewall-cmd --reload
+```
+
+### Dev mode
+
+- `warren start --dev` skips the proxy entirely; you keep using `http://localhost:3000` direct.
+- `warren start --dev --proxy` brings Caddy up in front of `next dev` for LAN HTTPS testing. HMR's WebSocket requires the CA installed in your dev browser.
+
+### Known LAN-security gaps (separate follow-up specs)
+
+These are real but out of scope for the edge-HTTPS feature; flagging here so you know:
+
+- ESP32 sensors send their MQTT password to `mosquitto:1883` in the clear — anyone on the LAN sniffing can capture it. Fix: MQTTS in firmware (separate spec).
+- The three device-facing endpoints (`/api/sensors/announce`, `/api/sensors/config/{id}`, `/api/sensors/{id}/reading`) have no per-device authentication — anyone on the LAN can spoof readings. Fix: per-device shared-secret HMAC (separate spec).
+- Mosquitto, InfluxDB, Node-RED and InfluxDB Explorer publish their host ports on `0.0.0.0` (LAN-reachable) instead of just the Docker bridge. Anyone on the LAN can reach `:8086`, `:1880`, `:8888` directly, bypassing Caddy. Fix: bind to `127.0.0.1` only, or remove the host port mappings (separate spec).
+
+---
+
 ## Services
 
 | Service | URL | Purpose |

@@ -23,8 +23,9 @@ if [[ -f "$INFLUXDB_TOKEN_FILE" ]]; then
     return 0 2>/dev/null || exit 0
 fi
 
-# Run setup with synthetic answers piped via stdin
-printf 'test-ssid\ntest-wifi-pass\ntest-ui-pass\n127.0.0.1\n' \
+# Run setup with synthetic answers piped via stdin.
+# Order: WIFI_SSID, WIFI_PASS, UI_PASS, BACKEND_HOST, Let's-Encrypt? (n = local-CA mode).
+printf 'test-ssid\ntest-wifi-pass\ntest-ui-pass\n127.0.0.1\nn\n' \
     | "$WARREN" setup
 
 assert_file "$INFLUXDB_TOKEN_FILE"     "docker/admin.token"

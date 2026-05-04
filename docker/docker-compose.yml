@@ -45,6 +45,35 @@ services:
     volumes:
       - ./mosquitto/config:/mosquitto/config
 
+  caddy:
+    # Local-CA mode uses the stock image (default). Let's Encrypt mode
+    # uses a custom image built by `warren setup` with the chosen
+    # caddy-dns provider plugin baked in (warren-caddy:latest).
+    image: ${CADDY_IMAGE:-caddy:2.10-alpine}
+    container_name: caddy
+    restart: unless-stopped
+    profiles: ["prod"]
+    ports:
+      - "80:80"
+      - "443:443"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      WARREN_TLS_MODE: ${WARREN_TLS_MODE:-local}
+      WARREN_HOSTNAME: ${WARREN_HOSTNAME:-warren.local}
+      WARREN_DOMAIN: ${WARREN_DOMAIN:-}
+      WARREN_ACME_EMAIL: ${WARREN_ACME_EMAIL:-}
+      WARREN_DNS_PROVIDER: ${WARREN_DNS_PROVIDER:-}
+      WARREN_DNS_TOKEN: ${WARREN_DNS_TOKEN:-}
+      WARREN_UPSTREAM: ${WARREN_UPSTREAM:-host.docker.internal:3000}
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./caddy/site:/srv:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
 volumes:
   node_red_data:
   influxdb3_data:
+  caddy_data:
+  caddy_config:
