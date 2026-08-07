@@ -148,9 +148,15 @@ The player's stored output preference and per-target volume continue to work unc
 
 6. **A `WARREN_SONOS_FAKE` stub mirrors `WARREN_CAST_FAKE`.** The Cast work established that without a fake, the paths are untestable in CI and effectively unverified. The fake seeds a couple of speakers, one group and a favorites list, and stubs the UPnP layer.
 
+## Known Limitations
+
+Found while implementing against real hardware, and not fixable from Warren's side:
+
+- **Not every Sonos Favorite is playable.** Favorites carry a `<res>` URI and an `<r:resMD>` metadata blob. Entries of `r:type="shortcut"` — Sonos Radio tiles such as "Discover Sonos Radio", "Sonos Presents", "Trending Now" — have an **empty `<res>`**: there is no URI to hand the speaker. Warren filters them out of the picker rather than offering something guaranteed to fail. On the reference household this left one of four favorites.
+- **A favorite can outlive its music-service binding.** A TuneIn favorite whose metadata carries a bare `SA_RINCON65031_` token (no account suffix) is rejected by the speaker with `UPnPError 402 (Invalid args)` — on `SetAVTransportURI` *and* on `AddURIToQueue`, and identically when the request is sent as raw SOAP with the URI and metadata the speaker itself published. Neither the URI nor the metadata is Warren's to correct, so the tile says "re-create it in the Sonos app" rather than surfacing the UPnP fault. This is not specific to Warren: the same request is what SoCo and node-sonos send.
+- **The container path is unverified against hardware.** A YouTube Music playlist saved as a Sonos favorite produces a container favorite (`x-rincon-cpcontainer:`), which enqueues rather than setting the transport URI. That code exists and is covered by the fake, but the reference household has no such favorite, so it has never run against a real speaker. This is the feature's primary use case and should be the first thing checked when one is available.
+
 ## Open Questions
 
 - What should happen to the player's state when a Sonos speaker is playing a source Warren did not start, and the user then selects a Warren favorite — does Warren take over silently, or confirm first? Cast's answer was last-write-wins; Sonos may warrant the same, but a speaker playing someone else's music in another room is a more visible interruption.
-- Sonos Favorites include non-music entries such as radio stations and line-in sources. Should the picker show all of them, or filter to what behaves like a playlist?
-- How should the tile render now-playing artwork for Sonos? The speaker provides an artwork URL, but the tile's artwork surface is currently the embedded YouTube player, which is absent on Sonos.
 - Does the household concept need modelling explicitly? A home with two Sonos households on one LAN is rare but not impossible, and favorites are per-household.

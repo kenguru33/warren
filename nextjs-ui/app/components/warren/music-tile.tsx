@@ -86,6 +86,8 @@ export function MusicTile({
   const elapsedMs = isBrowser && ownsPlayer ? local.elapsedMs : music.playback.elapsedMs
   const durationMs = isBrowser && ownsPlayer ? local.durationMs : music.playback.durationMs
   const volume = isBrowser ? local.volume : music.playback.volume ?? 50
+  // Browser playback draws its own artwork inside the embedded player.
+  const artworkUrl = isBrowser ? null : music.playback.artworkUrl
 
   const isActive = status === 'playing' || status === 'paused'
   const showPlayer = isBrowser && ownsPlayer && status !== 'unsupported'
@@ -241,6 +243,16 @@ export function MusicTile({
                   </a>
                 )}
               </>
+            ) : artworkUrl ? (
+              // A Sonos or Cast target has no embedded player, so the speaker's
+              // own artwork becomes the tile's artwork surface.
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={artworkUrl}
+                alt=""
+                className="size-full object-cover"
+                onError={e => { e.currentTarget.style.display = 'none' }}
+              />
             ) : !isBrowser && isActive ? (
               <SpeakerWaveIcon className="size-10" aria-hidden="true" />
             ) : (

@@ -22,9 +22,18 @@ export type SonosResult<T> = { ok: true; value: T } | { ok: false; error: string
 export interface SonosFavorite {
   id: string
   title: string
-  /** The URI to hand back when the user picks this favorite. */
+  /** The `<res>` URI. Empty for shortcut favorites, which cannot be played. */
   uri: string
-  metadata: string | null
+  /**
+   * The favorite's own `<r:resMD>` DIDL. Sonos rejects SetAVTransportURI with
+   * UPnPError 402 (Invalid args) when a stream arrives without it, and the
+   * library's convenience wrappers only *guess* metadata — a guess that fails
+   * for exactly the URI schemes favorites use. This must be passed through
+   * verbatim.
+   */
+  metadata: string
+  /** Containers (playlists, albums, stations) enqueue; items play directly. */
+  isContainer: boolean
   artworkUrl: string | null
 }
 
@@ -51,8 +60,14 @@ function device(target: TargetRow): SonosDevice {
 // ---------------------------------------------------------------------------
 
 const FAKE_FAVORITES: SonosFavorite[] = [
-  { id: 'FV:2/1', title: 'Chill playlist', uri: 'x-rincon-cpcontainer:fake-chill', metadata: null, artworkUrl: null },
-  { id: 'FV:2/2', title: 'Morning radio', uri: 'x-sonosapi-stream:fake-radio', metadata: null, artworkUrl: null },
+  {
+    id: 'FV:2/1', title: 'Chill playlist', uri: 'x-rincon-cpcontainer:fake-chill',
+    metadata: '<DIDL-Lite/>', isContainer: true, artworkUrl: null,
+  },
+  {
+    id: 'FV:2/2', title: 'Morning radio', uri: 'x-sonosapi-stream:fake-radio',
+    metadata: '<DIDL-Lite/>', isContainer: false, artworkUrl: null,
+  },
 ]
 
 // Mirrors the three transport states a real speaker reports, rather than a
@@ -85,25 +100,61 @@ export async function listFavorites(target: TargetRow): Promise<SonosResult<Sono
   if (SONOS_FAKE) return { ok: true, value: FAKE_FAVORITES }
 
   try {
-    const result = await device(target).GetFavorites()
-    // Result is `string | Track[]` — a string means the speaker returned raw
-    // DIDL it could not parse, which is not something to guess at.
-    const items = Array.isArray(result?.Result) ? result.Result : []
-    return {
-      ok: true,
-      value: items
-        .map((item, index) => ({
-          id: String(item.TrackUri ?? `FV:${index}`),
-          title: String(item.Title ?? 'Untitled'),
-          uri: String(item.TrackUri ?? ''),
-          metadata: null,
-          artworkUrl: typeof item.AlbumArtUri === 'string' ? item.AlbumArtUri : null,
-        }))
-        .filter(f => f.uri.length > 0),
-    }
+    // Browse the raw DIDL rather than the library's GetFavorites(). Its parser
+    // returns only Title/ItemId and drops both <res> and <r:resMD> — without
+    // which a favorite cannot be played at all.
+    const response = await device(target).ContentDirectoryService.Browse({
+      ObjectID: 'FV:2',
+      BrowseFlag: 'BrowseDirectChildren',
+      Filter: '*',
+      StartingIndex: 0,
+      RequestedCount: 100,
+      SortCriteria: '',
+    })
+
+    const xml = typeof response?.Result === 'string' ? decodeXml(response.Result) : ''
+    return { ok: true, value: parseFavorites(xml) }
   } catch (err) {
     return failure(err, 'Could not read Sonos favorites')
   }
+}
+
+/** DIDL arrives escaped, and favorites nest a second escaped DIDL inside. */
+function decodeXml(value: string): string {
+  return value
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    // Must be last: an ampersand entity can encode the others.
+    .replace(/&amp;/g, '&')
+}
+
+function parseFavorites(xml: string): SonosFavorite[] {
+  const favorites: SonosFavorite[] = []
+
+  for (const match of xml.matchAll(/<item id="([^"]+)"[^>]*>([\s\S]*?)<\/item>/g)) {
+    const [, id, body] = match
+    const pick = (re: RegExp) => (body.match(re)?.[1] ?? '').trim()
+
+    const uri = decodeXml(pick(/<res[^>]*>([\s\S]*?)<\/res>/))
+    // Shortcut favorites (Sonos Radio entries and the like) carry an empty
+    // <res>. There is no URI to play, so offering them would guarantee a
+    // failure — they are left out rather than shown and broken.
+    if (!uri) continue
+
+    const metadata = decodeXml(pick(/<r:resMD>([\s\S]*?)<\/r:resMD>/))
+    favorites.push({
+      id,
+      title: pick(/<dc:title>([\s\S]*?)<\/dc:title>/) || 'Untitled',
+      uri,
+      metadata,
+      isContainer: /<upnp:class>object\.container/.test(metadata),
+      artworkUrl: decodeXml(pick(/<upnp:albumArtURI>([\s\S]*?)<\/upnp:albumArtURI>/)) || null,
+    })
+  }
+
+  return favorites
 }
 
 /**
@@ -135,9 +186,14 @@ export async function readState(target: TargetRow): Promise<SonosResult<SonosNow
     const d = device(target)
     const state = await d.GetState()
     const transport = state.transportState
-    // TrackMetaData is `string | Track`; a string is unparsed DIDL.
-    const meta = typeof state.positionInfo?.TrackMetaData === 'object'
+
+    // Both fields are `string | Track`; a string is DIDL the library could not
+    // parse, which is not something to guess at.
+    const track = typeof state.positionInfo?.TrackMetaData === 'object'
       ? state.positionInfo.TrackMetaData
+      : null
+    const media = typeof state.mediaInfo?.CurrentURIMetaData === 'object'
+      ? state.mediaInfo.CurrentURIMetaData
       : null
 
     return {
@@ -147,9 +203,10 @@ export async function readState(target: TargetRow): Promise<SonosResult<SonosNow
           transport === 'PLAYING' || transport === 'TRANSITIONING' ? 'playing'
           : transport === 'PAUSED_PLAYBACK' ? 'paused'
           : 'idle',
-        title: meta?.Title ?? null,
-        artist: meta?.Artist ?? null,
-        artworkUrl: meta?.AlbumArtUri ?? null,
+        title: displayTitle(track?.Title, media?.Title),
+        artist: track?.Artist ?? null,
+        // Radio carries its artwork on the media rather than the track.
+        artworkUrl: track?.AlbumArtUri ?? media?.AlbumArtUri ?? null,
         elapsedMs: timeToMs(state.positionInfo?.RelTime),
         durationMs: timeToMs(state.positionInfo?.TrackDuration),
         volume: typeof state.volume === 'number' ? state.volume : null,
@@ -158,6 +215,21 @@ export async function readState(target: TargetRow): Promise<SonosResult<SonosNow
   } catch (err) {
     return failure(err, 'Could not read Sonos state')
   }
+}
+
+/**
+ * On a radio stream Sonos puts the raw stream URL in the *track* title and the
+ * station name in the *media* title, so taking the track title blindly renders
+ * something like `P04_AH?userid=…&args=…` as the now-playing line. Prefer the
+ * track title only when it reads like a name rather than a URL.
+ */
+function displayTitle(trackTitle?: string, mediaTitle?: string): string | null {
+  const looksLikeUrl = (value?: string) =>
+    !!value && !value.includes(' ') && /[?&=]|^https?:|^x-/.test(value)
+
+  if (trackTitle && !looksLikeUrl(trackTitle)) return trackTitle
+  if (mediaTitle && !looksLikeUrl(mediaTitle)) return mediaTitle
+  return null
 }
 
 /** Sonos reports positions as H:MM:SS. */
@@ -193,10 +265,41 @@ export async function playFavorite(
 
   try {
     const d = device(target)
-    await d.SetAVTransportURI(favorite.uri)
+    const av = d.AVTransportService
+
+    // The device's own methods guess metadata; favorites must supply their own,
+    // so these go through AVTransportService directly.
+    if (favorite.isContainer) {
+      // A playlist, album or station list is enqueued and played from the
+      // queue — SetAVTransportURI on a container does nothing useful.
+      await av.RemoveAllTracksFromQueue({ InstanceID: 0 })
+      await av.AddURIToQueue({
+        InstanceID: 0,
+        EnqueuedURI: favorite.uri,
+        EnqueuedURIMetaData: favorite.metadata,
+        DesiredFirstTrackNumberEnqueued: 0,
+        EnqueueAsNext: false,
+      })
+      await d.SwitchToQueue()
+    } else {
+      await av.SetAVTransportURI({
+        InstanceID: 0,
+        CurrentURI: favorite.uri,
+        CurrentURIMetaData: favorite.metadata,
+      })
+    }
+
     await d.Play()
     return { ok: true, value: undefined }
   } catch (err) {
+    // 402 here means the speaker rejected the favorite's own URI and metadata,
+    // which happens when a favorite outlives the music-service binding it was
+    // saved under. Neither the URI nor the metadata is ours to correct — the
+    // fix is to re-create the favorite — so say that instead of the UPnP fault.
+    const message = err instanceof Error ? err.message : ''
+    if (message.includes('402')) {
+      return { ok: false, error: 'Sonos rejected this favorite — re-create it in the Sonos app' }
+    }
     return failure(err, 'Could not start that favorite')
   }
 }
