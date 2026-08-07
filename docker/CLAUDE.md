@@ -73,13 +73,17 @@ Browser        →  Caddy     :443 HTTPS  →  warren-ui :3000 (bridge net)
 
 Node-RED subscribes to `warren/sensors/+/+` and writes `sensor_readings` measurements. The anonymous listener (1884) avoids storing MQTT credentials in Node-RED config; it stays bridge-network-only (no host port).
 
-### Cast speaker discovery needs link-local access
+### Speaker discovery needs link-local access — and `warren start` does not have it
 
-The music feature finds Google Cast speakers by browsing the `_googlecast._tcp` mDNS service, and then talks to them over TLS on port 8009. Both need the UI process to be on the same layer-2 network as the speakers.
+Speaker discovery is multicast: mDNS `_googlecast._tcp` for Cast, SSDP for Sonos. **Docker's default bridge network does not pass multicast**, and `./docker/warren start` runs the UI as the `warren-ui` *container*, so multicast discovery finds nothing in the standard production deployment. Only `warren start --dev`, where the UI is a host process, has link-local access.
 
-The default `./docker/warren start` runs the **UI as a host process**, so this works with no extra setup. It only becomes a problem in a fully containerized deployment: Docker's default bridge network does not pass multicast, so discovery finds nothing. Options there are host networking for the UI container, or an mDNS reflector.
+The symptom is an empty target list and `[sonos] SSDP discovery unavailable: Error: No players found` in `docker logs warren-ui`.
 
-No code can work around this, which is why the UI also accepts a speaker's IP address directly (`POST /api/music/targets`). Manually added speakers are never removed by a discovery sweep.
+**Sonos works around it; Cast does not.** Unicast *does* cross the bridge, and Sonos serves its device description on a well-known port (1400), so `lib/server/sonos/discovery.ts` falls back to probing the `WARREN_LAN_IP` subnet when multicast comes up empty. One answer is enough — a Sonos speaker knows its whole household, so `InitializeFromDevice` expands it into the full topology including groups. The scan is throttled to once per ten minutes so a house with no Sonos does not fire 254 probes a minute. `WARREN_LAN_IP` must reach the `ui` service for this to work; without it the fallback would scan Docker's private range instead of the LAN.
+
+Cast has no equivalent — there is no well-known port to probe — so Cast discovery genuinely requires host networking for the UI container or an mDNS reflector.
+
+Both protocols also accept a speaker's IP address directly (`POST /api/music/targets`, with `protocol: "sonos"` for Sonos, which is probed before it is stored). Manually added speakers are never removed by a discovery sweep.
 
 ## Key files
 
