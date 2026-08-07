@@ -13,7 +13,8 @@ import { MAX_MUSIC_SOURCES, BROWSER_TARGET_ID } from '@/lib/shared/types'
 import { getDb } from './db'
 import { HttpError } from './errors'
 import { castRuntime } from './cast/runtime'
-import { listTargets, isReachable, type TargetRow } from './cast/discovery'
+import { sonosRuntime } from './sonos/runtime'
+import { listTargets, isReachable, groupRoomsOf, getTarget, type TargetRow } from './targets'
 
 interface SourceRow {
   id: number
@@ -48,6 +49,8 @@ export function toTargetView(row: TargetRow): MusicTargetView {
     friendlyName: row.friendly_name,
     model: row.model,
     origin: row.origin,
+    protocol: row.protocol,
+    groupRooms: groupRoomsOf(row),
     reachable: isReachable(row),
     lastSeen: row.last_seen,
   }
@@ -178,8 +181,12 @@ export function getPreferredTargetId(db: Database.Database): string | null {
 /**
  * The whole music view. `configured` is false before the player has been set
  * up — the card is absent in that case, not empty.
+ *
+ * Async because Sonos state is read from the speaker rather than tracked
+ * server-side: a Sonos speaker is authoritative about what it is playing,
+ * including audio Warren never started.
  */
-export function buildMusicView(db: Database.Database): MusicView {
+export async function buildMusicView(db: Database.Database): Promise<MusicView> {
   const configured = isConfigured(db)
   const preferredTargetId = configured ? getPreferredTargetId(db) : null
 
@@ -187,12 +194,27 @@ export function buildMusicView(db: Database.Database): MusicView {
     configured,
     sources: configured ? listSources(db) : [],
     preferredTargetId,
-    // The browser target's playback is private to the tab that owns it, so the
-    // server reports idle for it rather than inventing shared state.
-    playback: castRuntime.getState(
-      preferredTargetId === BROWSER_TARGET_ID ? null : preferredTargetId,
-    ),
+    playback: await buildPlayback(preferredTargetId),
   }
+}
+
+/** Route state reads to whichever stack owns the selected output. */
+async function buildPlayback(preferredTargetId: string | null) {
+  // The browser target's playback is private to the tab that owns it, so the
+  // server reports idle for it rather than inventing shared state.
+  if (preferredTargetId === null || preferredTargetId === BROWSER_TARGET_ID) {
+    return castRuntime.getState(null)
+  }
+
+  const target = getTarget(preferredTargetId)
+  if (target?.protocol === 'sonos') return sonosRuntime.getState(preferredTargetId)
+  return castRuntime.getState(preferredTargetId)
+}
+
+/** Which stack drives a target, for routing commands. */
+export function protocolOf(targetId: string | null): 'browser' | 'cast' | 'sonos' {
+  if (targetId === null || targetId === BROWSER_TARGET_ID) return 'browser'
+  return getTarget(targetId)?.protocol ?? 'cast'
 }
 
 export function getDbOrThrow(): Database.Database {

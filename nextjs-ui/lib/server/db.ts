@@ -188,8 +188,17 @@ export function initDb() {
 
     CREATE INDEX IF NOT EXISTS idx_music_sources_position ON music_sources(position);
 
-    -- Cast targets are shared across rooms. Discovered rows are a cache of what
-    -- mDNS saw and may be pruned; manual rows are user configuration and never are.
+    -- Output targets, shared by the whole house. Discovered rows are a cache of
+    -- what mDNS/SSDP saw and may be pruned; manual rows are user configuration
+    -- and never are.
+    --
+    -- protocol says which stack drives the device: Cast speaks CASTV2 on 8009,
+    -- Sonos speaks UPnP on 1400. They share this table because the player picks
+    -- an *output* and the wire protocol is an implementation detail.
+    --
+    -- group_rooms is Sonos-only: a JSON array of the other room names a group
+    -- coordinator carries with it, NULL when ungrouped. Only coordinators are
+    -- stored as targets -- see lib/server/sonos/discovery.ts.
     CREATE TABLE IF NOT EXISTS music_targets (
       target_id     TEXT    PRIMARY KEY,
       friendly_name TEXT    NOT NULL,
@@ -197,6 +206,9 @@ export function initDb() {
       port          INTEGER NOT NULL DEFAULT 8009,
       model         TEXT,
       origin        TEXT    NOT NULL DEFAULT 'discovered' CHECK(origin IN ('discovered','manual')),
+      protocol      TEXT    NOT NULL DEFAULT 'cast',
+      group_rooms   TEXT,
+      household_id  TEXT,
       last_seen     INTEGER NOT NULL,
       created_at    INTEGER NOT NULL DEFAULT (unixepoch('now') * 1000)
     );
@@ -209,6 +221,15 @@ export function initDb() {
   `)
 
   migrateMusicOffRooms(db)
+
+  // Sonos arrived after Cast, so existing target rows predate `protocol` and
+  // are all Cast by definition. Plain ALTER TABLE suffices — these are added
+  // columns with defaults, not the constraint changes that need a shadow table.
+  const targetCols = db.pragma('table_info(music_targets)') as { name: string }[]
+  const has = (name: string) => targetCols.some(c => c.name === name)
+  if (!has('protocol')) db.exec("ALTER TABLE music_targets ADD COLUMN protocol TEXT NOT NULL DEFAULT 'cast'")
+  if (!has('group_rooms')) db.exec('ALTER TABLE music_targets ADD COLUMN group_rooms TEXT')
+  if (!has('household_id')) db.exec('ALTER TABLE music_targets ADD COLUMN household_id TEXT')
 
   const columns = db.pragma('table_info(sensors)') as { name: string; notnull: number }[]
   if (!columns.some(c => c.name === 'device_id')) {

@@ -9,7 +9,7 @@ import { buildMusicView } from '@/lib/server/music'
  */
 export async function GET() {
   try {
-    const view = buildMusicView(getDb())
+    const view = await buildMusicView(getDb())
     return Response.json({
       ...view.playback,
       stale: view.playback.status === 'unknown',

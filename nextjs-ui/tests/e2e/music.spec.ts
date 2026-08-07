@@ -1,9 +1,10 @@
 import { test, expect, login, loginViaApi } from './fixtures'
 import type { APIRequestContext } from '@playwright/test'
 
-// Runs with WARREN_CAST_FAKE=1 (playwright.config.ts), which seeds two fake
-// cast targets and stubs the lounge/CASTV2 layers. That is what makes the cast
-// paths testable at all — the real ones need hardware on the LAN.
+// Runs with WARREN_CAST_FAKE=1 and WARREN_SONOS_FAKE=1 (playwright.config.ts),
+// which seed fake Cast and Sonos targets and stub the CASTV2 and UPnP layers.
+// That is what makes either path testable at all — the real ones need hardware
+// on the LAN.
 //
 // Music is global state, not per-room, so these tests reset it rather than
 // isolating themselves behind a throwaway room. The suite runs with
@@ -36,12 +37,30 @@ async function addSource(request: APIRequestContext, url: string, name: string) 
   return await res.json() as { id: number; kind: string; contentId: string }
 }
 
+interface TargetView {
+  targetId: string
+  friendlyName: string
+  origin: string
+  protocol: 'cast' | 'sonos'
+  groupRooms: string[]
+  reachable: boolean
+}
+
+async function targets(request: APIRequestContext): Promise<TargetView[]> {
+  return await (await request.get('/api/music/targets')).json() as TargetView[]
+}
+
 async function discoveredTarget(request: APIRequestContext): Promise<string> {
-  const targets = await (await request.get('/api/music/targets')).json() as
-    { targetId: string; origin: string }[]
-  const target = targets.find(t => t.origin === 'discovered')
+  const target = (await targets(request)).find(t => t.origin === 'discovered' && t.protocol === 'cast')
   expect(target).toBeTruthy()
   return target!.targetId
+}
+
+async function sonosTarget(request: APIRequestContext, grouped = false): Promise<TargetView> {
+  const found = (await targets(request))
+    .find(t => t.protocol === 'sonos' && (grouped ? t.groupRooms.length > 0 : t.groupRooms.length === 0))
+  expect(found).toBeTruthy()
+  return found!
 }
 
 test.describe('music (API)', () => {
@@ -148,17 +167,15 @@ test.describe('music targets', () => {
   })
 
   test('fake discovery seeds cast targets', async ({ request }) => {
-    const targets = await (await request.get('/api/music/targets')).json() as
-      { targetId: string; reachable: boolean }[]
-    expect(targets.length).toBeGreaterThanOrEqual(2)
-    expect(targets.every(t => t.reachable)).toBe(true)
+    const cast = (await targets(request)).filter(t => t.protocol === 'cast')
+    expect(cast.length).toBeGreaterThanOrEqual(2)
+    expect(cast.every(t => t.reachable)).toBe(true)
   })
 
   test('a target can be added manually and removed', async ({ request }) => {
     // Manual targets outlive the test that made them, so a run interrupted
     // between create and delete would otherwise poison every later run.
-    const existing = await (await request.get('/api/music/targets')).json() as
-      { targetId: string; origin: string }[]
+    const existing = await targets(request)
     for (const t of existing.filter(t => t.origin === 'manual')) {
       await request.delete(`/api/music/targets/${t.targetId}`)
     }
@@ -172,8 +189,7 @@ test.describe('music targets', () => {
 
     // Manual entries survive a discovery sweep that doesn't see them.
     await request.post('/api/music/targets/discover')
-    const afterSweep = await (await request.get('/api/music/targets')).json() as
-      { targetId: string }[]
+    const afterSweep = await targets(request)
     expect(afterSweep.some(t => t.targetId === target.targetId)).toBe(true)
 
     expect((await request.delete(`/api/music/targets/${target.targetId}`)).ok()).toBeTruthy()
@@ -185,9 +201,7 @@ test.describe('music targets', () => {
   })
 
   test('discovered targets cannot be deleted', async ({ request }) => {
-    const targets = await (await request.get('/api/music/targets')).json() as
-      { targetId: string; origin: string }[]
-    const discovered = targets.find(t => t.origin === 'discovered')
+    const discovered = (await targets(request)).find(t => t.origin === 'discovered')
     expect(discovered).toBeTruthy()
     const res = await request.delete(`/api/music/targets/${discovered!.targetId}`)
     expect(res.status()).toBe(400)
@@ -222,9 +236,8 @@ test.describe('music playback', () => {
   })
 
   test('switching output moves the player rather than starting a second stream', async ({ request }) => {
-    const targets = await (await request.get('/api/music/targets')).json() as
-      { targetId: string; origin: string }[]
-    const [first, second] = targets
+    const cast = (await targets(request)).filter(t => t.protocol === 'cast')
+    const [first, second] = cast
     expect(second).toBeTruthy()
 
     await enableMusic(request, first.targetId)
@@ -275,6 +288,145 @@ test.describe('music playback', () => {
     // The server must not claim anything is playing — that audio is private to
     // whichever tab started it.
     const state = await (await request.get('/api/music/state')).json() as { status: string }
+    expect(state.status).toBe('idle')
+  })
+})
+
+test.describe('sonos', () => {
+  test.beforeEach(async ({ request }) => {
+    await loginViaApi(request)
+    await resetMusic(request)
+  })
+
+  test('sonos speakers are discovered and listed alongside cast targets', async ({ request }) => {
+    const all = await targets(request)
+    const sonos = all.filter(t => t.protocol === 'sonos')
+    const cast = all.filter(t => t.protocol === 'cast')
+
+    // One combined list, each kind distinguishable.
+    expect(sonos.length).toBeGreaterThanOrEqual(2)
+    expect(cast.length).toBeGreaterThanOrEqual(2)
+    expect(sonos.every(t => t.reachable)).toBe(true)
+    // Labelled by the Sonos room name, not an IP or a model.
+    expect(sonos.map(t => t.friendlyName)).toContain('Kitchen')
+  })
+
+  test('a grouped speaker is one entry naming the rooms it carries', async ({ request }) => {
+    const grouped = await sonosTarget(request, true)
+    expect(grouped.friendlyName).toBe('Living Room')
+    expect(grouped.groupRooms).toContain('Dining Room')
+
+    // Members bound into a group are not offered as independent outputs.
+    const all = await targets(request)
+    expect(all.some(t => t.friendlyName === 'Dining Room')).toBe(false)
+  })
+
+  test('sonos target ids cannot collide with cast ones', async ({ request }) => {
+    const all = await targets(request)
+    expect(all.filter(t => t.protocol === 'sonos').every(t => t.targetId.startsWith('sonos:'))).toBe(true)
+    expect(new Set(all.map(t => t.targetId)).size).toBe(all.length)
+  })
+
+  test('favorites are listed for a sonos target and refused for a cast one', async ({ request }) => {
+    const sonos = await sonosTarget(request)
+    const favorites = await (await request.get(
+      `/api/music/targets/${encodeURIComponent(sonos.targetId)}/favorites`,
+    )).json() as { id: string; title: string }[]
+    expect(favorites.length).toBeGreaterThan(0)
+    expect(favorites[0].title).toBeTruthy()
+
+    // Favorites are a Sonos concept; a Cast target has Warren's own library.
+    const castId = await discoveredTarget(request)
+    const refused = await request.get(`/api/music/targets/${encodeURIComponent(castId)}/favorites`)
+    expect(refused.status()).toBe(400)
+  })
+
+  test('playing a favorite reports playing state', async ({ request }) => {
+    const sonos = await sonosTarget(request)
+    await enableMusic(request, sonos.targetId)
+
+    const favorites = await (await request.get(
+      `/api/music/targets/${encodeURIComponent(sonos.targetId)}/favorites`,
+    )).json() as { id: string }[]
+
+    const played = await request.post('/api/music/command', {
+      data: { command: 'play', favoriteId: favorites[0].id },
+    })
+    expect(played.ok()).toBeTruthy()
+
+    const state = await (await request.get('/api/music/state')).json() as
+      { status: string; targetId: string }
+    expect(state.status).toBe('playing')
+    expect(state.targetId).toBe(sonos.targetId)
+
+    const paused = await request.post('/api/music/command', { data: { command: 'pause' } })
+    expect(paused.ok()).toBeTruthy()
+    const after = await (await request.get('/api/music/state')).json() as { status: string }
+    expect(after.status).toBe('paused')
+  })
+
+  test('a sonos target refuses a youtube source and needs a favoriteId', async ({ request }) => {
+    const sonos = await sonosTarget(request)
+    await enableMusic(request, sonos.targetId)
+    const source = await addSource(request, PLAYLIST_URL, 'Not on sonos')
+
+    // Warren's YouTube library cannot play on Sonos, so a sourceId is not a
+    // valid thing to ask for — better a clear 400 than a silent failure.
+    const res = await request.post('/api/music/command', {
+      data: { command: 'play', sourceId: source.id },
+    })
+    expect(res.status()).toBe(400)
+    const body = await res.json() as { message: string }
+    expect(body.message).toMatch(/favoriteId/i)
+  })
+
+  test('seek is not offered on a sonos target', async ({ request }) => {
+    const sonos = await sonosTarget(request)
+    await enableMusic(request, sonos.targetId)
+    const res = await request.post('/api/music/command', {
+      data: { command: 'seek', positionMs: 1000 },
+    })
+    expect(res.status()).toBe(400)
+  })
+
+  test('volume works on a sonos target', async ({ request }) => {
+    const sonos = await sonosTarget(request)
+    await enableMusic(request, sonos.targetId)
+    const res = await request.post('/api/music/command', {
+      data: { command: 'volume', volume: 42 },
+    })
+    expect(res.ok()).toBeTruthy()
+    const state = await (await request.get('/api/music/state')).json() as { volume: number }
+    expect(state.volume).toBe(42)
+  })
+
+  test('a sonos speaker can be added manually and is probed first', async ({ request }) => {
+    for (const t of (await targets(request)).filter(t => t.origin === 'manual')) {
+      await request.delete(`/api/music/targets/${t.targetId}`)
+    }
+
+    const created = await request.post('/api/music/targets', {
+      data: { address: '192.168.77.99', protocol: 'sonos' },
+    })
+    expect(created.status()).toBe(201)
+    const target = await created.json() as TargetView
+    expect(target.protocol).toBe('sonos')
+    expect(target.origin).toBe('manual')
+
+    // Manual rows are never pruned by a sweep, unlike discovered ones.
+    await request.post('/api/music/targets/discover')
+    expect((await targets(request)).some(t => t.targetId === target.targetId)).toBe(true)
+
+    expect((await request.delete(`/api/music/targets/${target.targetId}`)).ok()).toBeTruthy()
+  })
+
+  test('switching from sonos back to the browser leaves the player idle', async ({ request }) => {
+    const sonos = await sonosTarget(request)
+    await enableMusic(request, sonos.targetId)
+
+    await enableMusic(request, 'browser')
+    const state = await (await request.get('/api/music/state')).json() as { status: string }
+    // Browser playback is private to a tab; the server must not claim otherwise.
     expect(state.status).toBe('idle')
   })
 })

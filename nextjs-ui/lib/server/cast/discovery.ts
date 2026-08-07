@@ -11,24 +11,21 @@
 // `POST /api/music/targets` exists for when neither is available.
 
 import { Bonjour, type Browser, type Service } from 'bonjour-service'
-import { getDb } from '../db'
+import { upsertDiscovered, type DiscoveredTarget } from '../targets'
 
 export const CAST_FAKE = process.env.WARREN_CAST_FAKE === '1'
 
-/** Targets not seen by this many sweeps are marked unreachable, not deleted. */
-export const STALE_AFTER_MS = 180_000
-
-export interface DiscoveredTarget {
-  targetId: string
-  friendlyName: string
-  address: string
-  port: number
-  model: string | null
-}
+// Target storage and reachability live in lib/server/targets.ts — they are
+// shared with Sonos and are not Cast concerns. Re-exported here so the many
+// existing `from './cast/discovery'` imports keep working.
+export {
+  listTargets, getTarget, isReachable, upsertDiscovered,
+  STALE_AFTER_MS, type TargetRow, type DiscoveredTarget,
+} from '../targets'
 
 const FAKE_TARGETS: DiscoveredTarget[] = [
-  { targetId: 'fake-kitchen', friendlyName: 'Kitchen speaker', address: '127.0.0.1', port: 8009, model: 'Google Home' },
-  { targetId: 'fake-office',  friendlyName: 'Office display',  address: '127.0.0.1', port: 8009, model: 'Nest Hub' },
+  { targetId: 'fake-kitchen', friendlyName: 'Kitchen speaker', address: '127.0.0.1', port: 8009, model: 'Google Home', protocol: 'cast' },
+  { targetId: 'fake-office',  friendlyName: 'Office display',  address: '127.0.0.1', port: 8009, model: 'Nest Hub', protocol: 'cast' },
 ]
 
 function textValue(txt: Service['txt'], key: string): string | null {
@@ -50,24 +47,10 @@ function toTarget(service: Service): DiscoveredTarget | null {
     address,
     port: service.port ?? 8009,
     model: textValue(service.txt, 'md'),
+    protocol: 'cast',
   }
 }
 
-export function upsertDiscovered(target: DiscoveredTarget) {
-  getDb().prepare(`
-    INSERT INTO music_targets (target_id, friendly_name, address, port, model, origin, last_seen)
-    VALUES (?, ?, ?, ?, ?, 'discovered', ?)
-    ON CONFLICT(target_id) DO UPDATE SET
-      friendly_name = excluded.friendly_name,
-      address       = excluded.address,
-      port          = excluded.port,
-      model         = excluded.model,
-      last_seen     = excluded.last_seen
-  `).run(
-    target.targetId, target.friendlyName, target.address,
-    target.port, target.model, Date.now(),
-  )
-}
 
 /**
  * Owns the mDNS browser. Must be stopped on shutdown and on dev HMR — a leaked
@@ -118,32 +101,3 @@ export class CastDiscovery {
   }
 }
 
-export interface TargetRow {
-  target_id: string
-  friendly_name: string
-  address: string
-  port: number
-  model: string | null
-  origin: 'discovered' | 'manual'
-  last_seen: number
-}
-
-export function listTargets(): TargetRow[] {
-  return getDb().prepare(`
-    SELECT target_id, friendly_name, address, port, model, origin, last_seen
-    FROM music_targets ORDER BY friendly_name COLLATE NOCASE ASC
-  `).all() as TargetRow[]
-}
-
-export function getTarget(targetId: string): TargetRow | null {
-  return getDb().prepare(`
-    SELECT target_id, friendly_name, address, port, model, origin, last_seen
-    FROM music_targets WHERE target_id = ?
-  `).get(targetId) as TargetRow | undefined ?? null
-}
-
-/** Manual entries are reachable by assumption — we never saw them via mDNS. */
-export function isReachable(row: TargetRow): boolean {
-  if (row.origin === 'manual') return true
-  return Date.now() - row.last_seen < STALE_AFTER_MS
-}

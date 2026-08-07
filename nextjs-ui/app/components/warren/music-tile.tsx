@@ -7,13 +7,14 @@ import {
   ChevronDownIcon, ExclamationTriangleIcon, ArrowTopRightOnSquareIcon,
 } from '@heroicons/react/20/solid'
 import * as Headless from '@headlessui/react'
-import type { MusicSourceView, MusicTargetView, MusicView } from '@/lib/shared/types'
+import type { MusicSourceView, MusicTargetView, MusicView, SonosFavoriteView } from '@/lib/shared/types'
 import { BROWSER_TARGET_ID } from '@/lib/shared/types'
 import { youtubeMusicUrl } from '@/lib/shared/youtube'
 import { DropdownItem, DropdownLabel, DropdownMenu } from '@/app/components/dropdown'
 import { TileMenu, type TileMenuItem } from './tile-menu'
 import { MusicTargetPicker } from './music-target-picker'
 import { browserPlayer, MIN_PLAYER_PX, type BrowserPlayerState } from './browser-player'
+import { useSonosFavorites } from '@/lib/hooks/use-music'
 
 function formatTime(ms: number | null): string {
   if (ms === null || !Number.isFinite(ms) || ms < 0) return '--:--'
@@ -42,7 +43,7 @@ export function MusicTile({
   onSetTarget: (targetId: string) => void
   onCommand: (
     command: string,
-    extra?: { sourceId?: number; positionMs?: number; volume?: number },
+    extra?: { sourceId?: number; favoriteId?: string; positionMs?: number; volume?: number },
   ) => Promise<{ target?: string; command?: string; source?: MusicSourceView } | null>
 }) {
   const mountRef = useRef<HTMLDivElement>(null)
@@ -53,6 +54,14 @@ export function MusicTile({
   const targetId = music.preferredTargetId
   const isBrowser = targetId === null || targetId === BROWSER_TARGET_ID
   const ownsPlayer = local.active
+
+  // Sonos cannot play Warren's YouTube library — YouTube Music is a Sonos music
+  // service resolved against the user's linked account, not something a LAN
+  // controller can push. Favorites are what it can start, so the source picker
+  // swaps its contents rather than offering sources that would fail.
+  const selectedTarget = targets.find(t => t.targetId === targetId) ?? null
+  const isSonos = selectedTarget?.protocol === 'sonos'
+  const { favorites, favoritesError } = useSonosFavorites(isSonos ? targetId : null)
 
   useEffect(() => browserPlayer.subscribe(setLocal), [])
 
@@ -109,6 +118,10 @@ export function MusicTile({
       await onCommand('play', { sourceId: source.id })
     })
   }, [isBrowser, onCommand, run])
+
+  const playFavorite = useCallback((favorite: SonosFavoriteView) => {
+    void run(async () => { await onCommand('play', { favoriteId: favorite.id }) })
+  }, [onCommand, run])
 
   const togglePlayPause = useCallback(() => {
     if (!isActive) { playSource(activeSource); return }
@@ -299,7 +312,9 @@ export function MusicTile({
       </div>
 
       <div className="flex items-center justify-between gap-2 border-t border-default/60 pt-2 dark:border-white/5">
-        <SourcePicker sources={sources} active={activeSource} onPlay={playSource} />
+        {isSonos
+          ? <FavoritePicker favorites={favorites} error={favoritesError} onPlay={playFavorite} />
+          : <SourcePicker sources={sources} active={activeSource} onPlay={playSource} />}
         <MusicTargetPicker
           targets={targets}
           selectedTargetId={targetId}
@@ -361,6 +376,54 @@ function SourcePicker({
                 <span className="ml-1.5 text-[10px] uppercase tracking-wide text-muted">browser only</span>
               )}
             </DropdownLabel>
+          </DropdownItem>
+        ))}
+      </DropdownMenu>
+    </Headless.Menu>
+  )
+}
+
+/**
+ * Sonos Favorites, shown in place of Warren's library when the output is a
+ * Sonos speaker. The reason is stated in the menu rather than left for the user
+ * to infer from a list that silently changed.
+ */
+function FavoritePicker({
+  favorites,
+  error,
+  onPlay,
+}: {
+  favorites: SonosFavoriteView[]
+  error: string | null
+  onPlay: (favorite: SonosFavoriteView) => void
+}) {
+  return (
+    <Headless.Menu>
+      <Headless.MenuButton
+        aria-label="Sonos favorite"
+        data-testid="music-favorite-picker"
+        className="inline-flex max-w-[55%] items-center gap-1.5 rounded-md px-1.5 py-1 text-xs text-subtle hover:bg-surface"
+      >
+        <MusicalNoteIcon className="size-3.5 shrink-0" aria-hidden="true" />
+        <span className="truncate">Sonos favorites</span>
+        <ChevronDownIcon className="size-3 shrink-0" aria-hidden="true" />
+      </Headless.MenuButton>
+
+      <DropdownMenu anchor="bottom start" className="min-w-64">
+        <div className="px-3 py-2 text-[11px] leading-snug text-muted">
+          Sonos plays your favorites from the Sonos app. Warren&apos;s YouTube
+          sources aren&apos;t available on a Sonos speaker.
+        </div>
+        {error && <div className="px-3 py-2 text-[11px] text-error">{error}</div>}
+        {!error && favorites.length === 0 && (
+          <div className="px-3 py-2 text-[11px] text-muted">
+            No favorites yet — add one in the Sonos app.
+          </div>
+        )}
+        {favorites.map(favorite => (
+          <DropdownItem key={favorite.id} onClick={() => onPlay(favorite)}>
+            <MusicalNoteIcon data-slot="icon" />
+            <DropdownLabel>{favorite.title}</DropdownLabel>
           </DropdownItem>
         ))}
       </DropdownMenu>

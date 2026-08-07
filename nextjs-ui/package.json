@@ -14,6 +14,7 @@
     "@headlessui/react": "^2.2.10",
     "@heroicons/react": "^2.2.0",
     "@influxdata/influxdb3-client": "^2.1.0",
+    "@svrooij/sonos": "^2.5.0",
     "@tailwindcss/forms": "^0.5.11",
     "better-sqlite3": "^12.9.0",
     "bonjour-service": "^1.4.4",

@@ -2,7 +2,7 @@
 
 import useSWR from 'swr'
 import { useCallback } from 'react'
-import type { MusicSourceView, MusicTargetView, MusicView } from '@/lib/shared/types'
+import type { MusicSourceView, MusicTargetView, MusicView, SonosFavoriteView } from '@/lib/shared/types'
 
 const fetcher = async (url: string) => {
   const res = await fetch(url, { credentials: 'include' })
@@ -59,6 +59,23 @@ export function useMusicTargets() {
 }
 
 /**
+ * Sonos Favorites for a target, fetched only when the selected output is a
+ * Sonos speaker. Not part of the music payload because the list belongs to the
+ * Sonos app rather than to Warren, and is read live every time it is shown.
+ */
+export function useSonosFavorites(targetId: string | null) {
+  const { data, error, isLoading } = useSWR<SonosFavoriteView[]>(
+    targetId ? `/api/music/targets/${encodeURIComponent(targetId)}/favorites` : null,
+    fetcher,
+  )
+  return {
+    favorites: data ?? [],
+    favoritesError: error instanceof Error ? error.message : null,
+    favoritesLoading: isLoading,
+  }
+}
+
+/**
  * The music player: one library, one output, one playback state for the whole
  * house. Polls its own state because — unlike the per-room player this replaced
  * — it no longer rides along on the `useRooms` payload.
@@ -107,7 +124,7 @@ export function useMusic() {
   /** Transport commands. For the browser target the server returns intent only. */
   const command = useCallback(async (
     command: string,
-    extra: { sourceId?: number; positionMs?: number; volume?: number } = {},
+    extra: { sourceId?: number; favoriteId?: string; positionMs?: number; volume?: number } = {},
   ) => {
     const result = await send('/api/music/command', 'POST', { command, ...extra })
     onChanged()

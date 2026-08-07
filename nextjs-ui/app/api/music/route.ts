@@ -15,7 +15,7 @@ import { BROWSER_TARGET_ID } from '@/lib/shared/types'
  */
 export async function GET() {
   try {
-    return Response.json(buildMusicView(getDb()))
+    return Response.json(await buildMusicView(getDb()))
   } catch (err) {
     return httpErrorResponse(err)
   }
@@ -43,7 +43,7 @@ export async function PUT(req: NextRequest) {
     enableMusic(db, preferredTargetId)
     if (previous !== null && previous !== preferredTargetId) castRuntime.release()
 
-    return Response.json(buildMusicView(db))
+    return Response.json(await buildMusicView(db))
   } catch (err) {
     return httpErrorResponse(err)
   }

@@ -79,13 +79,40 @@ export interface MusicSourceView {
 /** The browser is always available as a target; cast targets are discovered or manual. */
 export const BROWSER_TARGET_ID = 'browser'
 
+/** Which stack drives a target. The browser is neither, and has no row. */
+export type MusicTargetProtocol = 'cast' | 'sonos'
+
 export interface MusicTargetView {
   targetId: string
   friendlyName: string
   model: string | null
   origin: 'discovered' | 'manual'
+  protocol: MusicTargetProtocol
+  /**
+   * Sonos only: the other rooms a group coordinator carries with it. Non-empty
+   * means selecting this target fills every one of those rooms with sound, so
+   * the UI must say so rather than let the single room name imply otherwise.
+   */
+  groupRooms: string[]
   reachable: boolean
   lastSeen: number
+}
+
+/**
+ * A Sonos favorite, offered instead of Warren's YouTube library when the
+ * output is a Sonos speaker.
+ *
+ * Warren cannot hand a Sonos speaker a YouTube identifier — YouTube Music is a
+ * Sonos music service resolved against the user's linked account, not
+ * something a LAN controller can push. Favorites are the supported way in: the
+ * user saves a playlist as a favorite in the Sonos app once, and Warren can
+ * start it from then on. These are read live from the speaker and never
+ * stored, because the Sonos app owns the list.
+ */
+export interface SonosFavoriteView {
+  id: string
+  title: string
+  artworkUrl: string | null
 }
 
 /**

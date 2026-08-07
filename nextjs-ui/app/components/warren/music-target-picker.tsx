@@ -8,8 +8,12 @@ import { DropdownItem, DropdownLabel, DropdownMenu } from '@/app/components/drop
 
 /**
  * Output picker. The current output is named on the tile face, not hidden
- * inside the menu — the browser/cast asymmetry is deliberately visible, since
- * only one of the two is controllable from another device.
+ * inside the menu — the browser/speaker asymmetry is deliberately visible,
+ * since only one of the two is controllable from another device.
+ *
+ * Cast and Sonos speakers share one list: the user is choosing where sound
+ * comes out, and the protocol is an implementation detail. The kind is still
+ * shown, quietly, for a household that has both.
  */
 export function MusicTargetPicker({
   targets,
@@ -67,11 +71,24 @@ export function MusicTargetPicker({
             <SpeakerWaveIcon data-slot="icon" />
             <DropdownLabel>
               {target.friendlyName}
+              <span className="ml-1.5 text-[10px] uppercase tracking-wide text-muted">
+                {target.protocol === 'sonos' ? 'sonos' : 'cast'}
+              </span>
               {target.origin === 'manual' && (
                 <span className="ml-1.5 text-[10px] uppercase tracking-wide text-muted">manual</span>
               )}
               {!target.reachable && (
                 <span className="ml-1.5 text-[10px] uppercase tracking-wide text-muted">offline</span>
+              )}
+              {/*
+                A grouped Sonos coordinator plays in every room of its group.
+                Naming only the coordinator would let the user pick "Kitchen"
+                and fill four rooms with sound.
+              */}
+              {target.groupRooms.length > 0 && (
+                <span className="block text-[11px] text-muted">
+                  + {target.groupRooms.join(', ')}
+                </span>
               )}
             </DropdownLabel>
           </DropdownItem>

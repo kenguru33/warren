@@ -124,16 +124,18 @@ Rooms can group multiple lights (Hue or otherwise) into a single controllable un
 
 ### Music (YouTube Music)
 
-A single global player — **not** a per-room feature — playing YouTube Music either through the browser showing the dashboard or through a Google Cast speaker. One source library, one output, one playback state for the whole house. Lives entirely inside `nextjs-ui/`.
+A single global player — **not** a per-room feature — playing through the browser showing the dashboard, a Google Cast speaker, or a Sonos speaker. One source library, one output, one playback state for the whole house. Lives entirely inside `nextjs-ui/`.
 
-- **Tables**: `music_config` (single row, `id = 1`; its presence is what makes the player appear), `music_sources` (saved playlists/albums/tracks, max 12), `music_targets` (cast speakers, discovered or manually added), `music_volume` (per target, so browser and speaker volumes stay independent).
+- **Tables**: `music_config` (single row, `id = 1`; its presence is what makes the player appear), `music_sources` (saved playlists/albums/tracks, max 12), `music_targets` (speakers of either protocol, discovered or manually added), `music_volume` (per target, so browser and speaker volumes stay independent).
+- **Three output stacks, one target list.** The browser plays in the tab; Cast speaks CASTV2 on :8009 (`lib/server/cast/`); Sonos speaks UPnP on :1400 (`lib/server/sonos/`). `music_targets.protocol` says which, and `lib/server/targets.ts` holds the protocol-neutral queries both discovery stacks write through. Commands and state reads dispatch on protocol — see `protocolOf()` in `lib/server/music.ts`.
+- **Sonos plays Favorites, not Warren's library.** YouTube Music is a Sonos music service resolved against the user's linked account, so a LAN controller cannot hand a speaker a YouTube id the way the Cast receiver accepts one. The user saves a playlist as a favorite in the Sonos app, and Warren starts it by favorite id — the same approach Home Assistant takes. The tile swaps its source picker to favorites when the output is Sonos. Only group *coordinators* are stored as targets; a bound member is not independently addressable.
 - **Endpoints** live under `/api/music/` — there is no room in the path. `initDb()` migrates the original per-room schema (`room_music`, `music_sources.room_id`, `music_volume.room_id`) by merging every room's sources into one library, de-duplicated by `content_id`.
 - **Must be served from a hostname, not a bare IP.** YouTube returns error `150` and renders "Video unavailable" for licensed music when the embedding origin is an IP address, even for public, embeddable content. `localhost` and any DNS name (including mDNS `.local`) work, which is why this only shows up on a LAN deployment reached by IP. Set `WARREN_HOSTNAME` and carry it as a DNS SAN on the local-CA leaf cert.
 - **Not a sensor.** Music is never added to `SensorType` — a player produces no readings and must stay out of sensor discovery and the InfluxDB pipeline.
 - **Content IDs are ordinary YouTube IDs.** A YouTube Music playlist URL carries `list=`, an album an `OLAK5uy_…` playlist ID, a track a `watch?v=` video ID. `lib/shared/youtube.ts:parseYouTubeMusicUrl()` extracts them. This is why the officially supported IFrame Player API can play YouTube Music without any unofficial endpoint.
 - **The embedded player must stay visible** at ≥200×200 with nothing drawn over it — YouTube's Required Minimum Functionality terms. The tile makes the player its artwork surface.
 - **Cast**: `lib/server/cast/` stacks documented CASTV2 (connection, transport, status, volume) under one reverse-engineered piece — `lounge.ts`, needed only to *start* content. Cast playback is anonymous, so it may carry ads and cannot reach private content; sources that fail that way are marked `browser_only`.
-- See [`nextjs-ui/CLAUDE.md`](nextjs-ui/CLAUDE.md) for the browser-vs-cast ownership split and the cast runtime's shutdown requirements.
+- See [`nextjs-ui/CLAUDE.md`](nextjs-ui/CLAUDE.md) for the browser/cast/Sonos ownership split and the runtimes' shutdown requirements.
 
 ### Shared code (`nextjs-ui/lib/shared/`)
 
