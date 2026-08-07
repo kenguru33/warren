@@ -74,8 +74,24 @@ async function handleSonos(
   body: CommandBody,
 ) {
   if (command === 'play') {
+    // A Warren source can never play here, so saying so beats attempting it.
+    if (typeof body.sourceId === 'number') {
+      throw new HttpError(400, "Warren's own sources can't play on Sonos — choose a Sonos favorite")
+    }
+
     const favoriteId = typeof body.favoriteId === 'string' ? body.favoriteId : null
-    if (!favoriteId) throw new HttpError(400, 'choose a Sonos favorite to play')
+
+    // No favorite named means resume: a Sonos speaker usually already holds
+    // content — its queue, or a station someone started in the Sonos app — and
+    // pressing play should continue that rather than replace it. Loading a
+    // favorite unasked would override what the room was already set up to play.
+    if (!favoriteId) {
+      const resumed = await sonosRuntime.command(targetId, 'play')
+      if (!resumed.ok) {
+        throw new HttpError(502, `${resumed.error}. Choose a Sonos favorite to start something new.`)
+      }
+      return Response.json(await buildMusicView(db))
+    }
 
     const result = await sonosRuntime.play(targetId, favoriteId)
     if (!result.ok) throw new HttpError(502, result.error)

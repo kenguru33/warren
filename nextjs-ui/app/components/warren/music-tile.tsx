@@ -127,16 +127,13 @@ export function MusicTile({
 
   const togglePlayPause = useCallback(() => {
     if (!isActive) {
-      // Sonos has no equivalent of Warren's default source: its content lives
-      // in the Sonos app. Starting the first favorite is the closest analogue
-      // to what play does everywhere else, and beats rejecting the press.
+      // On Sonos, play means resume. The speaker usually already holds
+      // content — its queue, or a station started from the Sonos app — and a
+      // stopped speaker is not an empty one. Replacing that with a favorite
+      // unasked would override what the room was already set up to play; the
+      // favorites picker is how the user chooses something new.
       if (isSonos) {
-        const first = favorites[0]
-        if (!first) {
-          setCommandError('Add a favorite in the Sonos app first')
-          return
-        }
-        playFavorite(first)
+        void run(async () => { await onCommand('play') })
         return
       }
       playSource(activeSource)
@@ -150,7 +147,7 @@ export function MusicTile({
       }
       await onCommand(status === 'playing' ? 'pause' : 'play')
     })
-  }, [isActive, isSonos, favorites, playFavorite, playSource, activeSource, isBrowser, status, onCommand, run])
+  }, [isActive, isSonos, playSource, activeSource, isBrowser, status, onCommand, run])
 
   const skip = useCallback((direction: 'next' | 'previous') => {
     void run(async () => {

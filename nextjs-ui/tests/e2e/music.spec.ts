@@ -365,7 +365,7 @@ test.describe('sonos', () => {
     expect(after.status).toBe('paused')
   })
 
-  test('a sonos target refuses a youtube source and needs a favoriteId', async ({ request }) => {
+  test('a sonos target refuses a youtube source', async ({ request }) => {
     const sonos = await sonosTarget(request)
     await enableMusic(request, sonos.targetId)
     const source = await addSource(request, PLAYLIST_URL, 'Not on sonos')
@@ -378,6 +378,20 @@ test.describe('sonos', () => {
     expect(res.status()).toBe(400)
     const body = await res.json() as { message: string }
     expect(body.message).toMatch(/favorite/i)
+  })
+
+  test('play without a favorite resumes rather than loading one', async ({ request }) => {
+    const sonos = await sonosTarget(request)
+    await enableMusic(request, sonos.targetId)
+
+    // A stopped Sonos speaker is not an empty one: it usually still holds its
+    // queue, or a station started from the Sonos app. Play must continue that
+    // rather than replace it with a favorite the user did not ask for.
+    const res = await request.post('/api/music/command', { data: { command: 'play' } })
+    expect(res.ok()).toBeTruthy()
+
+    const state = await (await request.get('/api/music/state')).json() as { status: string }
+    expect(state.status).toBe('playing')
   })
 
   test('seek is not offered on a sonos target', async ({ request }) => {
