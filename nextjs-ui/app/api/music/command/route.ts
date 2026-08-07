@@ -75,7 +75,7 @@ async function handleSonos(
 ) {
   if (command === 'play') {
     const favoriteId = typeof body.favoriteId === 'string' ? body.favoriteId : null
-    if (!favoriteId) throw new HttpError(400, 'playing on Sonos needs a favoriteId')
+    if (!favoriteId) throw new HttpError(400, 'choose a Sonos favorite to play')
 
     const result = await sonosRuntime.play(targetId, favoriteId)
     if (!result.ok) throw new HttpError(502, result.error)

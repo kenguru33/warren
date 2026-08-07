@@ -377,7 +377,7 @@ test.describe('sonos', () => {
     })
     expect(res.status()).toBe(400)
     const body = await res.json() as { message: string }
-    expect(body.message).toMatch(/favoriteId/i)
+    expect(body.message).toMatch(/favorite/i)
   })
 
   test('seek is not offered on a sonos target', async ({ request }) => {

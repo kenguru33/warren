@@ -124,7 +124,22 @@ export function MusicTile({
   }, [onCommand, run])
 
   const togglePlayPause = useCallback(() => {
-    if (!isActive) { playSource(activeSource); return }
+    if (!isActive) {
+      // Sonos has no equivalent of Warren's default source: its content lives
+      // in the Sonos app. Starting the first favorite is the closest analogue
+      // to what play does everywhere else, and beats rejecting the press.
+      if (isSonos) {
+        const first = favorites[0]
+        if (!first) {
+          setCommandError('Add a favorite in the Sonos app first')
+          return
+        }
+        playFavorite(first)
+        return
+      }
+      playSource(activeSource)
+      return
+    }
     void run(async () => {
       if (isBrowser) {
         if (status === 'playing') browserPlayer.pause()
@@ -133,7 +148,7 @@ export function MusicTile({
       }
       await onCommand(status === 'playing' ? 'pause' : 'play')
     })
-  }, [isActive, playSource, activeSource, isBrowser, status, onCommand, run])
+  }, [isActive, isSonos, favorites, playFavorite, playSource, activeSource, isBrowser, status, onCommand, run])
 
   const skip = useCallback((direction: 'next' | 'previous') => {
     void run(async () => {
@@ -237,7 +252,7 @@ export function MusicTile({
 
       <div className="min-w-0">
         <p className="truncate text-sm font-medium text-text" data-testid="music-title">
-          {title ?? activeSource?.name ?? 'Nothing playing'}
+          {title ?? (isSonos ? 'Nothing playing' : activeSource?.name) ?? 'Nothing playing'}
         </p>
         <p className="truncate text-xs text-subtle" data-testid="music-status">
           {artist ?? statusLine}
@@ -254,7 +269,9 @@ export function MusicTile({
           max={Math.max(durationMs ?? 0, 1)}
           value={Math.min(elapsedMs ?? 0, durationMs ?? 0)}
           onChange={e => seekTo(Number(e.target.value))}
-          disabled={!isActive || durationMs === null}
+          // Sonos rejects seek — a control known not to work is disabled
+          // rather than present-and-broken.
+          disabled={!isActive || durationMs === null || isSonos}
           aria-label="Seek"
           className="slider-sm h-1 flex-1 accent-current disabled:opacity-40"
         />
@@ -277,7 +294,10 @@ export function MusicTile({
         <button
           type="button"
           onClick={togglePlayPause}
-          disabled={busy || status === 'loading' || (!activeSource && !isActive)}
+          // On Sonos the thing to play is a favorite, not a Warren source, so a
+          // household with no YouTube sources must still get a usable button.
+          disabled={busy || status === 'loading'
+            || (isSonos ? !favorites.length && !isActive : !activeSource && !isActive)}
           aria-label={status === 'playing' ? 'Pause' : 'Play'}
           data-testid="music-play-pause"
           className="rounded-full bg-accent-soft p-2.5 text-accent-strong hover:brightness-110 disabled:opacity-40"
