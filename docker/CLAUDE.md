@@ -79,9 +79,10 @@ Speaker discovery is multicast: mDNS `_googlecast._tcp` for Cast, SSDP for Sonos
 
 The symptom is an empty target list and `[sonos] SSDP discovery unavailable: Error: No players found` in `docker logs warren-ui`.
 
-**Sonos works around it; Cast does not.** Unicast *does* cross the bridge, and Sonos serves its device description on a well-known port (1400), so `lib/server/sonos/discovery.ts` falls back to probing the `WARREN_LAN_IP` subnet when multicast comes up empty. One answer is enough — a Sonos speaker knows its whole household, so `InitializeFromDevice` expands it into the full topology including groups. The scan is throttled to once per ten minutes so a house with no Sonos does not fire 254 probes a minute. `WARREN_LAN_IP` must reach the `ui` service for this to work; without it the fallback would scan Docker's private range instead of the LAN.
+**Both protocols fall back to a unicast subnet scan**, because unicast *does* cross the bridge and each device class serves an identifying endpoint on a well-known port. The subnet comes from `WARREN_LAN_IP`, which must reach the `ui` service — without it the fallback would scan Docker's private range instead of the LAN. Both scans are throttled to once per ten minutes so a house with no speakers does not fire 254 probes a minute; a device plugged in later is still found, within ten minutes rather than one.
 
-Cast has no equivalent — there is no well-known port to probe — so Cast discovery genuinely requires host networking for the UI container or an mDNS reflector.
+- **Sonos** (`lib/server/sonos/discovery.ts`) probes `:1400/xml/device_description.xml`. One answer is enough — a Sonos speaker knows its whole household, so `InitializeFromDevice` expands it into the full topology including groups.
+- **Cast** (`lib/server/cast/discovery.ts`) probes `:8008/setup/eureka_info`, the unencrypted setup endpoint every Cast device serves, and must find *all* devices: a Cast device knows nothing about its peers. The target id is the returned `ssdp_udn` with dashes stripped, which is exactly what mDNS advertises in its `id` TXT record — matching it is what stops a device discovered both ways from becoming two rows.
 
 Both protocols also accept a speaker's IP address directly (`POST /api/music/targets`, with `protocol: "sonos"` for Sonos, which is probed before it is stored). Manually added speakers are never removed by a discovery sweep.
 
