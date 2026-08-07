@@ -39,6 +39,9 @@ export default defineConfig({
           WARREN_AUTH_PASSWORD: 'e2e-test-password',
           WARREN_SESSION_PASSWORD: process.env.WARREN_SESSION_PASSWORD ?? 'a-very-long-session-password-for-tests-only-32+chars',
           HUE_FAKE: '1',
+          // Stubs cast discovery + playback so the music suite runs without a
+          // Cast device on the network.
+          WARREN_CAST_FAKE: '1',
           WARREN_DATA_DIR: './.data-e2e',
         },
       },

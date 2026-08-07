@@ -15,12 +15,25 @@ import { SensorConfigModal } from '@/app/components/warren/sensor-config-modal'
 import { SensorHistoryModal } from '@/app/components/warren/sensor-history-modal'
 import { LiveStreamModal } from '@/app/components/warren/live-stream-modal'
 import { EditLightModal } from '@/app/components/warren/edit-light-modal'
+import { MusicConfigModal } from '@/app/components/warren/music-config-modal'
+import { useMusicTargets, useMusic } from '@/lib/hooks/use-music'
+import { MusicTile } from '@/app/components/warren/music-tile'
 
 export default function DashboardPage() {
   const { rooms, lastUpdated, refresh, addRoom, removeRoom, renameRoom, removeSensor, hideSensor, renameSensor, renameLightGroup, addSensor, saveReference, clearReference } = useRooms()
 
   const [showAddRoom, setShowAddRoom] = useState(false)
   const [addSensorRoomId, setAddSensorRoomId] = useState<number | null>(null)
+
+  // Music is a single global player, not a per-room feature: one library, one
+  // output, one playback state for the whole house.
+  const { targets: musicTargets, addManualTarget, removeTarget } = useMusicTargets()
+  const {
+    music, enableMusic, removeMusic, setTarget: setMusicTarget,
+    addSource: addMusicSource, patchSource: patchMusicSource,
+    deleteSource: deleteMusicSource, command: musicCommand,
+  } = useMusic()
+  const [musicConfigOpen, setMusicConfigOpen] = useState(false)
 
   // Light group detail modal — opened via tile tap to inspect / re-theme a group.
   const [groupDetailId, setGroupDetailId] = useState<number | null>(null)
@@ -54,6 +67,20 @@ export default function DashboardPage() {
     }
     return null
   }, [groupDetailId, rooms])
+
+
+
+  // Adding music opens the config dialog straight away — a player with no
+  // sources isn't useful, so the user lands where they can add one.
+  async function handleAddMusic() {
+    await enableMusic(null)
+    setMusicConfigOpen(true)
+  }
+
+  async function handleRemoveMusic() {
+    await removeMusic()
+    setMusicConfigOpen(false)
+  }
 
   async function handleSaveRef(roomId: number, refTemp: number | null, refHumidity: number | null) {
     if (refTemp === null && refHumidity === null) {
@@ -160,10 +187,36 @@ export default function DashboardPage() {
             <Heading>Dashboard</Heading>
             <Text className="mt-1">Last updated {lastUpdated}</Text>
           </div>
-          <Button onClick={() => setShowAddRoom(true)}>
-            Add room
-          </Button>
+          <div className="flex items-center gap-2">
+            {/* `music` is null until the first fetch lands; gating on that
+                keeps "Add music" from flashing when it is already set up. */}
+            {music && !music.configured && (
+              <Button outline onClick={handleAddMusic}>
+                Add music
+              </Button>
+            )}
+            <Button onClick={() => setShowAddRoom(true)}>
+              Add room
+            </Button>
+          </div>
         </div>
+
+        {/*
+          The player is global — one library, one output, one playback state —
+          so it sits alongside the room grid rather than inside a room card.
+        */}
+        {music?.configured && (
+          <div className="sm:max-w-[28rem]">
+            <MusicTile
+              music={music}
+              targets={musicTargets}
+              onConfigure={() => setMusicConfigOpen(true)}
+              onRemoveMusic={handleRemoveMusic}
+              onSetTarget={setMusicTarget}
+              onCommand={musicCommand}
+            />
+          </div>
+        )}
 
         {rooms.length === 0 ? (
           <div className="rounded-2xl bg-surface ring-1 ring-default shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_20px_-12px_rgba(0,0,0,0.08)] dark:ring-white/10 dark:shadow-none dark:[box-shadow:inset_0_1px_0_0_rgba(255,255,255,0.04)] p-10 text-center">
@@ -278,6 +331,21 @@ export default function DashboardPage() {
           setLightColorOverrides(prev => ({ ...prev, [sensorId]: hex }))
         }}
       />
+
+      {music?.configured && musicConfigOpen && (
+        <MusicConfigModal
+          open
+          music={music}
+          targets={musicTargets}
+          onClose={() => setMusicConfigOpen(false)}
+          onAddSource={addMusicSource}
+          onPatchSource={patchMusicSource}
+          onDeleteSource={deleteMusicSource}
+          onAddManualTarget={addManualTarget}
+          onRemoveTarget={removeTarget}
+          onRemoveMusic={handleRemoveMusic}
+        />
+      )}
     </>
   )
 }

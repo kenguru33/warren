@@ -47,8 +47,16 @@ Production requires **rootful Docker** so `host.docker.internal` and the bridge 
 
 Two cert sources, picked at `warren setup` time:
 
-- **Local CA** (default): `warren setup` generates a self-signed CA + leaf cert via `openssl`, with the host's LAN IP as a SubjectAltName. Caddy serves the static cert files (`tls /etc/caddy/tls/server.crt /etc/caddy/tls/server.key`) on a catch-all `:443` listener. Image: stock `caddy:2.10-alpine`. URL is `https://<lan-ip>` — no Avahi/Bonjour/mDNS dependency. Each LAN device installs the CA once via `http://<lan-ip>/ca.crt`.
+- **Local CA** (default): `warren setup` generates a self-signed CA + leaf cert via `openssl`, with the host's LAN IP as a SubjectAltName (plus a DNS SAN for `WARREN_HOSTNAME` when set). Caddy serves the static cert files (`tls /etc/caddy/tls/server.crt /etc/caddy/tls/server.key`) on a catch-all `:443` listener. Image: stock `caddy:2.10-alpine`. URL is `https://<lan-ip>` — no Avahi/Bonjour/mDNS dependency. Each LAN device installs the CA once via `http://<lan-ip>/ca.crt`.
 - **Let's Encrypt** (opt-in): publicly-trusted cert via DNS-01 challenge. Requires a public domain + DNS provider API token. Image: custom `warren-caddy:latest` built by `setup` from `docker/caddy/Dockerfile` with the chosen `caddy-dns/<provider>` plugin compiled in.
+
+**Bare-IP redirect.** When `WARREN_HOSTNAME` is set, the `:443` block 308-redirects browser traffic from `https://<lan-ip>` to the hostname. This exists for the music tile: YouTube refuses to embed licensed music when the page origin is an IP address (IFrame error `150`), so the dashboard has to be reached by name. Three guards keep it safe, and all three matter:
+
+- It fires only when `WARREN_CANONICAL_HOST` is non-empty. That variable is passed as `${WARREN_HOSTNAME:-}` — deliberately *without* the `warren.local` fallback the `WARREN_HOSTNAME` env uses — so an unnamed deployment never redirects to a name that resolves nowhere.
+- It never touches `/api/*`. The ESP32 fleet posts readings and announces to `https://<lan-ip>`; its `HTTPClient` does not follow redirects and cannot resolve mDNS `.local`, so redirecting the API would take the sensors offline.
+- It matches on the LAN IP only, so hostname traffic passes straight through.
+
+Reloading the Caddyfile needs `docker exec caddy caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile` — the file is a bind mount, so `compose up -d caddy` alone sees no change and does not restart it.
 
 Mode is recorded in `docker/.env` as `WARREN_TLS_MODE=local|letsencrypt` along with mode-specific values (`WARREN_LAN_IP`, `WARREN_DOMAIN`, `WARREN_ACME_EMAIL`, `WARREN_DNS_PROVIDER`, `WARREN_DNS_TOKEN`). Compose substitutes these into the `caddy` service env at parse time, and Caddy resolves `{$VAR}` placeholders in its Caddyfile at config load.
 
@@ -64,6 +72,14 @@ Browser        →  Caddy     :443 HTTPS  →  warren-ui :3000 (bridge net)
 ```
 
 Node-RED subscribes to `warren/sensors/+/+` and writes `sensor_readings` measurements. The anonymous listener (1884) avoids storing MQTT credentials in Node-RED config; it stays bridge-network-only (no host port).
+
+### Cast speaker discovery needs link-local access
+
+The music feature finds Google Cast speakers by browsing the `_googlecast._tcp` mDNS service, and then talks to them over TLS on port 8009. Both need the UI process to be on the same layer-2 network as the speakers.
+
+The default `./docker/warren start` runs the **UI as a host process**, so this works with no extra setup. It only becomes a problem in a fully containerized deployment: Docker's default bridge network does not pass multicast, so discovery finds nothing. Options there are host networking for the UI container, or an mDNS reflector.
+
+No code can work around this, which is why the UI also accepts a speaker's IP address directly (`POST /api/music/targets`). Manually added speakers are never removed by a discovery sweep.
 
 ## Key files
 

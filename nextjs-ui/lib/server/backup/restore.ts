@@ -14,7 +14,7 @@ import { HttpError } from '@/lib/server/errors'
 // for the DELETE itself, but staying consistent keeps the SQL legible.
 const WIPE_ORDER = [...BACKUP_TABLES].reverse()
 
-const AUTOINCREMENT_TABLES = ['rooms', 'sensors', 'hue_devices', 'light_groups'] as const
+const AUTOINCREMENT_TABLES = ['rooms', 'sensors', 'hue_devices', 'light_groups', 'music_sources'] as const
 
 type DbBindable = string | number | bigint | null | Buffer
 

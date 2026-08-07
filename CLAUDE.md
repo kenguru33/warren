@@ -122,6 +122,19 @@ Rooms can group multiple lights (Hue or otherwise) into a single controllable un
 - **Fan-out**: `lib/server/light-groups.ts` exports `fanOutLightCommand(db, members, command)` which issues the same command to every member in parallel and returns `{ successCount, failureCount, total }`. Used by both the per-group `state` endpoint and the global `/api/lights/master-state` endpoints.
 - **Themes**: `lib/shared/light-themes.ts` defines the `LIGHT_THEMES` map (`slate`, `amber`, `emerald`, `rose`, `indigo`, `teal`, `plum`, `terracotta`, `catppuccin`, `tokyoNight`, `dracula`, `nord`, `gruvbox`). The `LightThemeKey` type is the source of truth — passing an unknown key crashes the theme picker with a confusing downstream error. The same file also exports `hexToXy()` for converting CSS hex to Hue's xy color space.
 
+### Music (YouTube Music)
+
+A single global player — **not** a per-room feature — playing YouTube Music either through the browser showing the dashboard or through a Google Cast speaker. One source library, one output, one playback state for the whole house. Lives entirely inside `nextjs-ui/`.
+
+- **Tables**: `music_config` (single row, `id = 1`; its presence is what makes the player appear), `music_sources` (saved playlists/albums/tracks, max 12), `music_targets` (cast speakers, discovered or manually added), `music_volume` (per target, so browser and speaker volumes stay independent).
+- **Endpoints** live under `/api/music/` — there is no room in the path. `initDb()` migrates the original per-room schema (`room_music`, `music_sources.room_id`, `music_volume.room_id`) by merging every room's sources into one library, de-duplicated by `content_id`.
+- **Must be served from a hostname, not a bare IP.** YouTube returns error `150` and renders "Video unavailable" for licensed music when the embedding origin is an IP address, even for public, embeddable content. `localhost` and any DNS name (including mDNS `.local`) work, which is why this only shows up on a LAN deployment reached by IP. Set `WARREN_HOSTNAME` and carry it as a DNS SAN on the local-CA leaf cert.
+- **Not a sensor.** Music is never added to `SensorType` — a player produces no readings and must stay out of sensor discovery and the InfluxDB pipeline.
+- **Content IDs are ordinary YouTube IDs.** A YouTube Music playlist URL carries `list=`, an album an `OLAK5uy_…` playlist ID, a track a `watch?v=` video ID. `lib/shared/youtube.ts:parseYouTubeMusicUrl()` extracts them. This is why the officially supported IFrame Player API can play YouTube Music without any unofficial endpoint.
+- **The embedded player must stay visible** at ≥200×200 with nothing drawn over it — YouTube's Required Minimum Functionality terms. The tile makes the player its artwork surface.
+- **Cast**: `lib/server/cast/` stacks documented CASTV2 (connection, transport, status, volume) under one reverse-engineered piece — `lounge.ts`, needed only to *start* content. Cast playback is anonymous, so it may carry ads and cannot reach private content; sources that fail that way are marked `browser_only`.
+- See [`nextjs-ui/CLAUDE.md`](nextjs-ui/CLAUDE.md) for the browser-vs-cast ownership split and the cast runtime's shutdown requirements.
+
 ### Shared code (`nextjs-ui/lib/shared/`)
 
 `lib/shared/types.ts` and `lib/shared/light-themes.ts` are imported by both client (`'use client'` components) and server (route handlers, runtime). Cross-tier types and helpers belong here.

@@ -1,4 +1,7 @@
-export const SNAPSHOT_SCHEMA_VERSION = 1
+// v2: added room_music, music_sources, music_targets, music_volume.
+// v3: music became a single global player — room_music → music_config, and
+//     music_sources / music_volume lost their room_id.
+export const SNAPSHOT_SCHEMA_VERSION = 3
 
 // Forward foreign-key dependency order. The restore engine wipes in reverse
 // and inserts in this order; reordering breaks FK enforcement during restore.
@@ -14,6 +17,10 @@ export const BACKUP_TABLES = [
   'hue_light_state',
   'light_groups',
   'light_group_members',
+  'music_targets',
+  'music_config',
+  'music_sources',
+  'music_volume',
   'users',
   'meta',
 ] as const

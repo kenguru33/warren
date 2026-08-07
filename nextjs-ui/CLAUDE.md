@@ -114,8 +114,39 @@ Two utilities are kept by design and don't have Catalyst equivalents: `.slider` 
 | `INFLUXDB_URL`, `INFLUXDB_TOKEN`, `INFLUXDB_DATABASE` | InfluxDB 3 connection |
 | `MQTT_URL`, `MQTT_USER`, `MQTT_PASS` | Mosquitto connection |
 | `HUE_FAKE` | When `1`, the Hue client serves stub bridge data (used by E2E tests) |
+| `WARREN_CAST_FAKE` | When `1`, cast discovery and playback are stubbed (used by E2E tests) |
 
 `./docker/warren setup` writes these to `nextjs-ui/.env`. The dev server picks them up via Next.js's built-in `.env` loading; the production server (started by `./docker/warren start`) sources `.env` explicitly.
+
+### Music (YouTube Music)
+
+Music is a **single global player**, not a per-room feature: one source library, one output target, one playback state for the whole house. The card appears on the dashboard (`app/(dashboard)/page.tsx`) beside the room grid once a `music_config` row exists — never inside a `RoomCard`. Endpoints live under `/api/music/`; `RoomWithSensors` carries no music field.
+
+Music is deliberately **not** a `SensorType` — a player produces no readings and must stay out of sensor discovery and the InfluxDB pipeline.
+
+**Serve the dashboard from a hostname, not a bare IP.** YouTube refuses to embed licensed music when the embedding origin is an IP address, returning IFrame error `150` ("owner does not allow embedded playback") for content that is public and embeddable. `localhost` and any DNS name work, so this is invisible in development and only bites a LAN deployment reached by IP. `browser-player.ts:describePlayerError()` names the fix in the 101/150 message.
+
+**Two output targets, two very different mechanisms:**
+
+| | Browser target | Cast target |
+|---|---|---|
+| Where audio plays | the tab showing the dashboard | a Google Cast speaker |
+| Who owns state | that tab only (`browser-player.ts`) | the server (`cast/runtime.ts`) |
+| Visible to other clients | no — they see it as idle | yes, shared |
+| Account | the browser's YouTube session (Premium assumed) | **anonymous** — ads possible, no private content |
+
+The server reports the browser target as `idle` on purpose. It cannot see or control that audio, so claiming otherwise would be a lie to every other client.
+
+**The embedded player must stay visible.** YouTube's Required Minimum Functionality terms mandate a ≥200×200 viewport and forbid drawing anything over an embedded player. `music-tile.tsx` makes the player the tile's artwork surface and lays every control *around* it. Do not hide it, shrink it, or overlay it — the common "invisible iframe + custom audio UI" trick violates the terms.
+
+**Cast stack** (`lib/server/cast/`), two protocol layers:
+
+- `protobuf.ts` + `connection.ts` — CASTV2 over TLS :8009. Documented Cast behaviour: launch the YouTube receiver (`233637DE`), read pushed `RECEIVER_STATUS`/`MEDIA_STATUS`, device volume, transport control, and the MDX screen ID.
+- `lounge.ts` — **reverse-engineered and unsupported.** Google does not document it and changes it without notice. Scope is kept to the one thing that genuinely needs it: *starting* content (`setPlaylist`). Transport and now-playing go through the documented media namespace, so a lounge breakage costs "can't start new content", not "cast is dead". Every function returns a typed failure instead of throwing.
+- `discovery.ts` — mDNS `_googlecast._tcp` via `bonjour-service`, 60s sweeps. Manual add-by-IP rows are never pruned.
+- `runtime.ts` — the singleton, started from `boot.ts`. Owns TLS sockets as well as timers: **`stop()` must close the sockets**, because a leaked one makes the device refuse new senders.
+
+State arrives by push over the long-lived socket; the 10s reconcile poll is a backstop, not the mechanism. Because there is one player, there is one `Playback` record and one active session — switching output closes the previous device's session rather than leaving two speakers running. The per-room `owners` map that used to arbitrate two rooms fighting over one speaker is gone with the rooms.
 
 ### Docker deployment notes
 

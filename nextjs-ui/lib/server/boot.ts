@@ -4,6 +4,7 @@
 import { initDb } from './db'
 import { startMqtt, stopMqtt } from './mqtt'
 import { hueRuntime } from './hue/runtime'
+import { castRuntime } from './cast/runtime'
 
 declare global {
   // eslint-disable-next-line no-var
@@ -17,9 +18,11 @@ export function bootServer() {
   initDb()
   startMqtt()
   hueRuntime.start()
+  castRuntime.start()
 
   const shutdown = (sig: string) => {
     console.log(`[boot] received ${sig}, shutting down`)
+    try { castRuntime.stop() } catch {}
     try { hueRuntime.stop() } catch {}
     try { stopMqtt() } catch {}
   }

@@ -1,7 +1,7 @@
 import { test, expect, loginViaApi, pairFakeBridge, unpairBridge } from './fixtures'
 import type { APIRequestContext } from '@playwright/test'
 import { Buffer } from 'node:buffer'
-import type { SnapshotFile } from '@/lib/shared/backup'
+import { SNAPSHOT_SCHEMA_VERSION, type SnapshotFile } from '@/lib/shared/backup'
 
 async function fetchSnapshot(request: APIRequestContext): Promise<{ text: string; json: SnapshotFile }> {
   const res = await request.get('/api/admin/backup/export')
@@ -46,12 +46,16 @@ test.describe('backup & restore (API)', () => {
     expect(res.headers()['content-type']).toMatch(/application\/json/)
 
     const snapshot = JSON.parse(await res.text()) as SnapshotFile
-    expect(snapshot.header.schema_version).toBe(1)
+    // Assert against the constant, not a literal — this bumps whenever a
+    // backed-up table changes shape, and the test shouldn't need editing then.
+    expect(snapshot.header.schema_version).toBe(SNAPSHOT_SCHEMA_VERSION)
     expect(typeof snapshot.header.app_version).toBe('string')
     expect(typeof snapshot.header.exported_at).toBe('number')
     expect(snapshot.tables).toHaveProperty('rooms')
     expect(snapshot.tables).toHaveProperty('users')
     expect(snapshot.tables).toHaveProperty('meta')
+    expect(snapshot.tables).toHaveProperty('music_config')
+    expect(snapshot.tables).toHaveProperty('music_sources')
   })
 
   test('POST /preview rejects a snapshot with a mismatched schema_version', async ({ request }) => {
@@ -110,6 +114,34 @@ test.describe('backup & restore (API)', () => {
 
     // Cleanup
     await request.delete(`/api/rooms/${roomId}`)
+  })
+
+  test('round-trip: the music library comes back', async ({ request }) => {
+    await loginViaApi(request)
+
+    // Music is global now — no room to hang it off.
+    await request.put('/api/music', { data: {} })
+    await request.post('/api/music/sources', {
+      data: { url: 'https://music.youtube.com/playlist?list=PLbackup12345', name: 'Backed up' },
+    })
+
+    const { text: snapshotText } = await fetchSnapshot(request)
+
+    // Mutate: strip music entirely.
+    await request.delete('/api/music')
+    const stripped = await (await request.get('/api/music')).json() as { configured: boolean }
+    expect(stripped.configured).toBe(false)
+
+    expect((await postSnapshot(request, '/api/admin/backup/restore', snapshotText)).ok()).toBeTruthy()
+
+    const view = await (await request.get('/api/music')).json() as
+      { configured: boolean; sources: { name: string; kind: string; contentId: string }[] }
+    expect(view.configured).toBe(true)
+    expect(view.sources).toHaveLength(1)
+    expect(view.sources[0].name).toBe('Backed up')
+    expect(view.sources[0].contentId).toBe('PLbackup12345')
+
+    await request.delete('/api/music')
   })
 
   test('preserves the active user when the snapshot would override the password', async ({ request }) => {

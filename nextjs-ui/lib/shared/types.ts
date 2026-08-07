@@ -61,6 +61,73 @@ export interface RoomReference {
   refHumidity: number | null
 }
 
+export type MusicSourceKind = 'playlist' | 'album' | 'track'
+
+export interface MusicSourceView {
+  id: number
+  name: string
+  kind: MusicSourceKind
+  contentId: string
+  position: number
+  isDefault: boolean
+  /** Found unplayable (deleted, private, region-blocked) on a previous attempt. */
+  unavailable: boolean
+  /** Will not resolve anonymously, so it plays on the browser target only. */
+  browserOnly: boolean
+}
+
+/** The browser is always available as a target; cast targets are discovered or manual. */
+export const BROWSER_TARGET_ID = 'browser'
+
+export interface MusicTargetView {
+  targetId: string
+  friendlyName: string
+  model: string | null
+  origin: 'discovered' | 'manual'
+  reachable: boolean
+  lastSeen: number
+}
+
+/**
+ * `unknown` is a real state, not a placeholder: a cast target is selected but
+ * its state could not be read. It must never be rendered as `idle`.
+ */
+export type MusicPlaybackStatus =
+  | 'idle' | 'playing' | 'paused' | 'loading'
+  | 'target-offline' | 'unknown' | 'error'
+
+export interface MusicPlaybackState {
+  status: MusicPlaybackStatus
+  /** Null means the browser target. */
+  targetId: string | null
+  targetName: string | null
+  sourceId: number | null
+  title: string | null
+  artist: string | null
+  artworkUrl: string | null
+  elapsedMs: number | null
+  durationMs: number | null
+  volume: number | null
+  /** Human-readable reason when status is 'error'. */
+  error: string | null
+  /** When the state was last confirmed against the device. */
+  updatedAt: number
+}
+
+/**
+ * The player is a single global component, not a per-room one: there is one
+ * source library, one selected output, and one playback state for the whole
+ * house. Rooms know nothing about music.
+ */
+export interface MusicView {
+  configured: boolean
+  sources: MusicSourceView[]
+  preferredTargetId: string | null
+  playback: MusicPlaybackState
+}
+
+export const MAX_MUSIC_SOURCES = 12
+
 export interface RoomWithSensors {
   id: number
   name: string
