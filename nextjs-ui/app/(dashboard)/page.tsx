@@ -4,7 +4,12 @@ import { useMemo, useState } from 'react'
 import type { LightGroupView, RoomWithSensors, SensorView } from '@/lib/shared/types'
 import { LIGHT_THEMES } from '@/lib/shared/light-themes'
 import { useRooms } from '@/lib/hooks/use-rooms'
+import { ChevronDownIcon, HomeIcon, MusicalNoteIcon } from '@heroicons/react/16/solid'
 import { Button } from '@/app/components/button'
+import {
+  Dropdown, DropdownButton, DropdownMenu, DropdownItem, DropdownLabel,
+  DropdownDescription, DropdownSection, DropdownHeading, DropdownDivider,
+} from '@/app/components/dropdown'
 import { Heading } from '@/app/components/heading'
 import { Text } from '@/app/components/text'
 import { RoomCard } from '@/app/components/warren/room-card'
@@ -187,18 +192,45 @@ export default function DashboardPage() {
             <Heading>Dashboard</Heading>
             <Text className="mt-1">Last updated {lastUpdated}</Text>
           </div>
-          <div className="flex items-center gap-2">
-            {/* `music` is null until the first fetch lands; gating on that
-                keeps "Add music" from flashing when it is already set up. */}
-            {music && !music.configured && (
-              <Button outline onClick={handleAddMusic}>
-                Add music
-              </Button>
-            )}
-            <Button onClick={() => setShowAddRoom(true)}>
-              Add room
-            </Button>
-          </div>
+          {/*
+            One add button for everything, rather than a button per thing. The
+            two sections carry the distinction that matters: a room is a place
+            sensors and lights belong to, while music is house-wide and tied to
+            no room at all.
+          */}
+          <Dropdown>
+            <DropdownButton>
+              Add
+              <ChevronDownIcon data-slot="icon" />
+            </DropdownButton>
+            <DropdownMenu anchor="bottom end" className="min-w-56">
+              <DropdownSection>
+                <DropdownHeading>Rooms</DropdownHeading>
+                <DropdownItem onClick={() => setShowAddRoom(true)}>
+                  <HomeIcon data-slot="icon" />
+                  <DropdownLabel>Room</DropdownLabel>
+                </DropdownItem>
+              </DropdownSection>
+
+              <DropdownDivider />
+
+              <DropdownSection>
+                <DropdownHeading>House-wide</DropdownHeading>
+                {/* `music` is null until the first fetch lands; gating on that
+                    keeps the entry from flashing when it is already set up. */}
+                <DropdownItem
+                  onClick={handleAddMusic}
+                  disabled={!music || music.configured}
+                >
+                  <MusicalNoteIcon data-slot="icon" />
+                  <DropdownLabel>Music</DropdownLabel>
+                  <DropdownDescription>
+                    {music?.configured ? 'Already added' : 'One player for the whole house'}
+                  </DropdownDescription>
+                </DropdownItem>
+              </DropdownSection>
+            </DropdownMenu>
+          </Dropdown>
         </div>
 
         {/*
