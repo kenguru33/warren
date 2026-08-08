@@ -47,8 +47,16 @@ Production requires **rootful Docker** so `host.docker.internal` and the bridge 
 
 Two cert sources, picked at `warren setup` time:
 
-- **Local CA** (default): `warren setup` generates a self-signed CA + leaf cert via `openssl`, with the host's LAN IP as a SubjectAltName. Caddy serves the static cert files (`tls /etc/caddy/tls/server.crt /etc/caddy/tls/server.key`) on a catch-all `:443` listener. Image: stock `caddy:2.10-alpine`. URL is `https://<lan-ip>` — no Avahi/Bonjour/mDNS dependency. Each LAN device installs the CA once via `http://<lan-ip>/ca.crt`.
+- **Local CA** (default): `warren setup` generates a self-signed CA + leaf cert via `openssl`, with the host's LAN IP as a SubjectAltName (plus a DNS SAN for `WARREN_HOSTNAME` when set). Caddy serves the static cert files (`tls /etc/caddy/tls/server.crt /etc/caddy/tls/server.key`) on a catch-all `:443` listener. Image: stock `caddy:2.10-alpine`. URL is `https://<lan-ip>` — no Avahi/Bonjour/mDNS dependency. Each LAN device installs the CA once via `http://<lan-ip>/ca.crt`.
 - **Let's Encrypt** (opt-in): publicly-trusted cert via DNS-01 challenge. Requires a public domain + DNS provider API token. Image: custom `warren-caddy:latest` built by `setup` from `docker/caddy/Dockerfile` with the chosen `caddy-dns/<provider>` plugin compiled in.
+
+**Bare-IP redirect.** When `WARREN_HOSTNAME` is set, the `:443` block 308-redirects browser traffic from `https://<lan-ip>` to the hostname. This exists for the music tile: YouTube refuses to embed licensed music when the page origin is an IP address (IFrame error `150`), so the dashboard has to be reached by name. Three guards keep it safe, and all three matter:
+
+- It fires only when `WARREN_CANONICAL_HOST` is non-empty. That variable is passed as `${WARREN_HOSTNAME:-}` — deliberately *without* the `warren.local` fallback the `WARREN_HOSTNAME` env uses — so an unnamed deployment never redirects to a name that resolves nowhere.
+- It never touches `/api/*`. The ESP32 fleet posts readings and announces to `https://<lan-ip>`; its `HTTPClient` does not follow redirects and cannot resolve mDNS `.local`, so redirecting the API would take the sensors offline.
+- It matches on the LAN IP only, so hostname traffic passes straight through.
+
+Reloading the Caddyfile needs `docker exec caddy caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile` — the file is a bind mount, so `compose up -d caddy` alone sees no change and does not restart it.
 
 Mode is recorded in `docker/.env` as `WARREN_TLS_MODE=local|letsencrypt` along with mode-specific values (`WARREN_LAN_IP`, `WARREN_DOMAIN`, `WARREN_ACME_EMAIL`, `WARREN_DNS_PROVIDER`, `WARREN_DNS_TOKEN`). Compose substitutes these into the `caddy` service env at parse time, and Caddy resolves `{$VAR}` placeholders in its Caddyfile at config load.
 
@@ -64,6 +72,19 @@ Browser        →  Caddy     :443 HTTPS  →  warren-ui :3000 (bridge net)
 ```
 
 Node-RED subscribes to `warren/sensors/+/+` and writes `sensor_readings` measurements. The anonymous listener (1884) avoids storing MQTT credentials in Node-RED config; it stays bridge-network-only (no host port).
+
+### Speaker discovery needs link-local access — and `warren start` does not have it
+
+Speaker discovery is multicast: mDNS `_googlecast._tcp` for Cast, SSDP for Sonos. **Docker's default bridge network does not pass multicast**, and `./docker/warren start` runs the UI as the `warren-ui` *container*, so multicast discovery finds nothing in the standard production deployment. Only `warren start --dev`, where the UI is a host process, has link-local access.
+
+The symptom is an empty target list and `[sonos] SSDP discovery unavailable: Error: No players found` in `docker logs warren-ui`.
+
+**Both protocols fall back to a unicast subnet scan**, because unicast *does* cross the bridge and each device class serves an identifying endpoint on a well-known port. The subnet comes from `WARREN_LAN_IP`, which must reach the `ui` service — without it the fallback would scan Docker's private range instead of the LAN. Both scans are throttled to once per ten minutes so a house with no speakers does not fire 254 probes a minute; a device plugged in later is still found, within ten minutes rather than one.
+
+- **Sonos** (`lib/server/sonos/discovery.ts`) probes `:1400/xml/device_description.xml`. One answer is enough — a Sonos speaker knows its whole household, so `InitializeFromDevice` expands it into the full topology including groups.
+- **Cast** (`lib/server/cast/discovery.ts`) probes `:8008/setup/eureka_info`, the unencrypted setup endpoint every Cast device serves, and must find *all* devices: a Cast device knows nothing about its peers. The target id is the returned `ssdp_udn` with dashes stripped, which is exactly what mDNS advertises in its `id` TXT record — matching it is what stops a device discovered both ways from becoming two rows.
+
+Both protocols also accept a speaker's IP address directly (`POST /api/music/targets`, with `protocol: "sonos"` for Sonos, which is probed before it is stored). Manually added speakers are never removed by a discovery sweep.
 
 ## Key files
 

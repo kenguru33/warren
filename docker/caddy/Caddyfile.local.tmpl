@@ -39,5 +39,23 @@
 # site blocks are listener bindings, not virtual hosts" gotcha.
 :443 {
 	tls /etc/caddy/tls/server.crt /etc/caddy/tls/server.key
+
+	# YouTube refuses to embed licensed music when the page's origin is a bare
+	# IP address (IFrame error 150), so the music tile only works when the
+	# dashboard is reached by name. Send browsers on the IP to the hostname so
+	# bookmarks and wall panels self-heal instead of silently losing music.
+	#
+	# Three guards, each load-bearing:
+	#   - host must be the LAN IP, so hostname traffic passes straight through.
+	#   - a canonical host must be configured. The env substitution happens at
+	#     config load, so an unnamed deployment yields "" != "" and the redirect
+	#     never fires — otherwise it would redirect to https:// or loop IP -> IP.
+	#   - /api/* is never redirected. The ESP32 fleet posts readings and
+	#     announces to https://<lan-ip>; its HTTPClient does not follow
+	#     redirects and cannot resolve mDNS .local names, so redirecting the API
+	#     would take the sensors offline.
+	@bare_ip expression {http.request.host} == "{$WARREN_LAN_IP}" && "{$WARREN_CANONICAL_HOST}" != "" && !({http.request.uri.path}.startsWith("/api/"))
+	redir @bare_ip https://{$WARREN_CANONICAL_HOST}{uri} 308
+
 	reverse_proxy {$WARREN_UPSTREAM}
 }

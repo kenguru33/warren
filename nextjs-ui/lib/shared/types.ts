@@ -61,6 +61,100 @@ export interface RoomReference {
   refHumidity: number | null
 }
 
+export type MusicSourceKind = 'playlist' | 'album' | 'track'
+
+export interface MusicSourceView {
+  id: number
+  name: string
+  kind: MusicSourceKind
+  contentId: string
+  position: number
+  isDefault: boolean
+  /** Found unplayable (deleted, private, region-blocked) on a previous attempt. */
+  unavailable: boolean
+  /** Will not resolve anonymously, so it plays on the browser target only. */
+  browserOnly: boolean
+}
+
+/** The browser is always available as a target; cast targets are discovered or manual. */
+export const BROWSER_TARGET_ID = 'browser'
+
+/** Which stack drives a target. The browser is neither, and has no row. */
+export type MusicTargetProtocol = 'cast' | 'sonos'
+
+export interface MusicTargetView {
+  targetId: string
+  friendlyName: string
+  model: string | null
+  origin: 'discovered' | 'manual'
+  protocol: MusicTargetProtocol
+  /**
+   * Sonos only: the other rooms a group coordinator carries with it. Non-empty
+   * means selecting this target fills every one of those rooms with sound, so
+   * the UI must say so rather than let the single room name imply otherwise.
+   */
+  groupRooms: string[]
+  reachable: boolean
+  lastSeen: number
+}
+
+/**
+ * A Sonos favorite, offered instead of Warren's YouTube library when the
+ * output is a Sonos speaker.
+ *
+ * Warren cannot hand a Sonos speaker a YouTube identifier — YouTube Music is a
+ * Sonos music service resolved against the user's linked account, not
+ * something a LAN controller can push. Favorites are the supported way in: the
+ * user saves a playlist as a favorite in the Sonos app once, and Warren can
+ * start it from then on. These are read live from the speaker and never
+ * stored, because the Sonos app owns the list.
+ */
+export interface SonosFavoriteView {
+  id: string
+  title: string
+  artworkUrl: string | null
+}
+
+/**
+ * `unknown` is a real state, not a placeholder: a cast target is selected but
+ * its state could not be read. It must never be rendered as `idle`.
+ */
+export type MusicPlaybackStatus =
+  | 'idle' | 'playing' | 'paused' | 'loading'
+  | 'target-offline' | 'unknown' | 'error'
+
+export interface MusicPlaybackState {
+  status: MusicPlaybackStatus
+  /** Null means the browser target. */
+  targetId: string | null
+  targetName: string | null
+  sourceId: number | null
+  title: string | null
+  artist: string | null
+  artworkUrl: string | null
+  elapsedMs: number | null
+  durationMs: number | null
+  volume: number | null
+  /** Human-readable reason when status is 'error'. */
+  error: string | null
+  /** When the state was last confirmed against the device. */
+  updatedAt: number
+}
+
+/**
+ * The player is a single global component, not a per-room one: there is one
+ * source library, one selected output, and one playback state for the whole
+ * house. Rooms know nothing about music.
+ */
+export interface MusicView {
+  configured: boolean
+  sources: MusicSourceView[]
+  preferredTargetId: string | null
+  playback: MusicPlaybackState
+}
+
+export const MAX_MUSIC_SOURCES = 12
+
 export interface RoomWithSensors {
   id: number
   name: string

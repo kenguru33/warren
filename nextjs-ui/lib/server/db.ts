@@ -162,7 +162,74 @@ export function initDb() {
     );
 
     CREATE INDEX IF NOT EXISTS idx_light_groups_room ON light_groups(room_id);
+
+    -- Music is a single global component, not a per-room one: one source
+    -- library, one selected output, one playback state for the whole house.
+    -- Deliberately NOT modeled as a sensor type: a player produces no readings
+    -- and must stay out of sensor discovery and the InfluxDB pipeline.
+    CREATE TABLE IF NOT EXISTS music_config (
+      id                  INTEGER PRIMARY KEY CHECK(id = 1),
+      preferred_target_id TEXT,
+      created_at          INTEGER NOT NULL DEFAULT (unixepoch('now') * 1000),
+      updated_at          INTEGER NOT NULL DEFAULT (unixepoch('now') * 1000)
+    );
+
+    CREATE TABLE IF NOT EXISTS music_sources (
+      id           INTEGER PRIMARY KEY AUTOINCREMENT,
+      name         TEXT    NOT NULL,
+      kind         TEXT    NOT NULL CHECK(kind IN ('playlist','album','track')),
+      content_id   TEXT    NOT NULL,
+      position     INTEGER NOT NULL DEFAULT 0,
+      is_default   INTEGER NOT NULL DEFAULT 0,
+      unavailable  INTEGER NOT NULL DEFAULT 0,
+      browser_only INTEGER NOT NULL DEFAULT 0,
+      created_at   INTEGER NOT NULL DEFAULT (unixepoch('now') * 1000)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_music_sources_position ON music_sources(position);
+
+    -- Output targets, shared by the whole house. Discovered rows are a cache of
+    -- what mDNS/SSDP saw and may be pruned; manual rows are user configuration
+    -- and never are.
+    --
+    -- protocol says which stack drives the device: Cast speaks CASTV2 on 8009,
+    -- Sonos speaks UPnP on 1400. They share this table because the player picks
+    -- an *output* and the wire protocol is an implementation detail.
+    --
+    -- group_rooms is Sonos-only: a JSON array of the other room names a group
+    -- coordinator carries with it, NULL when ungrouped. Only coordinators are
+    -- stored as targets -- see lib/server/sonos/discovery.ts.
+    CREATE TABLE IF NOT EXISTS music_targets (
+      target_id     TEXT    PRIMARY KEY,
+      friendly_name TEXT    NOT NULL,
+      address       TEXT    NOT NULL,
+      port          INTEGER NOT NULL DEFAULT 8009,
+      model         TEXT,
+      origin        TEXT    NOT NULL DEFAULT 'discovered' CHECK(origin IN ('discovered','manual')),
+      protocol      TEXT    NOT NULL DEFAULT 'cast',
+      group_rooms   TEXT,
+      household_id  TEXT,
+      last_seen     INTEGER NOT NULL,
+      created_at    INTEGER NOT NULL DEFAULT (unixepoch('now') * 1000)
+    );
+
+    -- Per target, so the browser and each speaker keep independent volumes.
+    CREATE TABLE IF NOT EXISTS music_volume (
+      target_id TEXT    PRIMARY KEY,
+      volume    INTEGER NOT NULL
+    );
   `)
+
+  migrateMusicOffRooms(db)
+
+  // Sonos arrived after Cast, so existing target rows predate `protocol` and
+  // are all Cast by definition. Plain ALTER TABLE suffices — these are added
+  // columns with defaults, not the constraint changes that need a shadow table.
+  const targetCols = db.pragma('table_info(music_targets)') as { name: string }[]
+  const has = (name: string) => targetCols.some(c => c.name === name)
+  if (!has('protocol')) db.exec("ALTER TABLE music_targets ADD COLUMN protocol TEXT NOT NULL DEFAULT 'cast'")
+  if (!has('group_rooms')) db.exec('ALTER TABLE music_targets ADD COLUMN group_rooms TEXT')
+  if (!has('household_id')) db.exec('ALTER TABLE music_targets ADD COLUMN household_id TEXT')
 
   const columns = db.pragma('table_info(sensors)') as { name: string; notnull: number }[]
   if (!columns.some(c => c.name === 'device_id')) {
@@ -237,4 +304,91 @@ export function initDb() {
     `)
     db.pragma('foreign_keys = ON')
   }
+}
+
+/**
+ * Collapse the original per-room music schema into the single global player.
+ *
+ * The first cut scoped music to a room (`room_music`, `music_sources.room_id`,
+ * `music_volume.room_id`). One player for the house replaces that, so the
+ * room-keyed tables have to be rebuilt — SQLite cannot drop a column in place,
+ * hence the shadow-table dance this file uses elsewhere.
+ *
+ * Sources from every room merge into one library, de-duplicated by content_id
+ * because the same playlist saved in two rooms is one entry now. Positions are
+ * renumbered and exactly one default survives. Nothing is discarded silently:
+ * the merged library keeps every distinct source even if that exceeds
+ * MAX_MUSIC_SOURCES, which only guards *new* additions.
+ */
+function migrateMusicOffRooms(db: Database.Database) {
+  const sourceCols = db.pragma('table_info(music_sources)') as { name: string }[]
+  const needsSourceMigration = sourceCols.some(c => c.name === 'room_id')
+
+  const volumeCols = db.pragma('table_info(music_volume)') as { name: string }[]
+  const needsVolumeMigration = volumeCols.some(c => c.name === 'room_id')
+
+  const roomMusicExists = !!db
+    .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'room_music'")
+    .get()
+
+  if (!needsSourceMigration && !needsVolumeMigration && !roomMusicExists) return
+
+  db.pragma('foreign_keys = OFF')
+  db.transaction(() => {
+    if (needsSourceMigration) {
+      db.exec(`
+        CREATE TABLE music_sources_global (
+          id           INTEGER PRIMARY KEY AUTOINCREMENT,
+          name         TEXT    NOT NULL,
+          kind         TEXT    NOT NULL CHECK(kind IN ('playlist','album','track')),
+          content_id   TEXT    NOT NULL,
+          position     INTEGER NOT NULL DEFAULT 0,
+          is_default   INTEGER NOT NULL DEFAULT 0,
+          unavailable  INTEGER NOT NULL DEFAULT 0,
+          browser_only INTEGER NOT NULL DEFAULT 0,
+          created_at   INTEGER NOT NULL DEFAULT (unixepoch('now') * 1000)
+        );
+        INSERT INTO music_sources_global
+          (name, kind, content_id, position, is_default, unavailable, browser_only, created_at)
+        SELECT name, kind, content_id,
+               ROW_NUMBER() OVER (ORDER BY room_id, position, id) - 1,
+               0, unavailable, browser_only, created_at
+        FROM music_sources
+        WHERE id IN (SELECT MIN(id) FROM music_sources GROUP BY content_id);
+
+        DROP TABLE music_sources;
+        ALTER TABLE music_sources_global RENAME TO music_sources;
+        CREATE INDEX IF NOT EXISTS idx_music_sources_position ON music_sources(position);
+
+        UPDATE music_sources SET is_default = 1
+        WHERE id = (SELECT id FROM music_sources ORDER BY position ASC, id ASC LIMIT 1);
+      `)
+    }
+
+    if (needsVolumeMigration) {
+      // One volume per target now; keep the loudest of the per-room values
+      // rather than an arbitrary row, so nothing silently goes quiet.
+      db.exec(`
+        CREATE TABLE music_volume_global (
+          target_id TEXT    PRIMARY KEY,
+          volume    INTEGER NOT NULL
+        );
+        INSERT INTO music_volume_global (target_id, volume)
+        SELECT target_id, MAX(volume) FROM music_volume GROUP BY target_id;
+        DROP TABLE music_volume;
+        ALTER TABLE music_volume_global RENAME TO music_volume;
+      `)
+    }
+
+    if (roomMusicExists) {
+      // Any room that had music configured means the house has music
+      // configured. The first room's target becomes the global one.
+      db.exec(`
+        INSERT OR IGNORE INTO music_config (id, preferred_target_id)
+        SELECT 1, preferred_target_id FROM room_music ORDER BY room_id ASC LIMIT 1;
+        DROP TABLE room_music;
+      `)
+    }
+  })()
+  db.pragma('foreign_keys = ON')
 }

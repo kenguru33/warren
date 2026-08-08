@@ -5,6 +5,12 @@ const nextConfig: NextConfig = {
     "better-sqlite3",
     "@influxdata/influxdb3-client",
     "mqtt",
+    // Cast stack: bonjour-service opens raw UDP sockets for mDNS and
+    // protobufjs resolves its codegen at runtime — neither survives bundling.
+    "bonjour-service",
+    "protobufjs",
+    // Sonos: SSDP discovery opens raw UDP sockets, same reason as bonjour-service.
+    "@svrooij/sonos",
   ],
   // Next 16 blocks dev assets (including the HMR WebSocket) from origins
   // other than the hostname the dev server was bound to. Warren runs on a

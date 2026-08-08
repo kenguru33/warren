@@ -114,8 +114,55 @@ Two utilities are kept by design and don't have Catalyst equivalents: `.slider` 
 | `INFLUXDB_URL`, `INFLUXDB_TOKEN`, `INFLUXDB_DATABASE` | InfluxDB 3 connection |
 | `MQTT_URL`, `MQTT_USER`, `MQTT_PASS` | Mosquitto connection |
 | `HUE_FAKE` | When `1`, the Hue client serves stub bridge data (used by E2E tests) |
+| `WARREN_CAST_FAKE` | When `1`, cast discovery and playback are stubbed (used by E2E tests) |
+| `WARREN_SONOS_FAKE` | When `1`, Sonos discovery, favorites and UPnP control are stubbed (used by E2E tests) |
 
 `./docker/warren setup` writes these to `nextjs-ui/.env`. The dev server picks them up via Next.js's built-in `.env` loading; the production server (started by `./docker/warren start`) sources `.env` explicitly.
+
+### Music (YouTube Music)
+
+Music is a **single global player**, not a per-room feature: one source library, one output target, one playback state for the whole house. The card appears on the dashboard (`app/(dashboard)/page.tsx`) beside the room grid once a `music_config` row exists — never inside a `RoomCard`. Endpoints live under `/api/music/`; `RoomWithSensors` carries no music field.
+
+Music is deliberately **not** a `SensorType` — a player produces no readings and must stay out of sensor discovery and the InfluxDB pipeline.
+
+**Serve the dashboard from a hostname, not a bare IP.** YouTube refuses to embed licensed music when the embedding origin is an IP address, returning IFrame error `150` ("owner does not allow embedded playback") for content that is public and embeddable. `localhost` and any DNS name work, so this is invisible in development and only bites a LAN deployment reached by IP. `browser-player.ts:describePlayerError()` names the fix in the 101/150 message.
+
+**Three output targets, three very different mechanisms:**
+
+| | Browser target | Cast target | Sonos target |
+|---|---|---|---|
+| Where audio plays | the tab showing the dashboard | a Google Cast speaker | a Sonos speaker |
+| Who owns state | that tab only (`browser-player.ts`) | the server (`cast/runtime.ts`) | the speaker — read live (`sonos/runtime.ts`) |
+| Visible to other clients | no — they see it as idle | yes, shared | yes, shared |
+| Content | Warren's YouTube library | Warren's YouTube library | **Sonos Favorites** |
+| Account | the browser's YouTube session (Premium assumed) | **anonymous** — ads possible, no private content | the household's linked Sonos services |
+
+`music_targets.protocol` says which stack drives a target, and `lib/server/targets.ts` holds the protocol-neutral queries both discovery stacks write through — putting them in `cast/discovery.ts`, where they started, would make the Sonos code import from the Cast stack. Commands and state reads dispatch on protocol via `protocolOf()` in `lib/server/music.ts`.
+
+The server reports the browser target as `idle` on purpose. It cannot see or control that audio, so claiming otherwise would be a lie to every other client.
+
+**The embedded player must stay visible.** YouTube's Required Minimum Functionality terms mandate a ≥200×200 viewport and forbid drawing anything over an embedded player. `music-tile.tsx` makes the player the tile's artwork surface and lays every control *around* it. Do not hide it, shrink it, or overlay it — the common "invisible iframe + custom audio UI" trick violates the terms.
+
+**Sonos stack** (`lib/server/sonos/`):
+
+- `discovery.ts` — SSDP via `@svrooij/sonos`'s `SonosManager`, 60s sweeps. Only group **coordinators** become targets: speakers bound into a group all play the same thing, so listing a bound member would let a user pick "Kitchen" and fill four rooms. The coordinator carries the other rooms' names in `group_rooms` so the picker can say so. Unlike Cast, discovered rows are *pruned* — a speaker that joins a group stops being a valid output, and a stale row would play in rooms its label does not name.
+- `control.ts` — **reverse-engineered and unsupported.** Sonos has never shipped a local Control API; the official one is cloud-only and OAuth-bound, so every serious local integration (Home Assistant via SoCo, node-sonos-http-api) uses the undocumented UPnP/SOAP interface on :1400. Same posture and same discipline as `cast/lounge.ts`: every function returns a typed failure instead of throwing, so a protocol change degrades the Sonos target rather than taking the player down.
+- `runtime.ts` — the singleton, started from `boot.ts`. Holds far less state than the cast runtime by design: a Sonos speaker is authoritative about what it is playing, including audio Warren never started, so state is **read from the device** rather than tracked. This is why `buildMusicView()` is async.
+
+**Not every favorite is playable, and the tile must not pretend otherwise.** Shortcut favorites (Sonos Radio tiles) carry an empty `<res>` and are filtered out of the picker. A favorite whose service binding has gone stale is rejected by the speaker with `UPnPError 402` on every method, so that fault is mapped to "re-create it in the Sonos app" rather than shown raw. Favorites must be read as **raw DIDL** (`ContentDirectoryService.Browse('FV:2')`), not via the library's `GetFavorites()` — its parser returns only Title/ItemId and drops both `<res>` and `<r:resMD>`, without which nothing can be played.
+
+**Radio puts the stream URL in the track title.** The station name and artwork live in the *media* metadata, not the track metadata, so `readState()` prefers the track title only when it does not read like a URL. Taking it blindly renders `P04_AH?userid=…&args=…` as the now-playing line.
+
+**Sonos plays Favorites, not Warren's library.** YouTube Music is a Sonos music service resolved against the user's linked account, so a LAN controller cannot push a YouTube id. The user saves a playlist as a favorite in the Sonos app; Warren starts it by favorite id (what Home Assistant's `favorite_item_id` does). Favorites are read live and never stored — the Sonos app owns that list. `POST /api/music/command` therefore takes `favoriteId` for a Sonos target and rejects `sourceId`, and `seek` is absent rather than present-and-broken.
+
+**Cast stack** (`lib/server/cast/`), two protocol layers:
+
+- `protobuf.ts` + `connection.ts` — CASTV2 over TLS :8009. Documented Cast behaviour: launch the YouTube receiver (`233637DE`), read pushed `RECEIVER_STATUS`/`MEDIA_STATUS`, device volume, transport control, and the MDX screen ID.
+- `lounge.ts` — **reverse-engineered and unsupported.** Google does not document it and changes it without notice. Scope is kept to the one thing that genuinely needs it: *starting* content (`setPlaylist`). Transport and now-playing go through the documented media namespace, so a lounge breakage costs "can't start new content", not "cast is dead". Every function returns a typed failure instead of throwing.
+- `discovery.ts` — mDNS `_googlecast._tcp` via `bonjour-service`, 60s sweeps. Manual add-by-IP rows are never pruned.
+- `runtime.ts` — the singleton, started from `boot.ts`. Owns TLS sockets as well as timers: **`stop()` must close the sockets**, because a leaked one makes the device refuse new senders.
+
+State arrives by push over the long-lived socket; the 10s reconcile poll is a backstop, not the mechanism. Because there is one player, there is one `Playback` record and one active session — switching output closes the previous device's session rather than leaving two speakers running. The per-room `owners` map that used to arbitrate two rooms fighting over one speaker is gone with the rooms.
 
 ### Docker deployment notes
 

@@ -7,7 +7,9 @@ import {
   TagIcon,
   TrashIcon,
 } from '@heroicons/react/20/solid'
-import type { RoomReference, RoomWithSensors, SensorView } from '@/lib/shared/types'
+import type {
+  RoomReference, RoomWithSensors, SensorView,
+} from '@/lib/shared/types'
 import { Heading } from '@/app/components/heading'
 import { Input } from '@/app/components/input'
 import { ClimateTile } from './climate-tile'
@@ -456,6 +458,7 @@ export function RoomCard({
               )}
             </div>
           )}
+
         </div>
       )}
 

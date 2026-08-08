@@ -71,6 +71,11 @@ services:
       MQTT_URL: mqtt://mosquitto:1883
       WARREN_DATA_DIR: /data
       NODE_ENV: production
+      # Speaker discovery is multicast (mDNS for Cast, SSDP for Sonos) and
+      # multicast does not cross Docker's bridge. The Sonos stack falls back to
+      # probing this subnet by unicast, which does cross it; without the LAN IP
+      # it has no idea which subnet to probe. See lib/server/sonos/discovery.ts.
+      WARREN_LAN_IP: ${WARREN_LAN_IP:-}
     volumes:
       - warren_ui_data:/data
     depends_on:
@@ -100,6 +105,17 @@ services:
       WARREN_DNS_PROVIDER: ${WARREN_DNS_PROVIDER:-}
       WARREN_DNS_TOKEN: ${WARREN_DNS_TOKEN:-}
       WARREN_UPSTREAM: ${WARREN_UPSTREAM:-ui:3000}
+      # Both are needed by the Caddyfile's bare-IP redirect. Empty when unset,
+      # so the matcher compares host against "" and never fires rather than
+      # redirecting every request.
+      #
+      # WARREN_CANONICAL_HOST deliberately has no `warren.local` fallback,
+      # unlike WARREN_HOSTNAME above: the redirect must only fire at a name the
+      # operator actually configured. Falling back would send every IP visitor
+      # to a hostname that resolves nowhere — locking them out of the dashboard
+      # entirely rather than just losing music.
+      WARREN_LAN_IP: ${WARREN_LAN_IP:-}
+      WARREN_CANONICAL_HOST: ${WARREN_HOSTNAME:-}
     volumes:
       - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
       - ./caddy/site:/srv:ro
