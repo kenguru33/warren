@@ -8,11 +8,12 @@
 // here. What is remembered is only which favorite Warren last started, so the
 // tile can show it selected.
 
-import type { MusicPlaybackState } from '@/lib/shared/types'
+import type { MusicPlaybackState, SonosQueueView } from '@/lib/shared/types'
 import { getTarget, isReachable, groupRoomsOf, type TargetRow } from '../targets'
 import { SonosDiscovery, SONOS_FAKE } from './discovery'
 import {
   listFavorites, readState, playFavorite, transport, setVolume,
+  listQueue, playQueueIndex, removeQueueEntry, moveQueueEntry,
   type SonosFavorite, type SonosTransport,
 } from './control'
 
@@ -146,6 +147,45 @@ async function volume(targetId: string, value: number): Promise<SonosCommandResu
   return result.ok ? { ok: true } : { ok: false, error: result.error }
 }
 
+/**
+ * The queue, with the same guards every other Sonos read gets.
+ */
+async function queue(targetId: string): Promise<{ ok: true; value: SonosQueueView } | { ok: false; error: string }> {
+  const target = requireTarget(targetId)
+  if (!target) return { ok: false, error: 'Not a Sonos target' }
+  if (!isReachable(target)) return { ok: false, error: 'Speaker is offline' }
+  return listQueue(target)
+}
+
+export type QueueAction = 'play' | 'remove' | 'move'
+
+/**
+ * Mutate the queue and return the re-read result.
+ *
+ * Returning the fresh list rather than an ok is deliberate: indices shift on
+ * every mutation, and any Sonos client can change the queue at the same time,
+ * so a client holding an optimistic list would act on positions that no longer
+ * mean what it thinks.
+ */
+async function mutateQueue(
+  targetId: string,
+  action: QueueAction,
+  index: number,
+  toIndex?: number,
+): Promise<{ ok: true; value: SonosQueueView } | { ok: false; error: string }> {
+  const target = requireTarget(targetId)
+  if (!target) return { ok: false, error: 'Not a Sonos target' }
+  if (!isReachable(target)) return { ok: false, error: 'Speaker is offline' }
+
+  const result =
+    action === 'play' ? await playQueueIndex(target, index)
+    : action === 'remove' ? await removeQueueEntry(target, index)
+    : await moveQueueEntry(target, index, toIndex ?? index)
+
+  if (!result.ok) return { ok: false, error: result.error }
+  return listQueue(target)
+}
+
 export const sonosRuntime = {
   start() {
     const s = state()
@@ -182,6 +222,8 @@ export const sonosRuntime = {
 
   getState,
   favorites,
+  queue,
+  mutateQueue,
   play,
   command,
   volume,
