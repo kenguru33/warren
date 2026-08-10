@@ -116,6 +116,41 @@ export interface SonosFavoriteView {
 }
 
 /**
+ * One entry in a Sonos speaker's queue.
+ *
+ * The queue is the only content surface the local Sonos stack exposes that
+ * Warren does not already show: the linked music services are not browsable
+ * over the LAN at all, so this is what "choose what plays next" can mean
+ * without an account. Read live — the queue belongs to the speaker and any
+ * Sonos client can change it.
+ */
+export interface SonosQueueEntryView {
+  /** 1-based, matching the speaker's own Q:0/N addressing. */
+  index: number
+  title: string
+  artist: string | null
+  album: string | null
+  artworkUrl: string | null
+  isCurrent: boolean
+}
+
+/** What the speaker is doing, when that changes what a queue view means. */
+export type SonosQueueMode =
+  /** A normal queue, populated or not. */
+  | 'queue'
+  /**
+   * A radio stream is playing. Any queue behind it is left over from an
+   * earlier session and is not what the room is playing, so showing it as
+   * "up next" would be a lie.
+   */
+  | 'stream'
+
+export interface SonosQueueView {
+  mode: SonosQueueMode
+  entries: SonosQueueEntryView[]
+}
+
+/**
  * `unknown` is a real state, not a placeholder: a cast target is selected but
  * its state could not be read. It must never be rendered as `idle`.
  */

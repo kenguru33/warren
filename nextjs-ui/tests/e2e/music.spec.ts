@@ -434,6 +434,76 @@ test.describe('sonos', () => {
     expect((await request.delete(`/api/music/targets/${target.targetId}`)).ok()).toBeTruthy()
   })
 
+  test('the queue lists entries with exactly one marked current', async ({ request }) => {
+    const sonos = await sonosTarget(request)
+    const queue = await (await request.get(
+      `/api/music/targets/${encodeURIComponent(sonos.targetId)}/queue`,
+    )).json() as { mode: string; entries: { index: number; title: string; isCurrent: boolean }[] }
+
+    expect(queue.mode).toBe('queue')
+    expect(queue.entries.length).toBeGreaterThan(1)
+    expect(queue.entries.filter(e => e.isCurrent)).toHaveLength(1)
+    // Indices are 1-based, matching the speaker's own Q:0/N addressing.
+    expect(queue.entries[0].index).toBe(1)
+  })
+
+  test('a queue is refused for a cast target', async ({ request }) => {
+    const castId = await discoveredTarget(request)
+    const res = await request.get(`/api/music/targets/${encodeURIComponent(castId)}/queue`)
+    expect(res.status()).toBe(400)
+  })
+
+  test('playing a queue entry makes it current', async ({ request }) => {
+    const sonos = await sonosTarget(request)
+    const url = `/api/music/targets/${encodeURIComponent(sonos.targetId)}/queue`
+
+    const res = await request.post(url, { data: { action: 'play', index: 3 } })
+    expect(res.ok()).toBeTruthy()
+    // The mutation returns the re-read queue, so the client never guesses.
+    const after = await res.json() as { entries: { index: number; isCurrent: boolean }[] }
+    expect(after.entries.find(e => e.isCurrent)?.index).toBe(3)
+  })
+
+  test('removing an entry shortens the queue', async ({ request }) => {
+    const sonos = await sonosTarget(request)
+    const url = `/api/music/targets/${encodeURIComponent(sonos.targetId)}/queue`
+    const before = await (await request.get(url)).json() as { entries: { title: string }[] }
+
+    const res = await request.post(url, { data: { action: 'remove', index: 1 } })
+    expect(res.ok()).toBeTruthy()
+    const after = await res.json() as { entries: { title: string }[] }
+    expect(after.entries).toHaveLength(before.entries.length - 1)
+    expect(after.entries.map(e => e.title)).not.toContain(before.entries[0].title)
+  })
+
+  test('moving an entry reorders the queue', async ({ request }) => {
+    const sonos = await sonosTarget(request)
+    const url = `/api/music/targets/${encodeURIComponent(sonos.targetId)}/queue`
+    const before = await (await request.get(url)).json() as { entries: { title: string }[] }
+    const first = before.entries[0].title
+
+    const res = await request.post(url, { data: { action: 'move', index: 1, toIndex: 2 } })
+    expect(res.ok()).toBeTruthy()
+    // Asserted on titles rather than indices, which shift by definition.
+    const after = await res.json() as { entries: { title: string }[] }
+    expect(after.entries[1].title).toBe(first)
+  })
+
+  test('bad queue input is a client error, not a speaker failure', async ({ request }) => {
+    const sonos = await sonosTarget(request)
+    const url = `/api/music/targets/${encodeURIComponent(sonos.targetId)}/queue`
+
+    for (const data of [
+      { action: 'explode', index: 1 },
+      { action: 'play' },
+      { action: 'play', index: 0 },
+      { action: 'move', index: 1 },
+    ]) {
+      const res = await request.post(url, { data })
+      expect(res.status()).toBe(400)
+    }
+  })
+
   test('switching from sonos back to the browser leaves the player idle', async ({ request }) => {
     const sonos = await sonosTarget(request)
     await enableMusic(request, sonos.targetId)

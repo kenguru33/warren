@@ -13,11 +13,15 @@
 // target rather than taking the music player down with it.
 
 import type { SonosDevice } from '@svrooij/sonos'
-import type { MusicPlaybackState } from '@/lib/shared/types'
+import type { MusicPlaybackState, SonosQueueEntryView, SonosQueueView } from '@/lib/shared/types'
 import { deviceFor, SONOS_FAKE, SONOS_PORT } from './discovery'
 import type { TargetRow } from '../targets'
 
 export type SonosResult<T> = { ok: true; value: T } | { ok: false; error: string }
+
+/** Bounds on queue paging, so a pathological queue cannot spin the request. */
+const QUEUE_PAGE_SIZE = 100
+const MAX_QUEUE_PAGES = 20
 
 export interface SonosFavorite {
   id: string
@@ -74,7 +78,21 @@ const FAKE_FAVORITES: SonosFavorite[] = [
 // boolean: pausing must read back as `paused`, not `idle`. Conflating them
 // would let the tile claim nothing is playing when something is merely paused.
 type FakeTransport = 'PLAYING' | 'PAUSED_PLAYBACK' | 'STOPPED'
-interface FakeState { transport: FakeTransport; favoriteId: string | null; volume: number }
+interface FakeQueueEntry { title: string; artist: string | null }
+interface FakeState {
+  transport: FakeTransport
+  favoriteId: string | null
+  volume: number
+  /** Mutated by the fake's queue operations, so ordering assertions are real. */
+  queue: FakeQueueEntry[]
+  currentIndex: number
+  /**
+   * A radio stream leaves a stale queue behind it. Modelling that separately
+   * matters: the merged Sonos work shipped a broken play button for rounds
+   * because the fake could not reach the state the real speaker was in.
+   */
+  streaming: boolean
+}
 
 declare global {
   var __warren_sonos_fake: FakeState | undefined
@@ -82,7 +100,18 @@ declare global {
 
 function fake(): FakeState {
   if (!globalThis.__warren_sonos_fake) {
-    globalThis.__warren_sonos_fake = { transport: 'STOPPED', favoriteId: null, volume: 30 }
+    globalThis.__warren_sonos_fake = {
+      transport: 'STOPPED',
+      favoriteId: null,
+      volume: 30,
+      queue: [
+        { title: 'First fake track', artist: 'Warren test' },
+        { title: 'Second fake track', artist: 'Warren test' },
+        { title: 'Third fake track', artist: 'Warren test' },
+      ],
+      currentIndex: 1,
+      streaming: false,
+    }
   }
   return globalThis.__warren_sonos_fake
 }
@@ -346,6 +375,168 @@ export async function setVolume(target: TargetRow, volume: number): Promise<Sono
     return { ok: true, value: undefined }
   } catch (err) {
     return failure(err, 'Sonos volume change failed')
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Queue
+// ---------------------------------------------------------------------------
+
+/**
+ * The speaker's queue.
+ *
+ * Unlike GetFavorites(), the library's queue parser does carry what playback
+ * needs — TrackUri, Title and AlbumArtUri — so this uses it directly rather
+ * than re-parsing raw DIDL. Verified against a real speaker holding a real
+ * queue; favorites needed raw DIDL only because their parser drops <res>.
+ */
+export async function listQueue(target: TargetRow): Promise<SonosResult<SonosQueueView>> {
+  if (SONOS_FAKE) {
+    const f = fake()
+    return {
+      ok: true,
+      value: {
+        mode: f.streaming ? 'stream' : 'queue',
+        entries: f.streaming ? [] : f.queue.map((entry, i) => ({
+          index: i + 1,
+          title: entry.title,
+          artist: entry.artist,
+          album: null,
+          artworkUrl: null,
+          isCurrent: i + 1 === f.currentIndex,
+        })),
+      },
+    }
+  }
+
+  try {
+    const d = device(target)
+
+    // A radio stream has no meaningful queue; whatever is in Q:0 is left over
+    // from an earlier session, so it must not be presented as "up next".
+    const state = await d.GetState()
+    const currentUri = String(state.mediaInfo?.CurrentURI ?? '')
+    if (currentUri && !currentUri.startsWith('x-rincon-queue:')) {
+      return { ok: true, value: { mode: 'stream', entries: [] } }
+    }
+
+    const currentTrack = Number(state.positionInfo?.Track ?? 0)
+
+    const entries: SonosQueueEntryView[] = []
+    // Queues can be long where a favorites list cannot, so this pages rather
+    // than assuming one request covers it.
+    let start = 0
+    for (let guard = 0; guard < MAX_QUEUE_PAGES; guard++) {
+      const page = await d.ContentDirectoryService.BrowseParsed({
+        ObjectID: 'Q:0',
+        BrowseFlag: 'BrowseDirectChildren',
+        Filter: '*',
+        StartingIndex: start,
+        RequestedCount: QUEUE_PAGE_SIZE,
+        SortCriteria: '',
+      })
+      const tracks = Array.isArray(page?.Result) ? page.Result : []
+      if (!tracks.length) break
+
+      for (const track of tracks) {
+        const index = entries.length + 1
+        entries.push({
+          index,
+          title: track.Title ?? 'Unknown track',
+          artist: track.Artist ?? null,
+          album: track.Album ?? null,
+          artworkUrl: track.AlbumArtUri ?? null,
+          isCurrent: index === currentTrack,
+        })
+      }
+
+      start += tracks.length
+      if (entries.length >= (page.TotalMatches ?? entries.length)) break
+    }
+
+    return { ok: true, value: { mode: 'queue', entries } }
+  } catch (err) {
+    return failure(err, 'Could not read the Sonos queue')
+  }
+}
+
+/** Sonos addresses queue entries as Q:0/N, 1-based. */
+function queueObjectId(index: number): string {
+  return `Q:0/${index}`
+}
+
+export async function playQueueIndex(target: TargetRow, index: number): Promise<SonosResult<void>> {
+  if (SONOS_FAKE) {
+    const f = fake()
+    if (index < 1 || index > f.queue.length) return { ok: false, error: 'No such queue entry' }
+    f.currentIndex = index
+    f.transport = 'PLAYING'
+    return { ok: true, value: undefined }
+  }
+
+  try {
+    const d = device(target)
+    // Play *before* seeking. Verified against real hardware: Play() on a
+    // stopped transport restarts the queue at track 1, so seeking first and
+    // then playing silently lands on the wrong entry. Seeking while the
+    // transport is already running moves to the requested track and stays.
+    await d.Play().catch(() => { /* already playing, or nothing loaded yet */ })
+    await d.AVTransportService.Seek({ InstanceID: 0, Unit: 'TRACK_NR', Target: String(index) })
+    return { ok: true, value: undefined }
+  } catch (err) {
+    return failure(err, 'Could not play that queue entry')
+  }
+}
+
+export async function removeQueueEntry(target: TargetRow, index: number): Promise<SonosResult<void>> {
+  if (SONOS_FAKE) {
+    const f = fake()
+    if (index < 1 || index > f.queue.length) return { ok: false, error: 'No such queue entry' }
+    f.queue.splice(index - 1, 1)
+    if (f.currentIndex > f.queue.length) f.currentIndex = f.queue.length
+    return { ok: true, value: undefined }
+  }
+
+  try {
+    // UpdateID 0 is accepted by the speaker; verified against real hardware.
+    await device(target).AVTransportService.RemoveTrackFromQueue({
+      InstanceID: 0, ObjectID: queueObjectId(index), UpdateID: 0,
+    })
+    return { ok: true, value: undefined }
+  } catch (err) {
+    return failure(err, 'Could not remove that queue entry')
+  }
+}
+
+/**
+ * Move one entry. `toIndex` is the 1-based position it should end up at.
+ *
+ * Sonos takes an *insert-before* position rather than a destination, and the
+ * two differ when moving downwards: removing the entry first shifts everything
+ * after it up by one, so inserting before `toIndex` would land one short.
+ */
+export async function moveQueueEntry(
+  target: TargetRow,
+  index: number,
+  toIndex: number,
+): Promise<SonosResult<void>> {
+  if (SONOS_FAKE) {
+    const f = fake()
+    if (index < 1 || index > f.queue.length) return { ok: false, error: 'No such queue entry' }
+    if (toIndex < 1 || toIndex > f.queue.length) return { ok: false, error: 'No such queue position' }
+    const [moved] = f.queue.splice(index - 1, 1)
+    f.queue.splice(toIndex - 1, 0, moved)
+    return { ok: true, value: undefined }
+  }
+
+  try {
+    const insertBefore = toIndex > index ? toIndex + 1 : toIndex
+    await device(target).AVTransportService.ReorderTracksInQueue({
+      InstanceID: 0, StartingIndex: index, NumberOfTracks: 1, InsertBefore: insertBefore, UpdateID: 0,
+    })
+    return { ok: true, value: undefined }
+  } catch (err) {
+    return failure(err, 'Could not move that queue entry')
   }
 }
 

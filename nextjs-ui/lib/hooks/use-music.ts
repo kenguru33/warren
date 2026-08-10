@@ -2,7 +2,9 @@
 
 import useSWR from 'swr'
 import { useCallback } from 'react'
-import type { MusicSourceView, MusicTargetView, MusicView, SonosFavoriteView } from '@/lib/shared/types'
+import type {
+  MusicSourceView, MusicTargetView, MusicView, SonosFavoriteView, SonosQueueView,
+} from '@/lib/shared/types'
 
 const fetcher = async (url: string) => {
   const res = await fetch(url, { credentials: 'include' })
@@ -72,6 +74,42 @@ export function useSonosFavorites(targetId: string | null) {
     favorites: data ?? [],
     favoritesError: error instanceof Error ? error.message : null,
     favoritesLoading: isLoading,
+  }
+}
+
+/**
+ * A Sonos speaker's queue. Fetched only for a Sonos target, and read live —
+ * the queue belongs to the speaker and any Sonos client can change it, so a
+ * cached copy would show entries that no longer exist.
+ */
+export function useSonosQueue(targetId: string | null) {
+  const key = targetId ? `/api/music/targets/${encodeURIComponent(targetId)}/queue` : null
+  const { data, error, isLoading, mutate } = useSWR<SonosQueueView>(key, fetcher)
+
+  /**
+   * Every mutation returns the re-read queue, and the hook renders from that
+   * response rather than guessing: indices shift on each change, and the Sonos
+   * app can be reordering the same queue at the same time.
+   */
+  const act = useCallback(async (
+    action: 'play' | 'remove' | 'move',
+    index: number,
+    toIndex?: number,
+  ) => {
+    if (!key) return
+    const updated = await send(key, 'POST', { action, index, toIndex })
+    // Render the server's re-read immediately, then revalidate: the speaker
+    // takes about a second to report a track change, so the response to a
+    // `play` can still carry the previous entry as current.
+    await mutate(updated as SonosQueueView)
+  }, [key, mutate])
+
+  return {
+    queue: data ?? null,
+    queueError: error instanceof Error ? error.message : null,
+    queueLoading: isLoading,
+    actOnQueue: act,
+    refreshQueue: mutate,
   }
 }
 

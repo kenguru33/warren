@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   BackwardIcon, ForwardIcon, PauseIcon, PlayIcon,
-  MusicalNoteIcon, SpeakerWaveIcon, Cog6ToothIcon, TrashIcon,
+  MusicalNoteIcon, SpeakerWaveIcon, Cog6ToothIcon, TrashIcon, QueueListIcon,
   ChevronDownIcon, ExclamationTriangleIcon, ArrowTopRightOnSquareIcon,
 } from '@heroicons/react/20/solid'
 import * as Headless from '@headlessui/react'
@@ -15,6 +15,7 @@ import { TileMenu, type TileMenuItem } from './tile-menu'
 import { MusicTargetPicker } from './music-target-picker'
 import { browserPlayer, MIN_PLAYER_PX, type BrowserPlayerState } from './browser-player'
 import { useSonosFavorites } from '@/lib/hooks/use-music'
+import { SonosQueueModal } from './sonos-queue-modal'
 
 function formatTime(ms: number | null): string {
   if (ms === null || !Number.isFinite(ms) || ms < 0) return '--:--'
@@ -50,6 +51,7 @@ export function MusicTile({
   const [local, setLocal] = useState<BrowserPlayerState>(browserPlayer.getState())
   const [busy, setBusy] = useState(false)
   const [commandError, setCommandError] = useState<string | null>(null)
+  const [queueOpen, setQueueOpen] = useState(false)
 
   const targetId = music.preferredTargetId
   const isBrowser = targetId === null || targetId === BROWSER_TARGET_ID
@@ -180,6 +182,13 @@ export function MusicTile({
   }, [isBrowser, ownsPlayer, onSetTarget])
 
   const menuItems: TileMenuItem[] = [
+    // A queue is a Sonos concept; the browser and Cast play Warren's library.
+    ...(isSonos ? [{
+      key: 'queue',
+      label: 'Queue…',
+      icon: <QueueListIcon data-slot="icon" />,
+      onSelect: () => setQueueOpen(true),
+    }] : []),
     {
       key: 'configure',
       label: 'Configure music…',
@@ -351,6 +360,13 @@ export function MusicTile({
           disabled={busy}
         />
       </div>
+
+      <SonosQueueModal
+        open={queueOpen}
+        targetId={targetId}
+        targetName={selectedTarget?.friendlyName ?? 'Sonos'}
+        onClose={() => setQueueOpen(false)}
+      />
 
       {status === 'target-offline' && (
         <button
