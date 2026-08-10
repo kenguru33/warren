@@ -43,6 +43,7 @@ export default defineConfig({
           // Cast device on the network.
           WARREN_CAST_FAKE: '1',
           WARREN_SONOS_FAKE: '1',
+          WARREN_WEATHER_FAKE: '1',
           WARREN_DATA_DIR: './.data-e2e',
         },
       },

@@ -138,6 +138,21 @@ A single global player — **not** a per-room feature — playing through the br
 - **Cast**: `lib/server/cast/` stacks documented CASTV2 (connection, transport, status, volume) under one reverse-engineered piece — `lounge.ts`, needed only to *start* content. Cast playback is anonymous, so it may carry ads and cannot reach private content; sources that fail that way are marked `browser_only`.
 - See [`nextjs-ui/CLAUDE.md`](nextjs-ui/CLAUDE.md) for the browser/cast/Sonos ownership split and the runtimes' shutdown requirements.
 
+### Weather (MET Norway / Yr)
+
+Outdoor forecast from MET Norway's free `api.met.no` Locationforecast product. House-wide like the music player — one location per installation, added from the dashboard's Add menu under **House-wide**, invisible until configured. Lives entirely inside `nextjs-ui/`.
+
+- **Table**: `weather_config` (single row, `id = 1`) holds the location *and* the cached raw payload with its `expires_at` and `last_modified`. Caching the raw response rather than a summary means presentation can change without touching the caching contract.
+- **MET's terms are a design input, not paperwork** — a client that ignores them gets blocked, and it fails invisibly until it does. Four obligations, three enforced in `lib/server/weather/client.ts` and one in the runtime:
+  - every request carries an identifying `User-Agent` naming the app and a contact point (`WARREN_WEATHER_CONTACT` overrides it for forks);
+  - coordinates are truncated to **four decimals** — more defeats MET's cache and is treated as abuse;
+  - `If-Modified-Since` is sent and **`304` is a success** that retains the cached forecast;
+  - `Expires` is honoured rather than polled. `runtime.ts` ticks every 5 min but only *fetches* once `expires_at` has passed; a fixed request interval is what the terms forbid.
+- **Fetched once server-side**, never per browser: a dashboard left open on a wall panel would otherwise turn one household into many API consumers.
+- **Attribution to MET Norway is rendered in the card** — a condition of the NLOD 2.0 / CC BY 4.0 licence, not a credit.
+- **Not a sensor.** A forecast is not a reading and stays out of sensor discovery and the InfluxDB pipeline, the same boundary music observes.
+- Daily highs/lows are derived by **local** calendar day; MET returns UTC instants, and grouping by UTC would land them on the wrong day.
+
 ### Shared code (`nextjs-ui/lib/shared/`)
 
 `lib/shared/types.ts` and `lib/shared/light-themes.ts` are imported by both client (`'use client'` components) and server (route handlers, runtime). Cross-tier types and helpers belong here.

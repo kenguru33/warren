@@ -213,6 +213,28 @@ export function initDb() {
       created_at    INTEGER NOT NULL DEFAULT (unixepoch('now') * 1000)
     );
 
+    -- Outdoor weather from MET Norway. Single row: Warren is one house.
+    --
+    -- The raw forecast payload is cached rather than a derived summary, so the
+    -- presentation can change without touching the caching contract with MET.
+    -- expires_at and last_modified are that contract: MET's terms require
+    -- honouring Expires rather than polling, and sending If-Modified-Since.
+    --
+    -- Deliberately NOT a sensor: a forecast is not a reading and must stay out
+    -- of sensor discovery and the InfluxDB pipeline.
+    CREATE TABLE IF NOT EXISTS weather_config (
+      id            INTEGER PRIMARY KEY CHECK(id = 1),
+      latitude      REAL    NOT NULL,
+      longitude     REAL    NOT NULL,
+      label         TEXT,
+      payload       TEXT,
+      expires_at    INTEGER,
+      last_modified TEXT,
+      fetched_at    INTEGER,
+      last_error    TEXT,
+      updated_at    INTEGER NOT NULL DEFAULT (unixepoch('now') * 1000)
+    );
+
     -- Per target, so the browser and each speaker keep independent volumes.
     CREATE TABLE IF NOT EXISTS music_volume (
       target_id TEXT    PRIMARY KEY,

@@ -2,7 +2,8 @@
 // v3: music became a single global player — room_music → music_config, and
 //     music_sources / music_volume lost their room_id.
 // v4: music_targets gained protocol / group_rooms / household_id for Sonos.
-export const SNAPSHOT_SCHEMA_VERSION = 4
+// v5: weather_config added.
+export const SNAPSHOT_SCHEMA_VERSION = 5
 
 // Forward foreign-key dependency order. The restore engine wipes in reverse
 // and inserts in this order; reordering breaks FK enforcement during restore.
@@ -22,6 +23,7 @@ export const BACKUP_TABLES = [
   'music_config',
   'music_sources',
   'music_volume',
+  'weather_config',
   'users',
   'meta',
 ] as const
