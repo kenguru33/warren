@@ -27,7 +27,6 @@ Weather belongs to the house, not to a room — the same shape as the music play
 - Radar imagery, lightning, air quality, tides, or the other MET products. Locationforecast only.
 - Automation on forecast values — no "close the blinds when sunny", no heater logic driven by outdoor temperature. Relay control stays on the sensor rules that already exist.
 - Severe-weather alerts. MET publishes them separately and they carry their own presentation obligations.
-- A geocoding search box that resolves place names. That needs a separate service with its own terms.
 - Replacing or altering any existing tile.
 
 ## User Stories
@@ -43,7 +42,13 @@ Weather belongs to the house, not to a room — the same shape as the music play
 
 ### Location
 
-- The household sets one location as coordinates — latitude and longitude — with a clear indication of what is expected and validation that rejects out-of-range values.
+Three ways to choose, offered in the order they are actually wanted:
+
+- **This device's position**, the default. Browser geolocation, one tap. Every failure mode — permission denied, position unavailable, timeout, unsupported — is named specifically, because "location unavailable" tells the user nothing about whether to grant permission or type a name instead.
+- **A place by name.** Search resolves a town or city to coordinates, showing region and country so the many places sharing a name are distinguishable. The search is debounced and proxied through the server, never called from the browser.
+- **Coordinates**, behind a disclosure. Kept because the other two both depend on something that can fail, and a setup screen that can dead-end is worse than one with a plain fallback.
+
+- Whichever route is used, the result is one latitude/longitude pair with an optional label, validated to be in range.
 - Coordinates are truncated to at most four decimals before being sent. MET requires this, and unrounded coordinates defeat their caching and are treated as abuse.
 - Weather is absent from the dashboard until a location is set. The component is invisible rather than present and empty, matching how the music player behaves before it is configured.
 - Changing the location refreshes the forecast rather than waiting for the next scheduled fetch.
@@ -133,7 +138,11 @@ Adding a table means the backup snapshot schema version must be bumped, per the 
 
 2. **The terms are a design input, not paperwork.** MET requires an identifying User-Agent and blocks generic or missing ones; requires clients to honour `Expires` rather than poll; and requires attribution. That shapes three concrete decisions: fetching happens once on the server rather than per browser, the refresh cadence is driven by the response rather than a constant, and attribution is in the component rather than hidden in settings. A dashboard left open on a wall panel is exactly the client that would otherwise generate abusive traffic.
 
-3. **Coordinates, not a place-name search.** MET does not geocode, and adding a geocoder means another service with its own terms and another failure mode. Home Assistant's met.no integration takes coordinates from the system's configured home for the same reason. Entering them once is a small cost for removing a whole dependency.
+3. **Current position first, then place-name search, then coordinates.** The original decision here was coordinates only, on the grounds that MET does not geocode and adding a geocoder means another service and another failure mode. That reasoning was sound about the cost and wrong about the benefit: asking a household to look up their latitude is a poor first impression for a dashboard, and both better routes degrade cleanly to the fallback rather than replacing it.
+
+   Geolocation costs nothing — it is in the browser — so it leads. For search, **Open-Meteo's geocoding API** is the narrowest addition available: purpose-built for name-to-coordinate lookup, no account or key, and it returns region and population, which is what makes "Oslo, Norway" distinguishable from "Oslo, Minnesota" in a picker. Nominatim was the alternative and is stricter — one request per second, no bulk use — for less structured data. The geocoder is used *only* to turn a name into coordinates; every byte of forecast data still comes from MET.
+
+   Search is proxied through Warren rather than called from the browser, so the outgoing request carries Warren's identification and a wall panel left on a setup screen cannot become a direct consumer of someone else's API.
 
 4. **Weather is house-wide, and belongs in the Add menu's House-wide section.** It is one thing for the installation, like the music player, and that section exists precisely for things not tied to a room.
 

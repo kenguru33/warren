@@ -142,6 +142,7 @@ A single global player — **not** a per-room feature — playing through the br
 
 Outdoor forecast from MET Norway's free `api.met.no` Locationforecast product. House-wide like the music player — one location per installation, added from the dashboard's Add menu under **House-wide**, invisible until configured. Lives entirely inside `nextjs-ui/`.
 
+- **Location is chosen three ways**, in this order: the browser's current position (default), a place-name search, or raw coordinates behind a disclosure. Search uses Open-Meteo's keyless geocoding API — MET does not geocode — and is **proxied through `/api/weather/search`** so the outgoing request carries Warren's identification. The geocoder only turns a name into coordinates; all forecast data still comes from MET.
 - **Table**: `weather_config` (single row, `id = 1`) holds the location *and* the cached raw payload with its `expires_at` and `last_modified`. Caching the raw response rather than a summary means presentation can change without touching the caching contract.
 - **MET's terms are a design input, not paperwork** — a client that ignores them gets blocked, and it fails invisibly until it does. Four obligations, three enforced in `lib/server/weather/client.ts` and one in the runtime:
   - every request carries an identifying `User-Agent` naming the app and a contact point (`WARREN_WEATHER_CONTACT` overrides it for forks);

@@ -276,3 +276,15 @@ export interface WeatherView {
   stale: boolean
   error: string | null
 }
+
+/** A geocoded place offered in the weather location picker. */
+export interface WeatherPlaceView {
+  id: string
+  name: string
+  region: string | null
+  country: string | null
+  latitude: number
+  longitude: number
+  /** Pre-formatted for display and for storing as the location's label. */
+  label: string
+}

@@ -111,6 +111,43 @@ test.describe('weather', () => {
     expect(after.current).toBeNull()
   })
 
+  test('place search returns results a user can choose between', async ({ request }) => {
+    const res = await request.get('/api/weather/search?q=Oslo')
+    expect(res.ok()).toBeTruthy()
+
+    const places = await res.json() as {
+      id: string; name: string; region: string | null; country: string | null
+      latitude: number; longitude: number; label: string
+    }[]
+    expect(places.length).toBeGreaterThan(1)
+    expect(places[0].name).toBe('Oslo')
+    expect(places[0].label).toContain('Oslo')
+    // Several places share a name, so the region is what makes the list usable.
+    expect(new Set(places.map(p => p.region)).size).toBeGreaterThan(1)
+  })
+
+  test('a one-character search does not reach upstream', async ({ request }) => {
+    // Too short to mean anything, and a wasted call on someone else's service.
+    const res = await request.get('/api/weather/search?q=O')
+    expect(res.ok()).toBeTruthy()
+    expect(await res.json()).toEqual([])
+  })
+
+  test('a chosen place is stored with its label', async ({ request }) => {
+    const places = await (await request.get('/api/weather/search?q=Lillestr')).json() as
+      { latitude: number; longitude: number; label: string }[]
+    expect(places.length).toBeGreaterThan(0)
+
+    const chosen = places[0]
+    await request.put('/api/weather', {
+      data: { latitude: chosen.latitude, longitude: chosen.longitude, label: chosen.label },
+    })
+
+    const after = await view(request)
+    expect(after.location?.label).toBe(chosen.label)
+    expect(after.current?.temperature).not.toBeNull()
+  })
+
   test('weather is not a sensor', async ({ request }) => {
     await request.put('/api/weather', { data: { latitude: 59.9139, longitude: 10.7522 } })
 
