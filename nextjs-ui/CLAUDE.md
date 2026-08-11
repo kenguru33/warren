@@ -115,6 +115,8 @@ Two utilities are kept by design and don't have Catalyst equivalents: `.slider` 
 | `MQTT_URL`, `MQTT_USER`, `MQTT_PASS` | Mosquitto connection |
 | `HUE_FAKE` | When `1`, the Hue client serves stub bridge data (used by E2E tests) |
 | `WARREN_CAST_FAKE` | When `1`, cast discovery and playback are stubbed (used by E2E tests) |
+| `WARREN_WEATHER_FAKE` | When `1`, the MET forecast client is stubbed and never reaches the network (used by E2E tests) |
+| `WARREN_WEATHER_CONTACT` | Contact point in the MET `User-Agent`; defaults to the project URL. Forks should override it |
 | `WARREN_SONOS_FAKE` | When `1`, Sonos discovery, favorites and UPnP control are stubbed (used by E2E tests) |
 
 `./docker/warren setup` writes these to `nextjs-ui/.env`. The dev server picks them up via Next.js's built-in `.env` loading; the production server (started by `./docker/warren start`) sources `.env` explicitly.

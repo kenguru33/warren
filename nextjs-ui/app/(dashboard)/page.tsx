@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react'
 import type { LightGroupView, RoomWithSensors, SensorView } from '@/lib/shared/types'
 import { LIGHT_THEMES } from '@/lib/shared/light-themes'
 import { useRooms } from '@/lib/hooks/use-rooms'
-import { ChevronDownIcon, HomeIcon, MusicalNoteIcon } from '@heroicons/react/16/solid'
+import { ChevronDownIcon, HomeIcon, MusicalNoteIcon, CloudIcon } from '@heroicons/react/16/solid'
 import { Button } from '@/app/components/button'
 import {
   Dropdown, DropdownButton, DropdownMenu, DropdownItem, DropdownLabel,
@@ -22,6 +22,9 @@ import { LiveStreamModal } from '@/app/components/warren/live-stream-modal'
 import { EditLightModal } from '@/app/components/warren/edit-light-modal'
 import { MusicConfigModal } from '@/app/components/warren/music-config-modal'
 import { useMusicTargets, useMusic } from '@/lib/hooks/use-music'
+import { useWeather } from '@/lib/hooks/use-weather'
+import { WeatherCard } from '@/app/components/warren/weather-card'
+import { WeatherLocationModal } from '@/app/components/warren/weather-location-modal'
 import { MusicTile } from '@/app/components/warren/music-tile'
 
 export default function DashboardPage() {
@@ -39,6 +42,11 @@ export default function DashboardPage() {
     deleteSource: deleteMusicSource, command: musicCommand,
   } = useMusic()
   const [musicConfigOpen, setMusicConfigOpen] = useState(false)
+
+  // Weather is house-wide too — one forecast for the installation, fetched
+  // server-side so several dashboards do not each become a MET consumer.
+  const { weather, setLocation: setWeatherLocation, clearLocation: clearWeather, refresh: refreshWeather } = useWeather()
+  const [weatherLocationOpen, setWeatherLocationOpen] = useState(false)
 
   // Light group detail modal — opened via tile tap to inspect / re-theme a group.
   const [groupDetailId, setGroupDetailId] = useState<number | null>(null)
@@ -216,6 +224,16 @@ export default function DashboardPage() {
 
               <DropdownSection>
                 <DropdownHeading>House-wide</DropdownHeading>
+                <DropdownItem
+                  onClick={() => setWeatherLocationOpen(true)}
+                  disabled={!weather || weather.configured}
+                >
+                  <CloudIcon data-slot="icon" />
+                  <DropdownLabel>Weather</DropdownLabel>
+                  <DropdownDescription>
+                    {weather?.configured ? 'Already added' : 'Outdoor forecast from Yr'}
+                  </DropdownDescription>
+                </DropdownItem>
                 {/* `music` is null until the first fetch lands; gating on that
                     keeps the entry from flashing when it is already set up. */}
                 <DropdownItem
@@ -237,6 +255,17 @@ export default function DashboardPage() {
           The player is global — one library, one output, one playback state —
           so it sits alongside the room grid rather than inside a room card.
         */}
+        {weather?.configured && (
+          <div className="sm:max-w-[28rem]">
+            <WeatherCard
+              weather={weather}
+              onEditLocation={() => setWeatherLocationOpen(true)}
+              onRemove={clearWeather}
+              onRefresh={refreshWeather}
+            />
+          </div>
+        )}
+
         {music?.configured && (
           <div className="sm:max-w-[28rem]">
             <MusicTile
@@ -363,6 +392,15 @@ export default function DashboardPage() {
           setLightColorOverrides(prev => ({ ...prev, [sensorId]: hex }))
         }}
       />
+
+      {weatherLocationOpen && (
+        <WeatherLocationModal
+          open
+          initial={weather?.location ?? null}
+          onClose={() => setWeatherLocationOpen(false)}
+          onSave={setWeatherLocation}
+        />
+      )}
 
       {music?.configured && musicConfigOpen && (
         <MusicConfigModal

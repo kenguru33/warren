@@ -211,3 +211,80 @@ export interface DiscoveredSensor {
   origin?: SensorOrigin
   capabilities?: SensorCapabilities
 }
+
+// ---------------------------------------------------------------------------
+// Weather (MET Norway / Yr)
+// ---------------------------------------------------------------------------
+
+/**
+ * A MET `symbol_code` such as `clearsky_day` or `lightrainshowers_night`.
+ * Rendered by prefix, so every code MET emits maps to something.
+ */
+export type WeatherSymbol = string
+
+export interface WeatherCurrent {
+  temperature: number | null
+  symbol: WeatherSymbol | null
+  windSpeed: number | null
+  windFromDirection: number | null
+  humidity: number | null
+  /** Millimetres expected in the coming hour. */
+  precipitation: number | null
+}
+
+export interface WeatherHour {
+  /** ISO instant the entry describes. */
+  time: string
+  temperature: number | null
+  symbol: WeatherSymbol | null
+  precipitation: number | null
+}
+
+export interface WeatherDay {
+  /** Local calendar date, YYYY-MM-DD. */
+  date: string
+  symbol: WeatherSymbol | null
+  high: number | null
+  low: number | null
+  precipitation: number | null
+}
+
+export interface WeatherLocation {
+  latitude: number
+  longitude: number
+  label: string | null
+}
+
+/**
+ * The dashboard's weather view.
+ *
+ * `configured: false` is a normal state, not an error — weather is invisible
+ * until a location is set, the same way the music player is.
+ */
+export interface WeatherView {
+  configured: boolean
+  location: WeatherLocation | null
+  current: WeatherCurrent | null
+  hourly: WeatherHour[]
+  daily: WeatherDay[]
+  /** When a forecast was last successfully fetched. */
+  updatedAt: number | null
+  /**
+   * True when the cached forecast is old enough that it should not be
+   * presented as current. Explicit rather than left for the client to derive.
+   */
+  stale: boolean
+  error: string | null
+}
+
+/** A geocoded place offered in the weather location picker. */
+export interface WeatherPlaceView {
+  id: string
+  name: string
+  region: string | null
+  country: string | null
+  latitude: number
+  longitude: number
+  /** Pre-formatted for display and for storing as the location's label. */
+  label: string
+}

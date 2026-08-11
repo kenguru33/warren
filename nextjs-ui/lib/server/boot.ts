@@ -6,6 +6,7 @@ import { startMqtt, stopMqtt } from './mqtt'
 import { hueRuntime } from './hue/runtime'
 import { castRuntime } from './cast/runtime'
 import { sonosRuntime } from './sonos/runtime'
+import { weatherRuntime } from './weather/runtime'
 
 declare global {
   // eslint-disable-next-line no-var
@@ -21,9 +22,11 @@ export function bootServer() {
   hueRuntime.start()
   castRuntime.start()
   sonosRuntime.start()
+  weatherRuntime.start()
 
   const shutdown = (sig: string) => {
     console.log(`[boot] received ${sig}, shutting down`)
+    try { weatherRuntime.stop() } catch {}
     try { sonosRuntime.stop() } catch {}
     try { castRuntime.stop() } catch {}
     try { hueRuntime.stop() } catch {}
